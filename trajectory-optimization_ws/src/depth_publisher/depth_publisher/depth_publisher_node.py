@@ -23,6 +23,14 @@ class DepthPublisherNode(Node):
         self.transform = None
         self.device = None
         
+        self.declare_parameter('depth_encoding', '32FC1')
+        self.declare_parameter('depth_scale', 1.0)
+        self.declare_parameter('max_depth', 10.0)
+        
+        self.depth_encoding = self.get_parameter('depth_encoding').value
+        self.depth_scale = self.get_parameter('depth_scale').value
+        self.max_depth = self.get_parameter('max_depth').value
+        
         self.initialize_depth_model()
         
         self.image_subscription = self.create_subscription(
@@ -122,12 +130,38 @@ class DepthPublisherNode(Node):
             with self.torch.no_grad():
                 depth = self.depth_model(image_tensor)
             
-            depth = self.F.interpolate(depth[None], (h, w), mode='bilinear', align_corners=False)[0, 0]
+            if len(depth.shape) == 2:
+                depth = depth.unsqueeze(0).unsqueeze(0)
+            elif len(depth.shape) == 3:
+                depth = depth.unsqueeze(0)
             
-            depth = (depth - depth.min()) / (depth.max() - depth.min()) * 255.0
-            depth = depth.cpu().numpy().astype(np.uint8)
+            depth = self.F.interpolate(depth, size=(h, w), mode='bilinear', align_corners=False)
+            depth = depth[0, 0]
             
-            depth_msg = self.bridge.cv2_to_imgmsg(depth, encoding='mono8')
+            depth_np = depth.cpu().numpy()
+            
+            if depth_np.shape != (h, w):
+                self.get_logger().warn(f'Shape mismatch: ({h}, {w}) got {depth_np.shape}')
+                depth_np = cv2.resize(depth_np, (w, h), interpolation=cv2.INTER_LINEAR)
+            
+            if self.depth_encoding == '32FC1':
+                depth_min = depth_np.min()
+                depth_max = depth_np.max()
+
+                if depth_max > depth_min:
+                    depth_normalized = (depth_np - depth_min) / (depth_max - depth_min)
+                    depth_meters = depth_normalized * self.max_depth * self.depth_scale
+                else:
+                    depth_meters = np.zeros_like(depth_np)
+                
+                depth_meters = depth_meters.astype(np.float32)
+                
+                depth_msg = self.bridge.cv2_to_imgmsg(depth_meters, encoding='32FC1')
+            else:
+                depth_normalized = (depth_np - depth_np.min()) / (depth_np.max() - depth_np.min() + 1e-8)
+                depth_uint8 = (depth_normalized * 255.0).astype(np.uint8)
+                depth_msg = self.bridge.cv2_to_imgmsg(depth_uint8, encoding='mono8')
+            
             depth_msg.header = msg.header
             depth_msg.header.frame_id = 'depth_camera'
             self.depth_publisher.publish(depth_msg)
