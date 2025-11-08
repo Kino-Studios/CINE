@@ -6,6 +6,7 @@ import cv2 as cv
 from cv_bridge import CvBridge
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import Float32
 from geometry_msgs.msg import PolygonStamped
 from sensor_msgs.msg import Image
 
@@ -63,6 +64,12 @@ class CostFunctionCalculator(Node):
             Image,
             '/depth/image_raw',
             self.depth_callback,
+            qos_profile=ROSParams.QOS_PROFILE
+        )
+
+        self.cost_publisher = self.create_publisher(
+            Float32, 
+            '/cost_function/value', 
             qos_profile=ROSParams.QOS_PROFILE
         )
     
@@ -209,7 +216,10 @@ class CostFunctionCalculator(Node):
         d_star = UserRequestedParams.DESIRED_FOCUS_DISTANCE_M
         d_min = UserRequestedParams.FOCUS_DISTANCE_MIN_M
 
-        Z = float(self.get_depth_at_point())
+        Z = self.get_median_depth_roi()
+        if Z is None:
+            return None
+        Z = float(Z)
         
         J_dist = (Z - d_star) ** 2
         J_near = math.pow(d_min - Z, 2) if Z < d_min else 0.0
@@ -226,7 +236,9 @@ class CostFunctionCalculator(Node):
         # total cost function
         cost = (depth_cost + framing_cost);
         
-        return cost
+        cost_msg = Float32()
+        cost_msg.data = cost
+        self.cost_publisher.publish(cost_msg)
 
 def main(args=None):
     rclpy.init(args=args)
