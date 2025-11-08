@@ -1,6 +1,11 @@
-import math
 import sys
 import os
+
+user_site = os.path.expanduser('~/.local/lib/python3.12/site-packages')
+if user_site in sys.path:
+    sys.path.remove(user_site)
+
+import math
 import numpy as np
 import cv2 as cv
 from cv_bridge import CvBridge
@@ -10,12 +15,11 @@ from std_msgs.msg import Float32
 from geometry_msgs.msg import PolygonStamped
 from sensor_msgs.msg import Image
 
-workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))))
-constants_path = os.path.join(workspace_root, 'configs', 'user_params')
-if constants_path not in sys.path:
-    sys.path.insert(0, constants_path)
-
-from constants import ROSParams, UserRequestedParams, ImageParams
+try:
+    from cinematographic_adjustment_agent.constants import ROSParams, UserRequestedParams, ImageParams
+except ImportError:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+    from constants import ROSParams, UserRequestedParams, ImageParams
 
 class CostFunctionCalculator(Node):
     def __init__(self):
@@ -39,55 +43,61 @@ class CostFunctionCalculator(Node):
         
         self.focus_object_id = self.get_parameter('focus_object_id').value
 
+        qos_profile = ROSParams.QOS_PROFILE
+
         self.bounding_box_subscriber = self.create_subscription(
             PolygonStamped,
             '/object_detection/bounding_box',
             self.bounding_box_callback,
-            qos_profile=ROSParams.QOS_PROFILE
+            qos_profile
         )
 
         self.dimensions_subscriber = self.create_subscription(
             PolygonStamped,
             '/object_detection/dimensions',
             self.dimensions_callback,
-            qos_profile=ROSParams.QOS_PROFILE
+            qos_profile
         )
 
         self.center_point_subscriber = self.create_subscription(
             PolygonStamped,
             '/object_detection/center_point',
             self.center_point_callback,
-            qos_profile=ROSParams.QOS_PROFILE
+            qos_profile
         )
         
         self.depth_subscriber = self.create_subscription(
             Image,
             '/depth/image_raw',
             self.depth_callback,
-            qos_profile=ROSParams.QOS_PROFILE
+            qos_profile
         )
 
         self.cost_publisher = self.create_publisher(
             Float32, 
             '/cost_function/value', 
-            qos_profile=ROSParams.QOS_PROFILE
+            qos_profile
         )
-    
+        
     def bounding_box_callback(self, msg):
         self.bounding_box = msg
         self._update_center_depth()
+        self._calculate_cost_function()
     
     def dimensions_callback(self, msg):
         self.dimensions = msg
+        self._calculate_cost_function()
     
     def center_point_callback(self, msg):
         self.center_point = msg
         self._update_center_depth()
+        self._calculate_cost_function()
     
     def depth_callback(self, msg):
         try:
             self.depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1')
             self._update_center_depth()
+            self._calculate_cost_function()
         except Exception as e:
             self.get_logger().error(f'Error processing depth image: {str(e)}')
     
@@ -180,6 +190,13 @@ class CostFunctionCalculator(Node):
             self.depth_image is None or
             self.center_depth is None
         ):
+            missing = []
+            if self.bounding_box is None: missing.append("bounding_box")
+            if self.dimensions is None: missing.append("dimensions")
+            if self.center_point is None: missing.append("center_point")
+            if self.depth_image is None: missing.append("depth_image")
+            if self.center_depth is None: missing.append("center_depth")
+            self.get_logger().warn(f'Cannot calculate cost - missing: {", ".join(missing)}', throttle_duration_sec=5.0)
             return None
 
         u_star = ImageParams.IMAGE_WIDTH * UserRequestedParams.THIRDS_ANCHOR[0]
@@ -236,9 +253,13 @@ class CostFunctionCalculator(Node):
         # total cost function
         cost = (depth_cost + framing_cost);
         
+        self.get_logger().info(f'Cost published: {cost:.3f} (framing: {framing_cost:.3f}, depth: {depth_cost:.3f})')
+        
         cost_msg = Float32()
-        cost_msg.data = cost
+        cost_msg.data = float(cost)
         self.cost_publisher.publish(cost_msg)
+        
+        return cost
 
 def main(args=None):
     rclpy.init(args=args)

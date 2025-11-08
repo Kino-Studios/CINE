@@ -24,6 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             'cinematographic_adjustment_node = cinematograhpic_adjustment_agent.cinematographic_adjustment_node:main',
+            'cost_function_calculator = cinematographic_adjustment_agent.cost_functions.cost_functions:main',
         ],
     },
 )
