@@ -36,10 +36,10 @@ class CostFunctionCalculator(Node):
         self.declare_parameter('focus_object_id', UserRequestedParams.FOCUS_OBJECT_ID)
         self.declare_parameter('huber_delta_px', 6.0)
         self.declare_parameter('deadband_px', 4.0)
-        self.declare_parameter('w_framing', 0.056)
-        self.declare_parameter('w_dist',    4.0)
-        self.declare_parameter('w_near',    25.0)
-        self.declare_parameter('w_stab',    0.2)
+        self.declare_parameter('w_framing', 1.0)
+        self.declare_parameter('w_dist', 2.0)
+        self.declare_parameter('w_near', 5.0)
+        self.declare_parameter('w_stab', 0.5)
         
         self.focus_object_id = self.get_parameter('focus_object_id').value
 

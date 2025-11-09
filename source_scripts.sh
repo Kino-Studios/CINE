@@ -6,4 +6,4 @@ unset ROS_LOCALHOST_ONLY
 
 source ~/bspline-nvidia-isaac-tsdf/venv/bin/activate
 source /opt/ros/jazzy/setup.bash
-source ~/bspline-nvidia-isaac-tsdf/ego-planner_ws/install/setup.bash
+source ~/bspline-nvidia-isaac-tsdf/trajectory-optimization_ws/install/setup.bash

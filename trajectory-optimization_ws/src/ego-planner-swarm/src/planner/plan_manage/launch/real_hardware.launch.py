@@ -1,6 +1,6 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
@@ -22,7 +22,11 @@ def generate_launch_description():
                 'depth_topic': depth_topic,
                 'odom_topic': odom_topic,
                 'camera_pose_topic': camera_pose_topic,
-                'use_sim_time': False
+                'use_sim_time': False,
+                'flight_type': 2,
+                'target_x': 5.0,
+                'target_y': 0.0,
+                'target_z': 1.0
             }]
         ),
     ])
