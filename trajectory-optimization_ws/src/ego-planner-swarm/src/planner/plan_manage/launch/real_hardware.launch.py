@@ -1,32 +1,30 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument, TimerAction
-from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
-    depth_topic = LaunchConfiguration('depth_topic', default='/depth/image_raw')
-    odom_topic = LaunchConfiguration('odom_topic', default='/odometry')
-    camera_pose_topic = LaunchConfiguration('camera_pose_topic', default='/camera_pose')
-    
     return LaunchDescription([
-        DeclareLaunchArgument('depth_topic', default_value='/depth/image_raw'),
-        DeclareLaunchArgument('odom_topic', default_value='/odometry'),
-        DeclareLaunchArgument('camera_pose_topic', default_value='/camera_pose'),
-        
         Node(
             package='ego_planner',
             executable='ego_planner_node',
             name='ego_planner_node',
             output='screen',
             parameters=[{
-                'depth_topic': depth_topic,
-                'odom_topic': odom_topic,
-                'camera_pose_topic': camera_pose_topic,
                 'use_sim_time': False,
-                'flight_type': 2,
-                'target_x': 5.0,
-                'target_y': 0.0,
-                'target_z': 1.0
-            }]
+                'fsm/flight_type': 1,
+                'fsm/thresh_replan_time': 2.0,
+                'fsm/thresh_no_replan_meter': 0.01,
+                'fsm/planning_horizon': 5.0,
+                'fsm/planning_horizen_time': 3.0,
+                'fsm/emergency_time': 1.0,
+                'fsm/realworld_experiment': True,
+                'fsm/fail_safe': True,
+                'fsm/waypoint_num': 0
+            }],
+            remappings=[
+                ('/grid_map/odom', '/imu_propagate'),
+                ('/odom_world', '/imu_propagate'),
+                ('/grid_map/depth', '/depth/image_raw'),
+                ('/grid_map/pose', '/camera_pose'),
+            ]
         ),
     ])
