@@ -109,15 +109,17 @@ class DepthPublisherNode(Node):
             self.depth_model = None
 
     def image_callback(self, msg):
+        self.get_logger().info(f'Received image callback')
         if self.processing:
             self.get_logger().debug('Skipping frame')
             return
         if self.depth_model is None:
-            self.get_logger().error('Depth failure!', throttle_duration_sec=5.0)
+            self.get_logger().error('Depth failure!')
             return
             
         try:
             self.processing = True
+            self.get_logger().info(f'Processing image {msg.width}x{msg.height}')
             
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
             h, w = cv_image.shape[:2]
@@ -165,6 +167,8 @@ class DepthPublisherNode(Node):
             depth_msg.header = msg.header
             depth_msg.header.frame_id = 'depth_camera'
             self.depth_publisher.publish(depth_msg)
+
+            self.get_logger().debug('Published depth image')
                     
         except Exception as e:
             self.get_logger().error(f'Error: {str(e)}')

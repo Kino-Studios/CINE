@@ -24,6 +24,8 @@ namespace ego_planner
     node_->declare_parameter("fsm/fail_safe", true);
 
     node_->get_parameter("fsm/flight_type", target_type_);
+   
+    target_type_ = 1;
     node_->get_parameter("fsm/thresh_replan_time", replan_thresh_);
     node_->get_parameter("fsm/thresh_no_replan_meter", no_replan_thresh_);
     node_->get_parameter("fsm/planning_horizon", planning_horizen_);
