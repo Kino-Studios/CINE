@@ -1,105 +1,64 @@
-import sys
-import os
-
-user_site = os.path.expanduser('~/.local/lib/python3.12/site-packages')
-if user_site in sys.path:
-    sys.path.remove(user_site)
-
 import math
 import numpy as np
-import cv2 as cv
 from cv_bridge import CvBridge
-import rclpy
-from rclpy.node import Node
-from std_msgs.msg import Float32
 from geometry_msgs.msg import PolygonStamped
 from sensor_msgs.msg import Image
 
-try:
-    from cinematographic_adjustment_agent.constants import ROSParams, UserRequestedParams, ImageParams
-except ImportError:
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-    from constants import ROSParams, UserRequestedParams, ImageParams
+workspace_root = None
+constants_path = None
 
-class CostFunctionCalculator(Node):
-    def __init__(self):
-        super().__init__('cost_function_calculator')
+def set_constants_path(path):
+    global constants_path
+    constants_path = path
+
+def get_constants():
+    import sys
+    if constants_path and constants_path not in sys.path:
+        sys.path.insert(0, constants_path)
+    from constants import ROSParams, UserRequestedParams, ImageParams
+    return ROSParams, UserRequestedParams, ImageParams
+
+class CostCalculator:
+    def __init__(self, node, constants_path=None):
+        if constants_path:
+            set_constants_path(constants_path)
         
+        ROSParams, UserRequestedParams, ImageParams = get_constants()
+        
+        self.node = node
         self.bridge = CvBridge()
-        
         self.bounding_box = None
         self.dimensions = None
         self.center_point = None
         self.depth_image = None
         self.center_depth = None
         
-        self.declare_parameter('focus_object_id', UserRequestedParams.FOCUS_OBJECT_ID)
-        self.declare_parameter('huber_delta_px', 6.0)
-        self.declare_parameter('deadband_px', 4.0)
-        self.declare_parameter('w_framing', 1.0)
-        self.declare_parameter('w_dist', 2.0)
-        self.declare_parameter('w_near', 5.0)
-        self.declare_parameter('w_stab', 0.5)
+        self.ROSParams = ROSParams
+        self.UserRequestedParams = UserRequestedParams
+        self.ImageParams = ImageParams
         
-        self.focus_object_id = self.get_parameter('focus_object_id').value
-
-        qos_profile = ROSParams.QOS_PROFILE
-
-        self.bounding_box_subscriber = self.create_subscription(
-            PolygonStamped,
-            '/object_detection/bounding_box',
-            self.bounding_box_callback,
-            qos_profile
-        )
-
-        self.dimensions_subscriber = self.create_subscription(
-            PolygonStamped,
-            '/object_detection/dimensions',
-            self.dimensions_callback,
-            qos_profile
-        )
-
-        self.center_point_subscriber = self.create_subscription(
-            PolygonStamped,
-            '/object_detection/center_point',
-            self.center_point_callback,
-            qos_profile
-        )
-        
-        self.depth_subscriber = self.create_subscription(
-            Image,
-            '/depth/image_raw',
-            self.depth_callback,
-            qos_profile
-        )
-
-        self.cost_publisher = self.create_publisher(
-            Float32, 
-            '/cost_function/value', 
-            qos_profile
-        )
-        
-    def bounding_box_callback(self, msg):
+        node.declare_parameter('focus_object_id', UserRequestedParams.FOCUS_OBJECT_ID)
+        node.declare_parameter('huber_delta_px', 6.0)
+        node.declare_parameter('deadband_px', 4.0)
+        node.declare_parameter('w_framing', 0.056)
+        node.declare_parameter('w_dist', 4.0)
+        node.declare_parameter('w_near', 25.0)
+        node.declare_parameter('w_stab', 0.2)
+    
+    def update_bounding_box(self, msg: PolygonStamped):
         self.bounding_box = msg
         self._update_center_depth()
-        self._calculate_cost_function()
     
-    def dimensions_callback(self, msg):
+    def update_dimensions(self, msg: PolygonStamped):
         self.dimensions = msg
-        self._calculate_cost_function()
     
-    def center_point_callback(self, msg):
+    def update_center_point(self, msg: PolygonStamped):
         self.center_point = msg
         self._update_center_depth()
-        self._calculate_cost_function()
     
-    def depth_callback(self, msg):
-        try:
-            self.depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1')
-            self._update_center_depth()
-            self._calculate_cost_function()
-        except Exception as e:
-            self.get_logger().error(f'Error processing depth image: {str(e)}')
+    def update_depth_image(self, depth_image):
+        self.depth_image = depth_image
+        self._update_center_depth()
     
     def _update_center_depth(self):
         if self.depth_image is None:
@@ -112,7 +71,6 @@ class CostFunctionCalculator(Node):
             center_y = int(self.center_point.polygon.points[0].y)
         elif self.bounding_box is not None and len(self.bounding_box.polygon.points) > 0:
             points = self.bounding_box.polygon.points
-
             if len(points) >= 2:
                 x_coords = [p.x for p in points]
                 y_coords = [p.y for p in points]
@@ -178,29 +136,22 @@ class CostFunctionCalculator(Node):
         median_depth = float(np.median(valid_depths))
         
         return median_depth
-
+    
     def huber_function(self, r, delta=6.0):
         a = abs(r)
         return 0.5 * math.pow(a, 2) if a <= delta else delta * (a - 0.5 * delta)
-
-    def _calculate_cost_function(self):
+    
+    def calculate_cost(self):
         if (self.bounding_box is None or 
             self.dimensions is None or 
             self.center_point is None or 
             self.depth_image is None or
             self.center_depth is None
         ):
-            missing = []
-            if self.bounding_box is None: missing.append("bounding_box")
-            if self.dimensions is None: missing.append("dimensions")
-            if self.center_point is None: missing.append("center_point")
-            if self.depth_image is None: missing.append("depth_image")
-            if self.center_depth is None: missing.append("center_depth")
-            self.get_logger().warn(f'Cannot calculate cost - missing: {", ".join(missing)}', throttle_duration_sec=5.0)
             return None
 
-        u_star = ImageParams.IMAGE_WIDTH * UserRequestedParams.THIRDS_ANCHOR[0]
-        v_star = ImageParams.IMAGE_HEIGHT * UserRequestedParams.THIRDS_ANCHOR[1]
+        u_star = self.ImageParams.IMAGE_WIDTH * self.UserRequestedParams.THIRDS_ANCHOR[0]
+        v_star = self.ImageParams.IMAGE_HEIGHT * self.UserRequestedParams.THIRDS_ANCHOR[1]
         
         if len(self.center_point.polygon.points) > 0:
             u_current = self.center_point.polygon.points[0].x
@@ -217,8 +168,8 @@ class CostFunctionCalculator(Node):
         else:
             return None
         
-        deadband = float(self.get_parameter('deadband_px').value)
-        delta_px = float(self.get_parameter('huber_delta_px').value)
+        deadband = float(self.node.get_parameter('deadband_px').value)
+        delta_px = float(self.node.get_parameter('huber_delta_px').value)
         
         du = u_current - u_star
         du = 0.0 if abs(du) < deadband else du
@@ -226,52 +177,30 @@ class CostFunctionCalculator(Node):
         dv = v_current - v_star
         dv = 0.0 if abs(dv) < deadband else dv
         
-        w_framing = float(self.get_parameter('w_framing').value)
+        w_framing = float(self.node.get_parameter('w_framing').value)
         framing_cost = w_framing * (self.huber_function(du, delta_px) + self.huber_function(dv, delta_px))
 
-        # calculate the depth cost
-        d_star = UserRequestedParams.DESIRED_FOCUS_DISTANCE_M
-        d_min = UserRequestedParams.FOCUS_DISTANCE_MIN_M
+        d_star = self.UserRequestedParams.DESIRED_FOCUS_DISTANCE_M
+        d_min = self.UserRequestedParams.FOCUS_DISTANCE_MIN_M
 
         Z = self.get_median_depth_roi()
         if Z is None:
             return None
         Z = float(Z)
         
-        J_dist = (Z - d_star) ** 2
+        J_dist = math.pow(Z - d_star, 2)
         J_near = math.pow(d_min - Z, 2) if Z < d_min else 0.0
         if not hasattr(self, "_prev_Z"):
             self._prev_Z = Z
         J_stab = math.pow(Z - self._prev_Z, 2)
         self._prev_Z = Z
 
-        w_dist = float(self.get_parameter('w_dist').value)
-        w_near = float(self.get_parameter('w_near').value)
-        w_stab = float(self.get_parameter('w_stab').value)
+        w_dist = float(self.node.get_parameter('w_dist').value)
+        w_near = float(self.node.get_parameter('w_near').value)
+        w_stab = float(self.node.get_parameter('w_stab').value)
         depth_cost = (w_dist * J_dist) + (w_near * J_near) + (w_stab * J_stab)
 
-        # total cost function
-        cost = (depth_cost + framing_cost);
-        
-        self.get_logger().info(f'Cost published: {cost:.3f} (framing: {framing_cost:.3f}, depth: {depth_cost:.3f})')
-        
-        cost_msg = Float32()
-        cost_msg.data = float(cost)
-        self.cost_publisher.publish(cost_msg)
+        cost = (depth_cost + framing_cost)
         
         return cost
 
-def main(args=None):
-    rclpy.init(args=args)
-    node = CostFunctionCalculator()
-
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
-
-if __name__ == '__main__':
-    main()
