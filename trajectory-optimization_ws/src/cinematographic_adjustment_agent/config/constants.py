@@ -1,5 +1,9 @@
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy 
 
+class Constraints:
+    MAX_VELOCITY = 1.5
+    MAX_ACCELERATION = 10
+
 class ROSParams:
     QOS_PROFILE = QoSProfile(
         reliability = ReliabilityPolicy.RELIABLE,

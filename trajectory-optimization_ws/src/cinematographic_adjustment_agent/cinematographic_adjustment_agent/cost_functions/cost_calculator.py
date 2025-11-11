@@ -203,4 +203,77 @@ class CostCalculator:
         cost = (depth_cost + framing_cost)
         
         return cost
+    
+    def estimate_cost_at_position(self, drone_x: float, drone_y: float, drone_z: float, 
+                                  target_world_x: float, target_world_y: float, target_world_z: float) -> Optional[float]:
+        """
+        Estimate cost if drone were at position (drone_x, drone_y, drone_z) looking at target.
+        
+        This is a simplified estimation that uses:
+        1. Distance to target (depth cost)
+        2. Estimated framing based on geometry
+        
+        Args:
+            drone_x, drone_y, drone_z: Hypothetical drone position in world frame
+            target_world_x, target_world_y, target_world_z: Target position in world frame
+            
+        Returns:
+            Estimated cost or None if insufficient data
+        """
+        if self.depth_image is None or self.center_point is None:
+            return None
+        
+        # Calculate distance to target
+        dx = target_world_x - drone_x
+        dy = target_world_y - drone_y
+        dz = target_world_z - drone_z
+        distance = math.sqrt(dx*dx + dy*dy + dz*dz)
+        
+        # Depth cost
+        d_star = self.UserRequestedParams.DESIRED_FOCUS_DISTANCE_M
+        d_min = self.UserRequestedParams.FOCUS_DISTANCE_MIN_M
+        
+        J_dist = math.pow(distance - d_star, 2)
+        J_near = math.pow(d_min - distance, 2) if distance < d_min else 0.0
+        
+        # Stability cost (use current depth as reference)
+        if hasattr(self, "_prev_Z") and self._prev_Z is not None:
+            J_stab = 0.0
+        else:
+            prev_Z = getattr(self, "_prev_Z", distance)
+            J_stab = math.pow(distance - prev_Z, 2)
+        
+        w_dist = float(self.node.get_parameter('w_dist').value)
+        w_near = float(self.node.get_parameter('w_near').value)
+        w_stab = float(self.node.get_parameter('w_stab').value)
+        depth_cost = (w_dist * J_dist) + (w_near * J_near) + (w_stab * J_stab)
+        
+        # add proper object estimation later
+        fx = self.ImageParams.IMAGE_WIDTH / 2.0
+        fy = self.ImageParams.IMAGE_HEIGHT / 2.0
+        
+        if len(self.center_point.polygon.points) > 0:
+            u_current = self.center_point.polygon.points[0].x
+            v_current = self.center_point.polygon.points[0].y
+        else:
+            u_current = self.ImageParams.IMAGE_WIDTH / 2.0
+            v_current = self.ImageParams.IMAGE_HEIGHT / 2.0
+        
+        u_star = self.ImageParams.IMAGE_WIDTH * self.UserRequestedParams.THIRDS_ANCHOR[0]
+        v_star = self.ImageParams.IMAGE_HEIGHT * self.UserRequestedParams.THIRDS_ANCHOR[1]
+        
+        du_est = u_current - u_star
+        dv_est = v_current - v_star
+        
+        deadband = float(self.node.get_parameter('deadband_px').value)
+        delta_px = float(self.node.get_parameter('huber_delta_px').value)
+        
+        du_est = 0.0 if abs(du_est) < deadband else du_est
+        dv_est = 0.0 if abs(dv_est) < deadband else dv_est
+        
+        w_framing = float(self.node.get_parameter('w_framing').value)
+        framing_cost = w_framing * (self.huber_function(du_est, delta_px) + self.huber_function(dv_est, delta_px))
+        
+        cost = depth_cost + framing_cost
+        return cost
 

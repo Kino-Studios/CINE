@@ -5,6 +5,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import PolygonStamped
+from nav_msgs.msg import Odometry
 from cv_bridge import CvBridge
 from typing import Optional, Tuple, List
 
@@ -18,10 +19,12 @@ from ..cost_functions.cost_calculator import CostCalculator
 from .state_tracker import StateTracker
 from .trajectory_planner import (
     generate_orbit_waypoints_xy,
+    generate_cost_optimized_orbit_waypoints,
+    optimize_orbit_center_and_radius,
     pixel_to_camera_xy,
     clamp_depth_to_preference,
 )
-from .waypoint_publisher import WaypointPublisher
+from ..setpoint_sender.waypoint_sender import WaypointPublisher
 
 
 class CinematographicPlannerNode(Node):
@@ -29,10 +32,13 @@ class CinematographicPlannerNode(Node):
         super().__init__("cinematographic_planner_node")
         self.params = CinematographyParams()
         self.bridge = CvBridge()
-        self.tracker = StateTracker(look_duration_s=self.params.look_duration_s)
         self.depth_image = None
         self.center_uv = None
         self.bounding_box = None
+        
+        self.drone_position = np.array([0.0, 0.0, 1.5])
+        self.drone_orientation = np.array([0.0, 0.0, 0.0, 1.0])
+        self.has_odom = False
         
         workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))))
         constants_path = os.path.join(workspace_root, 'configs', 'user_params')
@@ -70,6 +76,11 @@ class CinematographicPlannerNode(Node):
         self.params.camera_cy = float(self.get_parameter("camera_cy").value)
         self.params.waypoints_topic = str(self.get_parameter("waypoints_topic").value)
 
+        self.tracker = StateTracker(
+            look_duration_s=self.params.look_duration_s,
+            depth_window_size=15
+        )
+
         self.center_sub = self.create_subscription(
             PolygonStamped,
             "/object_detection/center_point",
@@ -94,8 +105,21 @@ class CinematographicPlannerNode(Node):
             self.dimensions_callback,
             10,
         )
+        
+        self.odom_sub = self.create_subscription(
+            Odometry,
+            "/mavros/local_position/odom",
+            self.odom_callback,
+            10,
+        )
 
-        self.waypoint_pub_node = WaypointPublisher(self.params.waypoints_topic)
+        self.waypoint_pub_node = WaypointPublisher(self, self.params.waypoints_topic)
+        
+        self.use_cost_optimization = True
+        self.optimization_frequency = 2.0 
+        self.last_optimization_time = 0.0
+        self.optimized_center = None
+        self.optimized_radius = None
 
         self.timer = self.create_timer(1.0 / max(1.0, self.params.waypoint_rate_hz), self.tick)
 
@@ -115,6 +139,20 @@ class CinematographicPlannerNode(Node):
     def dimensions_callback(self, msg: PolygonStamped):
         self.cost_calculator.update_dimensions(msg)
 
+    def odom_callback(self, msg: Odometry):
+        self.drone_position = np.array([
+            msg.pose.pose.position.x,
+            msg.pose.pose.position.y,
+            msg.pose.pose.position.z
+        ])
+        self.drone_orientation = np.array([
+            msg.pose.pose.orientation.x,
+            msg.pose.pose.orientation.y,
+            msg.pose.pose.orientation.z,
+            msg.pose.pose.orientation.w
+        ])
+        self.has_odom = True
+    
     def depth_callback(self, msg: Image):
         try:
             depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding="32FC1")
@@ -128,8 +166,8 @@ class CinematographicPlannerNode(Node):
                 z = float(depth[vv, uu])
                 if z > 0 and not np.isnan(z):
                     self.tracker.record_depth(z)
-        except Exception:
-            pass
+        except Exception as e:
+            self.get_logger().warn(f'Depth callback error: {e}')
 
     def compute_target_xy(self) -> Optional[Tuple[float, float, float]]:
         if self.center_uv is None:
@@ -157,32 +195,108 @@ class CinematographicPlannerNode(Node):
             self.params.camera_cy,
         )
         return x_cam, y_cam, preferred_depth
+    
+    def compute_target_world_position(self) -> Optional[np.ndarray]:
+        target_cam = self.compute_target_xy()
+        if target_cam is None or not self.has_odom:
+            return None
+        
+        x_cam, y_cam, z_cam = target_cam
+        
+        target_world = self.drone_position + np.array([z_cam, -x_cam, -y_cam])
+        
+        return target_world
 
     def build_initial_waypoints(self) -> List[Tuple[float, float, float, float]]:
-        target = self.compute_target_xy()
-        if target is None:
+        target_world = self.compute_target_world_position()
+        if target_world is None:
             return []
-        tx, ty, _ = target
+        
+        tx, ty, tz = target_world[0], target_world[1], target_world[2]
+        
+        if self.optimized_center is not None and self.optimized_radius is not None:
+            center_xy = self.optimized_center
+            radius = self.optimized_radius
+        else:
+            center_xy = (tx, ty)
+            radius = self.params.orbit_radius_m
+        
+        def cost_function(x: float, y: float, z: float) -> Optional[float]:
+            return self.cost_calculator.estimate_cost_at_position(
+                x, y, z, tx, ty, tz
+            )
+        
+        z = self.params.constant_altitude_m
+        
+        if self.use_cost_optimization:
+            try:
+                orbit = generate_cost_optimized_orbit_waypoints(
+                    center_xy_m=center_xy,
+                    initial_radius_m=radius,
+                    angular_velocity_rps=self.params.angular_velocity_rps,
+                    duration_s=float(self.params.num_initial_waypoints) / self.params.waypoint_rate_hz,
+                    waypoint_rate_hz=self.params.waypoint_rate_hz,
+                    altitude_m=z,
+                    cost_function=cost_function,
+                    num_radius_samples=5,
+                    radius_range=(0.8, 2.0),
+                )
+                return orbit
+            except Exception as e:
+                self.get_logger().warn(f'Cost optimization failed: {e}, using basic orbit')
+        
         orbit = generate_orbit_waypoints_xy(
-            center_xy_m=(tx, ty),
-            radius_m=self.params.orbit_radius_m,
+            center_xy_m=center_xy,
+            radius_m=radius,
             angular_velocity_rps=self.params.angular_velocity_rps,
             duration_s=float(self.params.num_initial_waypoints) / self.params.waypoint_rate_hz,
             waypoint_rate_hz=self.params.waypoint_rate_hz,
+            altitude_m=z,
         )
-        z = self.params.constant_altitude_m
-        xyz_time = []
-        for x, y, dt in orbit:
-            xyz_time.append((x, y, z, dt))
-        return xyz_time
+        return orbit
 
     def tick(self):
         if self.tracker.should_switch_target():
             self.tracker.rotate_to_next_target()
         
-        cost = self.cost_calculator.calculate_cost()
-        if cost is not None:
-            self.get_logger().debug(f'Current cost: {cost:.3f}')
+        cost_result = self.cost_calculator.calculate_cost()
+        if cost_result is not None and isinstance(cost_result, dict):
+            total_cost = cost_result.get('cost', 0.0)
+            self.get_logger().debug(f'Current cost: {total_cost:.3f}')
+        
+        now = self.get_clock().now()
+        current_time = now.nanoseconds / 1e9
+        if (self.use_cost_optimization and 
+            (current_time - self.last_optimization_time) >= self.optimization_frequency):
+            
+            target_world = self.compute_target_world_position()
+            if target_world is not None:
+                tx, ty, tz = target_world[0], target_world[1], target_world[2]
+                
+                def cost_function(x: float, y: float, z: float) -> Optional[float]:
+                    return self.cost_calculator.estimate_cost_at_position(
+                        x, y, z, tx, ty, tz
+                    )
+                
+                try:
+                    initial_center = (tx, ty)
+                    optimized_center, optimized_radius = optimize_orbit_center_and_radius(
+                        initial_center_xy=initial_center,
+                        initial_radius=self.params.orbit_radius_m,
+                        altitude_m=self.params.constant_altitude_m,
+                        cost_function=cost_function,
+                        search_radius=0.5,
+                        num_samples=9,
+                    )
+                    self.optimized_center = optimized_center
+                    self.optimized_radius = optimized_radius
+                    self.last_optimization_time = current_time
+                    self.get_logger().info(
+                        f'Optimized orbit: center=({optimized_center[0]:.2f}, {optimized_center[1]:.2f}), '
+                        f'radius={optimized_radius:.2f}m'
+                    )
+                except Exception as e:
+                    self.get_logger().warn(f'Orbit optimization failed: {e}')
         
         waypoints = self.build_initial_waypoints()
         if len(waypoints) == 0:
@@ -200,4 +314,3 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
