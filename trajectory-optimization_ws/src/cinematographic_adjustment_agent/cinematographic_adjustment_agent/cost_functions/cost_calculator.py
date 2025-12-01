@@ -1,7 +1,9 @@
 import math
+from typing import Dict, Optional
 import numpy as np
 from cv_bridge import CvBridge
-from geometry_msgs.msg import PolygonStamped
+from geometry_msgs.msg import PolygonStamped, Vector3Stamped
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Image
 
 workspace_root = None
@@ -32,6 +34,10 @@ class CostCalculator:
         self.center_point = None
         self.depth_image = None
         self.center_depth = None
+        self.light_vector = None
+        self.angular_velocity = None
+        self.orientation = None
+        self._prev_ang_vel = None
         
         self.ROSParams = ROSParams
         self.UserRequestedParams = UserRequestedParams
@@ -44,6 +50,26 @@ class CostCalculator:
         node.declare_parameter('w_dist', 4.0)
         node.declare_parameter('w_near', 25.0)
         node.declare_parameter('w_stab', 0.2)
+        node.declare_parameter('w_light', 1.0)
+        node.declare_parameter('w_smooth', 1.0)
+
+    def update_light_vector(self, msg: Vector3Stamped):
+        vector = np.array([msg.vector.x, msg.vector.y, msg.vector.z], dtype=float)
+        norm = np.linalg.norm(vector)
+        self.light_vector = vector / norm if norm > 0 else None
+
+    def update_odometry(self, msg: Odometry):
+        self.angular_velocity = np.array([
+            msg.twist.twist.angular.x,
+            msg.twist.twist.angular.y,
+            msg.twist.twist.angular.z,
+        ], dtype=float)
+        self.orientation = np.array([
+            msg.pose.pose.orientation.x,
+            msg.pose.pose.orientation.y,
+            msg.pose.pose.orientation.z,
+            msg.pose.pose.orientation.w,
+        ], dtype=float)
     
     def update_bounding_box(self, msg: PolygonStamped):
         self.bounding_box = msg
@@ -59,7 +85,33 @@ class CostCalculator:
     def update_depth_image(self, depth_image):
         self.depth_image = depth_image
         self._update_center_depth()
-    
+
+    def _camera_forward_vector(self) -> Optional[np.ndarray]:
+        if self.orientation is None:
+            return None
+        x, y, z, w = self.orientation
+        norm = math.sqrt(x * x + y * y + z * z + w * w)
+        if norm == 0:
+            return None
+        x /= norm
+        y /= norm
+        z /= norm
+        w /= norm
+
+        r00 = 1 - 2 * (y * y + z * z)
+        r01 = 2 * (x * y - z * w)
+        r02 = 2 * (x * z + y * w)
+        r10 = 2 * (x * y + z * w)
+        r11 = 1 - 2 * (x * x + z * z)
+        r12 = 2 * (y * z - x * w)
+        r20 = 2 * (x * z - y * w)
+        r21 = 2 * (y * z + x * w)
+        r22 = 1 - 2 * (x * x + y * y)
+
+        forward = np.array([r00, r10, r20], dtype=float)
+        norm_f = np.linalg.norm(forward)
+        return forward / norm_f if norm_f > 0 else None
+
     def _update_center_depth(self):
         if self.depth_image is None:
             return
@@ -141,12 +193,12 @@ class CostCalculator:
         a = abs(r)
         return 0.5 * math.pow(a, 2) if a <= delta else delta * (a - 0.5 * delta)
     
-    def calculate_cost(self):
+    def calculate_cost(self) -> Optional[Dict[str, float]]:
         if (self.bounding_box is None or 
-            self.dimensions is None or 
             self.center_point is None or 
             self.depth_image is None or
-            self.center_depth is None
+            self.light_vector is None or
+            self.angular_velocity is None
         ):
             return None
 
@@ -200,9 +252,33 @@ class CostCalculator:
         w_stab = float(self.node.get_parameter('w_stab').value)
         depth_cost = (w_dist * J_dist) + (w_near * J_near) + (w_stab * J_stab)
 
-        cost = (depth_cost + framing_cost)
+        forward = self._camera_forward_vector()
+
+        if forward is None or self.light_vector is None:
+            return None
+
+        dot_val = float(np.clip(np.dot(forward, self.light_vector), -1.0, 1.0))
+        angle = math.acos(dot_val)
+        w_light = float(self.node.get_parameter('w_light').value)
+        lighting_cost = w_light * angle
+
+        if self._prev_ang_vel is None:
+            self._prev_ang_vel = self.angular_velocity
+            
+        delta_ang = self.angular_velocity - self._prev_ang_vel
+        w_smooth = float(self.node.get_parameter('w_smooth').value)
+        smoothness_cost = w_smooth * float(np.linalg.norm(delta_ang))
+        self._prev_ang_vel = self.angular_velocity
+
+        total_cost = framing_cost + depth_cost + lighting_cost + smoothness_cost
         
-        return cost
+        return {
+            'framing_cost': float(framing_cost),
+            'distance_cost': float(depth_cost),
+            'lighting_cost': float(lighting_cost),
+            'smoothness_cost': float(smoothness_cost),
+            'total_cost': float(total_cost),
+        }
     
     def estimate_cost_at_position(self, drone_x: float, drone_y: float, drone_z: float, 
                                   target_world_x: float, target_world_y: float, target_world_z: float) -> Optional[float]:
@@ -257,6 +333,5 @@ class CostCalculator:
         w_framing = float(self.node.get_parameter('w_framing').value)
         framing_cost = w_framing * (self.huber_function(du_est, delta_px) + self.huber_function(dv_est, delta_px))
         
-        cost = depth_cost + framing_cost
-        return cost
-
+        total_cost = depth_cost + framing_cost
+        return total_cost

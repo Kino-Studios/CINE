@@ -120,9 +120,9 @@ class LightVectorAnalysisNode(Node):
         blurred = cv2.GaussianBlur(gray, (10, 10), 0)
         flat_index = int(np.argmax(blurred))
         rows, cols = blurred.shape
-        brightest_x, brightest_y = np.unravel_index(flat_index, (rows, cols))
+        brightest_row, brightest_col = np.unravel_index(flat_index, (rows, cols))
 
-        self.center_uv = ([brightest_x, brightest_y])
+        self.center_uv = ([brightest_col, brightest_row])
         self.publish_vectors()
 
     def publish_vectors(self):

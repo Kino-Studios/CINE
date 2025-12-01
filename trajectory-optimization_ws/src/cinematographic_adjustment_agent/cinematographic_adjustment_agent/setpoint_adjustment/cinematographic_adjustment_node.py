@@ -4,10 +4,11 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PolygonStamped
+from geometry_msgs.msg import PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from cv_bridge import CvBridge
 from typing import Optional, Tuple, List
+from cinematography_msgs.msg import CinematographyCosts
 
 workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))))
 config_path = os.path.join(workspace_root, 'config')
@@ -111,6 +112,18 @@ class CinematographicPlannerNode(Node):
             self.odom_callback,
             10,
         )
+        self.light_vector_sub = self.create_subscription(
+            Vector3Stamped,
+            "/cinematography/light_vector",
+            self.light_vector_callback,
+            10,
+        )
+
+        self.cost_pub = self.create_publisher(
+            CinematographyCosts,
+            "/cinematography/cinematography_costs",
+            10,
+        )
 
         self.waypoint_pub_node = WaypointPublisher(self, self.params.waypoints_topic)
         
@@ -151,6 +164,10 @@ class CinematographicPlannerNode(Node):
             msg.pose.pose.orientation.w
         ])
         self.has_odom = True
+        self.cost_calculator.update_odometry(msg)
+
+    def light_vector_callback(self, msg: Vector3Stamped):
+        self.cost_calculator.update_light_vector(msg)
     
     def depth_callback(self, msg: Image):
         try:
@@ -242,7 +259,7 @@ class CinematographicPlannerNode(Node):
                 )
                 return orbit
             except Exception as e:
-                self.get_logger().warn(f'Cost optimization failed: {e}, using basic orbit')
+                self.get_logger().warn(f'Optimization cost failed: {e}')
         
         orbit = generate_orbit_waypoints_xy(
             center_xy_m=center_xy,
@@ -261,8 +278,16 @@ class CinematographicPlannerNode(Node):
         cost_result = self.cost_calculator.calculate_cost()
         
         if cost_result is not None and isinstance(cost_result, dict):
-            total_cost = cost_result.get('cost', 0.0)
-            self.get_logger().debug(f'Current cost: {total_cost:.3f}')
+            total_cost = cost_result.get('total_cost', 0.0)
+            msg = CinematographyCosts()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = "map"
+            msg.light_cost = float(cost_result.get('lighting_cost', 0.0))
+            msg.framing_cost = float(cost_result.get('framing_cost', 0.0))
+            msg.smoothness_cost = float(cost_result.get('smoothness_cost', 0.0))
+            msg.distance_cost = float(cost_result.get('distance_cost', 0.0))
+            msg.total_cost = float(total_cost)
+            self.cost_pub.publish(msg)
         
         now = self.get_clock().now()
         current_time = now.nanoseconds / 1e9
