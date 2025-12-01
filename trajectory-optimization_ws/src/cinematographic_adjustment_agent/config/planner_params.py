@@ -2,19 +2,19 @@ from dataclasses import dataclass
 
 @dataclass
 class CinematographyParams:
-    target_focus_distance_m: float = 1.5
-    min_focus_distance_m: float = 1.0
-    constant_altitude_m: float = 1.5
-    orbit_radius_m: float = 1.5
-    angular_velocity_rps: float = 0.2
-    look_duration_s: float = 3.0
-    waypoint_rate_hz: float = 10.0
-    num_initial_waypoints: int = 40
-    image_width: int = 1152
-    image_height: int = 648
-    camera_fx: float = 525.0
-    camera_fy: float = 525.0
-    camera_cx: float = 576.0
-    camera_cy: float = 324.0
-    waypoints_topic: str = "cinematography/waypoints"
+    TARGET_FOCUS_DISTANCE_M: float = 1.5
+    MIN_FOCUS_DISTANCE_M: float = 1.0
+    CONSTANT_ALTITUDE_M: float = 1.5
+    ORBIT_RADIUS_M: float = 1.5
+    ANGULAR_VELOCITY_RPS: float = 0.2
+    LOOK_DURATION_S: float = 3.0
+    WAYPOINT_RATE_HZ: float = 10.0
+    NUM_INITIAL_WAYPOINTS: int = 40
+    IMAGE_WIDTH: int = 1152
+    IMAGE_HEIGHT: int = 648
+    CAMERA_FX: float = 525.0
+    CAMERA_FY: float = 525.0
+    CAMERA_CX: float = 576.0
+    CAMERA_CY: float = 324.0
+    WAYPOINTS_TOPIC: str = "cinematography/waypoints"
 

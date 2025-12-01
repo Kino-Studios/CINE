@@ -26,7 +26,6 @@ from .trajectory_planner import (
 )
 from ..setpoint_sender.waypoint_sender import WaypointPublisher
 
-
 class CinematographicPlannerNode(Node):
     def __init__(self):
         super().__init__("cinematographic_planner_node")
@@ -36,8 +35,8 @@ class CinematographicPlannerNode(Node):
         self.center_uv = None
         self.bounding_box = None
         
-        self.drone_position = np.array([0.0, 0.0, 1.5])
-        self.drone_orientation = np.array([0.0, 0.0, 0.0, 1.0])
+        self.drone_position = np.array([0.0, 0.0, 0.0])
+        self.drone_orientation = np.array([0.0, 0.0, 0.0, 0.0])
         self.has_odom = False
         
         workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))))
@@ -108,7 +107,7 @@ class CinematographicPlannerNode(Node):
         
         self.odom_sub = self.create_subscription(
             Odometry,
-            "/mavros/local_position/odom",
+            "/odometry",
             self.odom_callback,
             10,
         )
@@ -260,12 +259,14 @@ class CinematographicPlannerNode(Node):
             self.tracker.rotate_to_next_target()
         
         cost_result = self.cost_calculator.calculate_cost()
+        
         if cost_result is not None and isinstance(cost_result, dict):
             total_cost = cost_result.get('cost', 0.0)
             self.get_logger().debug(f'Current cost: {total_cost:.3f}')
         
         now = self.get_clock().now()
         current_time = now.nanoseconds / 1e9
+
         if (self.use_cost_optimization and 
             (current_time - self.last_optimization_time) >= self.optimization_frequency):
             
@@ -288,6 +289,7 @@ class CinematographicPlannerNode(Node):
                         search_radius=0.5,
                         num_samples=9,
                     )
+
                     self.optimized_center = optimized_center
                     self.optimized_radius = optimized_radius
                     self.last_optimization_time = current_time
