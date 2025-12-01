@@ -106,7 +106,7 @@ def generate_launch_description():
             ('a_star_list', ['drone_', drone_id, '_plan_vis/a_star_list']),
             
             ('grid_map/odom', ['drone_', drone_id, '_', odometry_topic]),
-            ('grid_map/cloud', ['drone_', drone_id, '_', cloud_topic]),
+            ('grid_map/cloud', cloud_topic),
             ('grid_map/pose', ['drone_', drone_id, '_', camera_pose_topic]),
             ('grid_map/depth', ['drone_', drone_id, '_', depth_topic]),
             ('grid_map/occupancy_inflate', ['drone_', drone_id, '_grid/grid_map/occupancy_inflate'])
