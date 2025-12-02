@@ -1,5 +1,6 @@
 import math
 from typing import Dict, Optional
+
 import numpy as np
 from cv_bridge import CvBridge
 from geometry_msgs.msg import PolygonStamped, Vector3Stamped
@@ -9,9 +10,11 @@ from sensor_msgs.msg import Image
 workspace_root = None
 constants_path = None
 
+
 def set_constants_path(path):
     global constants_path
     constants_path = path
+
 
 def get_constants():
     import sys
@@ -20,13 +23,13 @@ def get_constants():
     from constants import ROSParams, UserRequestedParams, ImageParams
     return ROSParams, UserRequestedParams, ImageParams
 
+
 class CostCalculator:
     def __init__(self, node, constants_path=None):
         if constants_path:
             set_constants_path(constants_path)
         
         ROSParams, UserRequestedParams, ImageParams = get_constants()
-        
         self.node = node
         self.bridge = CvBridge()
         self.bounding_box = None
@@ -38,11 +41,9 @@ class CostCalculator:
         self.angular_velocity = None
         self.orientation = None
         self._prev_ang_vel = None
-        
         self.ROSParams = ROSParams
         self.UserRequestedParams = UserRequestedParams
         self.ImageParams = ImageParams
-        
         node.declare_parameter('focus_object_id', UserRequestedParams.FOCUS_OBJECT_ID)
         node.declare_parameter('huber_delta_px', 6.0)
         node.declare_parameter('deadband_px', 4.0)

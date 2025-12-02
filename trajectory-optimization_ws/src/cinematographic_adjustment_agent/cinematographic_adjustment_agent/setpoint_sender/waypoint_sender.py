@@ -1,4 +1,5 @@
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from geometry_msgs.msg import PoseStamped
 from typing import List, Tuple
 
@@ -9,11 +10,11 @@ class WaypointPublisher:
         self.goal_pub = node.create_publisher(
             PoseStamped,
             topic_name,
-            QOS_PROFILE = QoSProfile(
-                reliability = ReliabilityPolicy.RELIABLE,
-                durability = DurabilityPolicy.VOLATILE,
-                history = HistoryPolicy.KEEP_LAST,
-                depth = 10
+            QoSProfile(
+                reliability=ReliabilityPolicy.RELIABLE,
+                durability=DurabilityPolicy.VOLATILE,
+                history=HistoryPolicy.KEEP_LAST,
+                depth=10,
             )
         )
     

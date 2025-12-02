@@ -1,15 +1,15 @@
-import sys
 import os
+import sys
+from typing import Optional, Tuple, List
+
 import cv2
 import numpy as np
 import rclpy
-from rclpy.node import Node
-from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 from geometry_msgs.msg import PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
-from cv_bridge import CvBridge
+from rclpy.node import Node
 from scipy.spatial.transform import Rotation
-from typing import Optional, Tuple, List
 
 workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))))
 config_path = os.path.join(workspace_root, 'config')
@@ -58,29 +58,29 @@ class LightVectorAnalysisNode(Node):
         self.params.num_initial_waypoints = int(self.get_parameter("num_initial_waypoints").value)
         self.params.image_width = int(self.get_parameter("image_width").value)
         self.params.image_height = int(self.get_parameter("image_height").value)
-        self.params.fx = float(self.get_parameter("camera_fx").value)
-        self.params.fy = float(self.get_parameter("camera_fy").value)
-        self.params.cx = float(self.get_parameter("camera_cx").value)
-        self.params.cy = float(self.get_parameter("camera_cy").value)
+        self.params.camera_fx = float(self.get_parameter("camera_fx").value)
+        self.params.camera_fy = float(self.get_parameter("camera_fy").value)
+        self.params.camera_cx = float(self.get_parameter("camera_cx").value)
+        self.params.camera_cy = float(self.get_parameter("camera_cy").value)
         self.params.waypoints_topic = str(self.get_parameter("waypoints_topic").value)
 
         self.image_sub = self.create_subscription(
             Image,
-            "/camera_publisher/image_raw",
+            self.params.image_topic,
             self.image_callback,
             20
         )
 
         self.odom_sub = self.create_subscription(
             Odometry,
-            "/odometry",
+            self.params.odom_topic,
             self.odom_callback,
             10,
         )
 
         self.vector_publisher = self.create_publisher(
             Vector3Stamped,
-            "/cinematography/light_vector",
+            self.params.light_vector_topic,
             10
         )
         
@@ -130,8 +130,8 @@ class LightVectorAnalysisNode(Node):
             return
         
         camera_coords = np.array([
-            (self.center_uv[0] - self.params.cx) / self.params.fx,
-            (self.center_uv[1] - self.params.cy) / self.params.fy,
+            (self.center_uv[0] - self.params.camera_cx) / self.params.camera_fx,
+            (self.center_uv[1] - self.params.camera_cy) / self.params.camera_fy,
             1.0
         ])
         

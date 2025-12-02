@@ -26,6 +26,7 @@ setup(
             'cinematographic_adjustment_node = cinematographic_adjustment_agent.setpoint_adjustment.cinematographic_adjustment_node:main',
             'cost_function_calculator = cinematographic_adjustment_agent.cost_functions.cost_functions:main',
             'waypoint_sender = cinematographic_adjustment_agent.setpoint_sender.waypoint_sender:main',
+            'cinematic_bspline_filter = cinematographic_adjustment_agent.setpoint_adjustment.cinematic_bspline_filter:main',
         ],
     },
 )

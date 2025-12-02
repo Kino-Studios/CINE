@@ -1,9 +1,10 @@
 import time
-import numpy as np
 from collections import deque
+
+import numpy as np
 import rclpy
-from rclpy.node import Node
 from geometry_msgs.msg import PolygonStamped
+from rclpy.node import Node
 from std_msgs.msg import Int32
 
 class StateTracker(Node):

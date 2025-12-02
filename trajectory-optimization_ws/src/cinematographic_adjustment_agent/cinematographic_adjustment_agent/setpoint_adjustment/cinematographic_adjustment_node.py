@@ -1,13 +1,14 @@
-import sys
 import os
+import sys
+from typing import List, Optional, Tuple
+
 import numpy as np
 import rclpy
-from rclpy.node import Node
-from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 from geometry_msgs.msg import PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
-from cv_bridge import CvBridge
-from typing import Optional, Tuple, List
+from rclpy.node import Node
+from sensor_msgs.msg import Image
 from cinematography_msgs.msg import CinematographyCosts
 
 workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))))
@@ -83,38 +84,42 @@ class CinematographicPlannerNode(Node):
 
         self.center_sub = self.create_subscription(
             PolygonStamped,
-            "/object_detection/center_point",
+            self.params.center_topic,
             self.center_callback,
             10,
         )
+
         self.depth_sub = self.create_subscription(
             Image,
-            "/depth/image_raw",
+            self.params.depth_topic,
             self.depth_callback,
             10,
         )
+
         self.bounding_box_sub = self.create_subscription(
             PolygonStamped,
-            "/object_detection/bounding_box",
+            self.params.bbox_topic,
             self.bounding_box_callback,
             10,
         )
+
         self.dimensions_sub = self.create_subscription(
             PolygonStamped,
-            "/object_detection/dimensions",
+            self.params.dimensions_topic,
             self.dimensions_callback,
             10,
         )
         
         self.odom_sub = self.create_subscription(
             Odometry,
-            "/odometry",
+            self.params.odom_topic,
             self.odom_callback,
             10,
         )
+
         self.light_vector_sub = self.create_subscription(
             Vector3Stamped,
-            "/cinematography/light_vector",
+            self.params.light_vector_topic,
             self.light_vector_callback,
             10,
         )
@@ -174,6 +179,7 @@ class CinematographicPlannerNode(Node):
             depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding="32FC1")
             self.depth_image = depth
             self.cost_calculator.update_depth_image(depth)
+
             if self.center_uv is not None:
                 u, v = self.center_uv
                 h, w = depth.shape[:2]
@@ -190,6 +196,7 @@ class CinematographicPlannerNode(Node):
             return None
         
         median_depth = self.cost_calculator.get_median_depth_roi()
+
         if median_depth is not None:
             smoothed_depth = median_depth
         else:
@@ -200,6 +207,7 @@ class CinematographicPlannerNode(Node):
             self.params.target_focus_distance_m,
             self.params.min_focus_distance_m,
         )
+
         u, v = self.center_uv
         x_cam, y_cam = pixel_to_camera_xy(
             u,
@@ -210,6 +218,7 @@ class CinematographicPlannerNode(Node):
             self.params.camera_cx,
             self.params.camera_cy,
         )
+        
         return x_cam, y_cam, preferred_depth
     
     def compute_target_world_position(self) -> Optional[np.ndarray]:

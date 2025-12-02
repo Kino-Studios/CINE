@@ -24,7 +24,7 @@ int traj_id_;
 double last_yaw_, last_yaw_dot_;
 double time_forward_;
 
-void bsplineCallback(traj_utils::msg::Bspline::ConstPtr msg)
+void handleBsplineMsg(traj_utils::msg::Bspline::ConstPtr msg)
 {
   // parse pos traj
 
@@ -66,6 +66,16 @@ void bsplineCallback(traj_utils::msg::Bspline::ConstPtr msg)
   traj_duration_ = traj_[0].getTimeSum();
 
   receive_traj_ = true;
+}
+
+void bsplineCallback(traj_utils::msg::Bspline::ConstPtr msg)
+{
+  handleBsplineMsg(msg);
+}
+
+void cinematicBsplineCallback(traj_utils::msg::Bspline::ConstPtr msg)
+{
+  handleBsplineMsg(msg);
 }
 
 std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, rclcpp::Time &time_now, rclcpp::Time &time_last)
@@ -240,6 +250,10 @@ int main(int argc, char **argv)
       "planning/bspline",
       10,
       bsplineCallback);
+  auto cinematic_bspline_sub = node->create_subscription<traj_utils::msg::Bspline>(
+      "planning/cinematic_bspline",
+      10,
+      cinematicBsplineCallback);
 
   pos_cmd_pub = node->create_publisher<quadrotor_msgs::msg::PositionCommand>(
       "/position_cmd",
