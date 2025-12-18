@@ -2,6 +2,8 @@
 
 export ROS_DOMAIN_ID=0
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export DISPLAY=localhost:0
+
 unset ROS_LOCALHOST_ONLY
 
 source ~/bspline-nvidia-isaac-tsdf/venv/bin/activate

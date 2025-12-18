@@ -246,14 +246,27 @@ int main(int argc, char **argv)
   rclcpp::init(argc, argv);
   auto node = rclcpp::Node::make_shared("traj_server");
 
-  auto bspline_sub = node->create_subscription<traj_utils::msg::Bspline>(
-      "planning/bspline",
-      10,
-      bsplineCallback);
-  auto cinematic_bspline_sub = node->create_subscription<traj_utils::msg::Bspline>(
-      "planning/cinematic_bspline",
-      10,
-      cinematicBsplineCallback);
+  // Parameter to select which trajectory to use
+  node->declare_parameter("traj_server/use_cinematic_bspline", false);
+  bool use_cinematic = node->get_parameter("traj_server/use_cinematic_bspline").as_bool();
+
+  // Store subscription to keep it alive - CRITICAL: must not go out of scope!
+  rclcpp::Subscription<traj_utils::msg::Bspline>::SharedPtr bspline_subscription;
+  
+  // Subscribe to appropriate B-spline topic based on parameter
+  if (use_cinematic) {
+    RCLCPP_INFO(node->get_logger(), "Using CINEMATIC B-spline trajectory (planning/cinematic_bspline)");
+    bspline_subscription = node->create_subscription<traj_utils::msg::Bspline>(
+        "planning/cinematic_bspline",
+        10,
+        cinematicBsplineCallback);
+  } else {
+    RCLCPP_INFO(node->get_logger(), "Using BASELINE B-spline trajectory (planning/bspline)");
+    bspline_subscription = node->create_subscription<traj_utils::msg::Bspline>(
+        "planning/bspline",
+        10,
+        bsplineCallback);
+  }
 
   pos_cmd_pub = node->create_publisher<quadrotor_msgs::msg::PositionCommand>(
       "/position_cmd",
