@@ -24,8 +24,9 @@ namespace ego_planner
     node_->declare_parameter("fsm/fail_safe", true);
 
     node_->get_parameter("fsm/flight_type", target_type_);
+    RCLCPP_INFO(node_->get_logger(), "target_type_: %d", target_type_);
    
-    target_type_ = 1;
+    // target_type_ = 1;
     node_->get_parameter("fsm/thresh_replan_time", replan_thresh_);
     node_->get_parameter("fsm/thresh_no_replan_meter", no_replan_thresh_);
     node_->get_parameter("fsm/planning_horizon", planning_horizen_);
@@ -116,9 +117,10 @@ namespace ego_planner
 
     if (target_type_ == TARGET_TYPE::MANUAL_TARGET)
     {
+      RCLCPP_INFO(node_->get_logger(), "Creating subscription to /move_base_simple/goal");
       waypoint_sub_ = node_->create_subscription<geometry_msgs::msg::PoseStamped>(
           "/move_base_simple/goal",
-          1,
+          100,
           [this](const std::shared_ptr<const geometry_msgs::msg::PoseStamped> &msg)
           {
             this->waypointCallback(msg);
@@ -134,23 +136,9 @@ namespace ego_planner
             this->triggerCallback(msg);
           });
 
-      RCLCPP_INFO(node_->get_logger(), "Wait for 1 second.");
-      int count = 0;
-      while (rclcpp::ok() && count++ < 1000)
-      {
-        rclcpp::spin_some(node_);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-      }
-
-      RCLCPP_WARN(node_->get_logger(), "Waiting for trigger from [n3ctrl] from RC");
-
-      while (rclcpp::ok() && (!have_odom_ || !have_trigger_))
-      {
-        rclcpp::spin_some(node_);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-      }
-
-      readGivenWps();
+      // In ROS 2, we cannot block in init() waiting for data because the executor hasn't started yet.
+      // The FSM will handle waiting for odom and trigger in the WAIT_TARGET state.
+      // readGivenWps() will be called when odom and trigger are available.
     }
     else
       cout << "Wrong target_type_ value! target_type_=" << target_type_ << endl;
@@ -209,15 +197,8 @@ namespace ego_planner
       /*** FSM状态转换 ***/
       if (exec_state_ == WAIT_TARGET)
         changeFSMExecState(GEN_NEW_TRAJ, "TRIG");
-      else
-      {
-        while (exec_state_ != EXEC_TRAJ)
-        {
-          rclcpp::spin_some(node_);
-          std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
+      else if (exec_state_ == EXEC_TRAJ)
         changeFSMExecState(REPLAN_TRAJ, "TRIG");
-      }
 
       visualization_->displayGlobalPathList(gloabl_traj, 0.1, 0);
     }
@@ -239,13 +220,25 @@ namespace ego_planner
     if (msg->pose.position.z < -0.1)
       return;
 
-    cout << "Triggered!" << endl;
-
-    init_pt_ = odom_pos_;
-
     Eigen::Vector3d end_wp(msg->pose.position.x, msg->pose.position.y, 1.0);
 
-    planNextWaypoint(end_wp);
+    if (exec_state_ == WAIT_TARGET)
+    {
+      wps_.clear();
+      wps_.push_back(end_wp);
+      waypoint_num_ = 1;
+      wp_id_ = 0;
+
+      cout << "Triggered! First waypoint received." << endl;
+      init_pt_ = odom_pos_;
+      planNextWaypoint(wps_[wp_id_]);
+    }
+    else
+    {
+      wps_.push_back(end_wp);
+      waypoint_num_ = wps_.size();
+      RCLCPP_INFO(node_->get_logger(), "Waypoint added to queue. Total waypoints: %d", waypoint_num_);
+    }
   }
 
   void EGOReplanFSM::odometryCallback(const std::shared_ptr<const nav_msgs::msg::Odometry> &msg)
@@ -493,6 +486,11 @@ namespace ego_planner
 
     case WAIT_TARGET:
     {
+      if (target_type_ == TARGET_TYPE::PRESET_TARGET && have_odom_ && have_trigger_ && !have_target_)
+      {
+        readGivenWps();
+      }
+
       if (!have_target_ || !have_trigger_)
         goto force_return;
       else
@@ -532,7 +530,7 @@ namespace ego_planner
 
     case GEN_NEW_TRAJ:
     {
-
+      RCLCPP_INFO(node_->get_logger(), "Generating new trajectory...");
       bool success = planFromGlobalTraj(10); // zx-todo
       if (success)
       {
@@ -549,7 +547,7 @@ namespace ego_planner
 
     case REPLAN_TRAJ:
     {
-
+      RCLCPP_INFO(node_->get_logger(), "Replanning trajectory...");
       if (planFromCurrentTraj(1))
       {
         changeFSMExecState(EXEC_TRAJ, "FSM");
@@ -574,11 +572,11 @@ namespace ego_planner
       Eigen::Vector3d pos = info->position_traj_.evaluateDeBoorT(t_cur);
 
       /* && (end_pt_ - pos).norm() < 0.5 */
-      if ((target_type_ == TARGET_TYPE::PRESET_TARGET) &&
-          (wp_id_ < waypoint_num_ - 1) &&
+      if ((wp_id_ < waypoint_num_ - 1) &&
           (end_pt_ - pos).norm() < no_replan_thresh_)
       {
         wp_id_++;
+        RCLCPP_INFO(node_->get_logger(), "Advancing to waypoint %d/%d", wp_id_ + 1, waypoint_num_);
         planNextWaypoint(wps_[wp_id_]);
       }
       else if ((local_target_pt_ - end_pt_).norm() < 1e-3) // close to the global target

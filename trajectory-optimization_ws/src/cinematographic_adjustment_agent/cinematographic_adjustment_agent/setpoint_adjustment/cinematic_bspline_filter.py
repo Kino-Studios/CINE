@@ -3,6 +3,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PolygonStamped, Vector3Stamped
+from std_msgs.msg import Float32MultiArray
 from cinematography_msgs.msg import CinematographyCosts
 from traj_utils.msg import Bspline
 from ..config.planner_params import CinematographyParams
@@ -37,6 +38,13 @@ class CinematicBsplineFilter(Node):
             self.cost_callback,
             10,
         )
+        # Subscribe to object detections from simulated detector
+        self.detections_sub = self.create_subscription(
+            Float32MultiArray,
+            'object_detections',
+            self.detections_callback,
+            10,
+        )
         self.bbox_sub = self.create_subscription(
             PolygonStamped,
             self.params.bbox_topic,
@@ -48,6 +56,12 @@ class CinematicBsplineFilter(Node):
             self.params.bspline_out_topic,
             10,
         )
+        
+        self.get_logger().info('Cinematic B-spline Filter initialized')
+        self.get_logger().info(f'  Input: {self.params.bspline_in_topic}')
+        self.get_logger().info(f'  Output: {self.params.bspline_out_topic}')
+        self.get_logger().info(f'  Focus constraints: {self.constraints.FOCUS_MAX_VELOCITY_MPS} m/s')
+        self.get_logger().info(f'  Default constraints: {self.constraints.DEFAULT_MAX_VELOCITY_MPS} m/s')
 
     def light_callback(self, msg: Vector3Stamped):
         vec = np.array([msg.vector.x, msg.vector.y, msg.vector.z], dtype=float)
@@ -65,6 +79,21 @@ class CinematicBsplineFilter(Node):
 
     def bbox_callback(self, msg: PolygonStamped):
         self.has_focus = len(msg.polygon.points) > 0
+    
+    def detections_callback(self, msg: Float32MultiArray):
+        """Handle object detections from simulated detector"""
+        if len(msg.data) < 1:
+            self.has_focus = False
+            return
+        
+        num_objects = int(msg.data[0])
+        self.has_focus = num_objects > 0
+        
+        if self.has_focus and num_objects > 0:
+            # Log detection for debugging (first time only)
+            if not hasattr(self, '_detection_logged'):
+                self.get_logger().info(f'✓ Object detected! Applying FOCUS constraints ({self.constraints.FOCUS_MAX_VELOCITY_MPS} m/s)')
+                self._detection_logged = True
 
     def bspline_callback(self, msg: Bspline):
         adjusted = self.adjust_bspline(msg)
@@ -111,8 +140,8 @@ class CinematicBsplineFilter(Node):
                 smoothed[i] = (1 - alpha) * pos_pts[i] + alpha * 0.5 * (pos_pts[i - 1] + pos_pts[i + 1])
             pos_pts = smoothed
         dt = self._estimate_dt(knots)
-        max_vel = self.constraints.focus_max_velocity_mps if self.has_focus else self.constraints.default_max_velocity_mps
-        max_acc = self.constraints.focus_max_accel_mps2 if self.has_focus else self.constraints.default_max_accel_mps2
+        max_vel = self.constraints.FOCUS_MAX_VELOCITY_MPS if self.has_focus else self.constraints.DEFAULT_MAX_VELOCITY_MPS
+        max_acc = self.constraints.FOCUS_MAX_ACCEL_MPS2 if self.has_focus else self.constraints.DEFAULT_MAX_ACCEL_MPS2
         pos_pts = self._enforce_velocity_acc_limits(pos_pts, dt, max_vel, max_acc)
 
         pos_pts = self.apply_mlp_adjustment(pos_pts)
@@ -124,15 +153,15 @@ class CinematicBsplineFilter(Node):
 
     def _estimate_dt(self, knots: np.ndarray) -> float:
         if knots is None or len(knots) < 2:
-            return self.constraints.min_dt
+            return self.constraints.MIN_DT
 
         diffs = np.diff(knots)
         positive = diffs[diffs > 0]
 
         if len(positive) == 0:
-            return self.constraints.min_dt
+            return self.constraints.MIN_DT
 
-        return float(max(self.constraints.min_dt, float(np.median(positive))))
+        return float(max(self.constraints.MIN_DT, float(np.median(positive))))
 
     def _enforce_velocity_acc_limits(self, pos_pts: np.ndarray, dt: float, max_vel: float, max_acc: float) -> np.ndarray:
         pts = pos_pts.copy()

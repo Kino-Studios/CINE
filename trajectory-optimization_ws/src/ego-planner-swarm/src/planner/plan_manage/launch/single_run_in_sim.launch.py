@@ -45,6 +45,13 @@ def generate_launch_description():
     use_dynamic = LaunchConfiguration('use_dynamic', default=False)  
     use_dynamic_cmd = DeclareLaunchArgument('use_dynamic', default_value=use_dynamic, description='Use Drone Simulation Considering Dynamics or Not')
     
+<<<<<<< HEAD
+=======
+    # Cinematographic mode
+    use_cinematic_bspline = LaunchConfiguration('use_cinematic_bspline', default=False)
+    use_cinematic_bspline_cmd = DeclareLaunchArgument('use_cinematic_bspline', default_value='false', description='Use cinematographic B-spline filter')
+    
+>>>>>>> refs/remotes/origin/main
     # map
     map_generator_node = Node(
         package='map_generator',
@@ -119,11 +126,19 @@ def generate_launch_description():
             'cy': str(243.44969177246094),
             'fx': str(387.229248046875),
             'fy': str(387.229248046875),
+<<<<<<< HEAD
             'max_vel': str(2.0),
             'max_acc': str(6.0),
             'planning_horizon': str(7.5),
             'use_distinctive_trajs': 'True',
             'flight_type': str(2),
+=======
+            'max_vel': str(2.5),
+            'max_acc': str(7.0),
+            'planning_horizon': str(7.5),
+            'use_distinctive_trajs': 'False',  # DISABLED for reproducible trajectories
+            'flight_type': str(1),  # 1 = manual goal, waits for /move_base_simple/goal
+>>>>>>> refs/remotes/origin/main
             'point_num': str(4),
             'point0_x': str(15.0),
             'point0_y': str(0.0),
@@ -155,10 +170,19 @@ def generate_launch_description():
         output='screen',
         remappings=[
             ('position_cmd', ['drone_', drone_id, '_planning/pos_cmd']),
+<<<<<<< HEAD
             ('planning/bspline', ['drone_', drone_id, '_planning/bspline'])
         ],
         parameters=[
             {'traj_server/time_forward': 1.0}
+=======
+            ('planning/bspline', ['drone_', drone_id, '_planning/bspline']),
+            ('planning/cinematic_bspline', ['drone_', drone_id, '_planning/cinematic_bspline'])
+        ],
+        parameters=[
+            {'traj_server/time_forward': 1.0},
+            {'traj_server/use_cinematic_bspline': use_cinematic_bspline}
+>>>>>>> refs/remotes/origin/main
         ]
     )
     
@@ -191,6 +215,10 @@ def generate_launch_description():
     ld.add_action(drone_id_cmd)
     ld.add_action(use_dynamic_cmd)
     ld.add_action(use_mockamap_cmd)
+<<<<<<< HEAD
+=======
+    ld.add_action(use_cinematic_bspline_cmd)
+>>>>>>> refs/remotes/origin/main
 
     # 添加 Map Generator 节点
     ld.add_action(map_generator_node)
