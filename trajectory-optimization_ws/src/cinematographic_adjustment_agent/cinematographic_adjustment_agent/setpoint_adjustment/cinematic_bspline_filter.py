@@ -185,7 +185,8 @@ class CinematicBsplineFilter(Node):
 
                 if acc_mag > max_acc and acc_mag > 0:
                     blend = max_acc / acc_mag
-                    pts[i] *= (blend + 0.5 * (pts[i - 1] + pts[i + 1]) * (1 - blend))
+                    midpoint = 0.5 * (pts[i - 1] + pts[i + 1])
+                    pts[i] = blend * pts[i] + (1.0 - blend) * midpoint
 
         return pts
 

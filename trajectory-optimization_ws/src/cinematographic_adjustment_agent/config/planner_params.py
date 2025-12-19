@@ -24,8 +24,8 @@ class CinematographyParams:
     dimensions_topic: str = "/object_detection/dimensions"
     light_vector_topic: str = "/cinematography/light_vector"
     image_topic: str = "/camera_publisher/image_raw"
-    bspline_in_topic: str = "planning/bspline"
-    bspline_out_topic: str = "planning/cinematic_bspline"
+    bspline_in_topic: str = "/drone_0_planning/bspline"
+    bspline_out_topic: str = "/drone_0_planning/cinematic_bspline"
     cinematic_offset_m: float = 0.5
     cinematic_smooth_alpha: float = 0.2
     min_altitude_m: float = 0.2
