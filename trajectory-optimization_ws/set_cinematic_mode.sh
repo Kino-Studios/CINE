@@ -1,10 +1,23 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Toggles ego planner and cinematographic adjustment algorithm.
 
-# Helper script to toggle cinematographic constraint mode
-# Usage: ./set_cinematic_mode.sh [baseline|constrained]
+set -euo pipefail
 
-MODE=$1
-LAUNCH_FILE=~/bspline-nvidia-isaac-tsdf/trajectory-optimization_ws/src/ego-planner-swarm/src/planner/plan_manage/launch/single_run_in_sim.launch.py
+MODE="${1:-}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+LAUNCH_FILE="${SCRIPT_DIR}/src/ego-planner-swarm/src/planner/plan_manage/launch/single_run_in_sim.launch.py"
+
+inplace_sed() {
+    local expr="$1"
+    local file="$2"
+
+    if command -v gsed >/dev/null 2>&1; then
+        gsed -i -e "$expr" "$file"
+    else
+        # BSD sed (macOS) requires a backup suffix; '' means no backup file.
+        sed -i '' -e "$expr" "$file"
+    fi
+}
 
 if [ -z "$MODE" ]; then
     echo "Usage: $0 [baseline|constrained]"
@@ -14,9 +27,14 @@ if [ -z "$MODE" ]; then
     exit 1
 fi
 
-if [ "$MODE" == "baseline" ]; then
+if [ ! -f "$LAUNCH_FILE" ]; then
+    echo "Launch file not found: $LAUNCH_FILE" >&2
+    exit 1
+fi
+
+if [ "$MODE" = "baseline" ]; then
     echo "Setting mode to BASELINE (unconstrained)..."
-    sed -i "s/'traj_server\/use_cinematic_bspline': True/'traj_server\/use_cinematic_bspline': False/" "$LAUNCH_FILE"
+    inplace_sed "s/'traj_server\\/use_cinematic_bspline': True/'traj_server\\/use_cinematic_bspline': False/" "$LAUNCH_FILE"
     echo "✓ Launch file updated"
     echo ""
     echo "traj_server will now use: planning/bspline"
@@ -26,9 +44,9 @@ if [ "$MODE" == "baseline" ]; then
     echo "  2. Rebuild: colcon build --packages-select ego_planner"
     echo "  3. Restart: ./start_simulation.sh"
     
-elif [ "$MODE" == "constrained" ]; then
+elif [ "$MODE" = "constrained" ]; then
     echo "Setting mode to CONSTRAINED (cinematographic)..."
-    sed -i "s/'traj_server\/use_cinematic_bspline': False/'traj_server\/use_cinematic_bspline': True/" "$LAUNCH_FILE"
+    inplace_sed "s/'traj_server\\/use_cinematic_bspline': False/'traj_server\\/use_cinematic_bspline': True/" "$LAUNCH_FILE"
     echo "✓ Launch file updated"
     echo ""
     echo "traj_server will now use: planning/cinematic_bspline"
@@ -41,6 +59,5 @@ elif [ "$MODE" == "constrained" ]; then
     
 else
     echo "Invalid mode: $MODE"
-    echo "Use 'baseline' or 'constrained'"
     exit 1
 fi

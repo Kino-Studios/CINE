@@ -1,6 +1,3 @@
-#!/bin/bash
-# Wrapper script to run room_waypoint_sender with proper ROS environment
-
 export ROS_DOMAIN_ID=0
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
