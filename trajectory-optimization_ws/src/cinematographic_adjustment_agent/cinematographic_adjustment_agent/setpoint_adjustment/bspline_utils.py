@@ -7,13 +7,16 @@ def msg_to_arrays(msg: Bspline):
     knots = np.array(msg.knots, dtype=float)
     return pos_pts, knots
 
-def arrays_to_msg(original: Bspline, pos_pts: np.ndarray) -> Bspline:
+def arrays_to_msg(original: Bspline, pos_pts: np.ndarray, knots: np.ndarray | None = None) -> Bspline:
     out = Bspline()
     out.drone_id = original.drone_id
     out.order = original.order
     out.traj_id = original.traj_id
     out.start_time = original.start_time
-    out.knots = list(original.knots)
+    if knots is None:
+        out.knots = list(original.knots)
+    else:
+        out.knots = [float(k) for k in knots]
     out.yaw_pts = list(original.yaw_pts)
     out.yaw_dt = original.yaw_dt
     out.pos_pts = []

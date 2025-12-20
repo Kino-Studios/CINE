@@ -1,18 +1,12 @@
-from rclpy.node import Node
-from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseStamped
-import numpy as np
-from typing import Optional
 import math
-import sys
-import os
+from typing import Optional
 
-workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))))
-config_path = os.path.join(workspace_root, 'config')
-if config_path not in sys.path:
-    sys.path.insert(0, config_path)
+import numpy as np
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Odometry
+from rclpy.node import Node
 
-from constants import Constraints
+from ..config.constants import Constraints
 
 
 class TrapezoidalProfile:

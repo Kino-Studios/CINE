@@ -2,36 +2,15 @@ import math
 from typing import Dict, Optional
 
 import numpy as np
-from cv_bridge import CvBridge
 from geometry_msgs.msg import PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import Image
 
-workspace_root = None
-constants_path = None
-
-
-def set_constants_path(path):
-    global constants_path
-    constants_path = path
-
-
-def get_constants():
-    import sys
-    if constants_path and constants_path not in sys.path:
-        sys.path.insert(0, constants_path)
-    from constants import ROSParams, UserRequestedParams, ImageParams
-    return ROSParams, UserRequestedParams, ImageParams
+from ..config.constants import ROSParams, UserRequestedParams, ImageParams
 
 
 class CostCalculator:
-    def __init__(self, node, constants_path=None):
-        if constants_path:
-            set_constants_path(constants_path)
-        
-        ROSParams, UserRequestedParams, ImageParams = get_constants()
+    def __init__(self, node):
         self.node = node
-        self.bridge = CvBridge()
         self.bounding_box = None
         self.dimensions = None
         self.center_point = None
@@ -44,15 +23,29 @@ class CostCalculator:
         self.ROSParams = ROSParams
         self.UserRequestedParams = UserRequestedParams
         self.ImageParams = ImageParams
-        node.declare_parameter('focus_object_id', UserRequestedParams.FOCUS_OBJECT_ID)
-        node.declare_parameter('huber_delta_px', 6.0)
-        node.declare_parameter('deadband_px', 4.0)
-        node.declare_parameter('w_framing', 0.056)
-        node.declare_parameter('w_dist', 4.0)
-        node.declare_parameter('w_near', 25.0)
-        node.declare_parameter('w_stab', 0.2)
-        node.declare_parameter('w_light', 1.0)
-        node.declare_parameter('w_smooth', 1.0)
+        self._declare_parameter("focus_object_id", UserRequestedParams.FOCUS_OBJECT_ID)
+        self._declare_parameter("huber_delta_px", 6.0)
+        self._declare_parameter("deadband_px", 4.0)
+        self._declare_parameter("w_framing", 0.056)
+        self._declare_parameter("w_dist", 4.0)
+        self._declare_parameter("w_near", 25.0)
+        self._declare_parameter("w_stab", 0.2)
+        self._declare_parameter("w_light", 1.0)
+        self._declare_parameter("w_smooth", 1.0)
+
+    def _declare_parameter(self, name: str, default):
+        try:
+            self.node.declare_parameter(name, default)
+        except Exception:
+            return
+
+    def _image_size(self) -> tuple[float, float]:
+        try:
+            w = float(self.node.get_parameter('image_width').value)
+            h = float(self.node.get_parameter('image_height').value)
+            return max(1.0, w), max(1.0, h)
+        except Exception:
+            return float(getattr(self.ImageParams, "IMAGE_WIDTH", 1152)), float(getattr(self.ImageParams, "IMAGE_HEIGHT", 648))
 
     def update_light_vector(self, msg: Vector3Stamped):
         vector = np.array([msg.vector.x, msg.vector.y, msg.vector.z], dtype=float)
@@ -195,21 +188,20 @@ class CostCalculator:
         return 0.5 * math.pow(a, 2) if a <= delta else delta * (a - 0.5 * delta)
     
     def calculate_cost(self) -> Optional[Dict[str, float]]:
-        if (self.bounding_box is None or 
-            self.center_point is None or 
-            self.depth_image is None or
-            self.light_vector is None or
-            self.angular_velocity is None
-        ):
+        if self.depth_image is None:
             return None
 
-        u_star = self.ImageParams.IMAGE_WIDTH * self.UserRequestedParams.THIRDS_ANCHOR[0]
-        v_star = self.ImageParams.IMAGE_HEIGHT * self.UserRequestedParams.THIRDS_ANCHOR[1]
+        if self.bounding_box is None and self.center_point is None:
+            return None
+
+        img_w, img_h = self._image_size()
+        u_star = img_w * self.UserRequestedParams.THIRDS_ANCHOR[0]
+        v_star = img_h * self.UserRequestedParams.THIRDS_ANCHOR[1]
         
-        if len(self.center_point.polygon.points) > 0:
+        if self.center_point is not None and len(self.center_point.polygon.points) > 0:
             u_current = self.center_point.polygon.points[0].x
             v_current = self.center_point.polygon.points[0].y
-        elif len(self.bounding_box.polygon.points) > 0:
+        elif self.bounding_box is not None and len(self.bounding_box.polygon.points) > 0:
             points = self.bounding_box.polygon.points
             if len(points) >= 2:
                 x_coords = [p.x for p in points]
@@ -238,7 +230,9 @@ class CostCalculator:
 
         Z = self.get_median_depth_roi()
         if Z is None:
-            return None
+            if self.center_depth is None:
+                return None
+            Z = float(self.center_depth)
         Z = float(Z)
         
         J_dist = math.pow(Z - d_star, 2)
@@ -253,23 +247,24 @@ class CostCalculator:
         w_stab = float(self.node.get_parameter('w_stab').value)
         depth_cost = (w_dist * J_dist) + (w_near * J_near) + (w_stab * J_stab)
 
-        forward = self._camera_forward_vector()
+        lighting_cost = 0.0
+        if self.light_vector is not None:
+            forward = self._camera_forward_vector()
+            if forward is not None:
+                dot_val = float(np.clip(np.dot(forward, self.light_vector), -1.0, 1.0))
+                angle = math.acos(dot_val)
+                w_light = float(self.node.get_parameter('w_light').value)
+                lighting_cost = w_light * angle
 
-        if forward is None or self.light_vector is None:
-            return None
+        smoothness_cost = 0.0
+        if self.angular_velocity is not None:
+            if self._prev_ang_vel is None:
+                self._prev_ang_vel = self.angular_velocity.copy()
 
-        dot_val = float(np.clip(np.dot(forward, self.light_vector), -1.0, 1.0))
-        angle = math.acos(dot_val)
-        w_light = float(self.node.get_parameter('w_light').value)
-        lighting_cost = w_light * angle
-
-        if self._prev_ang_vel is None:
-            self._prev_ang_vel = self.angular_velocity
-            
-        delta_ang = self.angular_velocity - self._prev_ang_vel
-        w_smooth = float(self.node.get_parameter('w_smooth').value)
-        smoothness_cost = w_smooth * float(np.linalg.norm(delta_ang))
-        self._prev_ang_vel = self.angular_velocity
+            delta_ang = self.angular_velocity - self._prev_ang_vel
+            w_smooth = float(self.node.get_parameter('w_smooth').value)
+            smoothness_cost = w_smooth * float(np.linalg.norm(delta_ang))
+            self._prev_ang_vel = self.angular_velocity.copy()
 
         total_cost = framing_cost + depth_cost + lighting_cost + smoothness_cost
         
@@ -284,9 +279,6 @@ class CostCalculator:
     def estimate_cost_at_position(self, drone_x: float, drone_y: float, drone_z: float, 
                                   target_world_x: float, target_world_y: float, target_world_z: float) -> Optional[float]:
 
-        if self.depth_image is None or self.center_point is None:
-            return None
-        
         dx = target_world_x - drone_x
         dy = target_world_y - drone_y
         dz = target_world_z - drone_z
@@ -309,18 +301,21 @@ class CostCalculator:
         w_stab = float(self.node.get_parameter('w_stab').value)
         depth_cost = (w_dist * J_dist) + (w_near * J_near) + (w_stab * J_stab)
         
-        fx = self.ImageParams.IMAGE_WIDTH / 2.0
-        fy = self.ImageParams.IMAGE_HEIGHT / 2.0
-        
-        if len(self.center_point.polygon.points) > 0:
-            u_current = self.center_point.polygon.points[0].x
-            v_current = self.center_point.polygon.points[0].y
+        img_w, img_h = self._image_size()
+
+        if self.center_point is not None and len(self.center_point.polygon.points) > 0:
+            u_current = float(self.center_point.polygon.points[0].x)
+            v_current = float(self.center_point.polygon.points[0].y)
+        elif self.bounding_box is not None and len(self.bounding_box.polygon.points) >= 2:
+            points = self.bounding_box.polygon.points
+            u_current = float(np.mean([p.x for p in points]))
+            v_current = float(np.mean([p.y for p in points]))
         else:
-            u_current = self.ImageParams.IMAGE_WIDTH / 2.0
-            v_current = self.ImageParams.IMAGE_HEIGHT / 2.0
-        
-        u_star = self.ImageParams.IMAGE_WIDTH * self.UserRequestedParams.THIRDS_ANCHOR[0]
-        v_star = self.ImageParams.IMAGE_HEIGHT * self.UserRequestedParams.THIRDS_ANCHOR[1]
+            u_current = img_w / 2.0
+            v_current = img_h / 2.0
+
+        u_star = img_w * self.UserRequestedParams.THIRDS_ANCHOR[0]
+        v_star = img_h * self.UserRequestedParams.THIRDS_ANCHOR[1]
         
         du_est = u_current - u_star
         dv_est = v_current - v_star

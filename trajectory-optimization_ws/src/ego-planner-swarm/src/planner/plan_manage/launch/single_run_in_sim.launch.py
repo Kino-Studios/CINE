@@ -167,6 +167,59 @@ def generate_launch_description():
             {'traj_server/use_cinematic_bspline': use_cinematic_bspline}
         ]
     )
+
+    cinematic_intent_node = Node(
+        package="cinematographic_adjustment_agent",
+        executable="cinematographic_adjustment_node",
+        name="cinematic_intent_node",
+        output="screen",
+        condition=IfCondition(use_cinematic_bspline),
+        parameters=[
+            {'waypoints_topic': '/move_base_simple/goal'},
+            {'odom_topic': odom_topic},
+            {'depth_topic': depth_topic},
+            {'center_topic': '/object_detection/center_point'},
+            {'bbox_topic': '/object_detection/bounding_box'},
+            {'dimensions_topic': '/object_detection/dimensions'},
+            {'image_width': 640},
+            {'image_height': 480},
+            {'camera_fx': 387.229248046875},
+            {'camera_fy': 387.229248046875},
+            {'camera_cx': 320.5},
+            {'camera_cy': 240.5},
+        ],
+    )
+
+    cinematic_bspline_filter_node = Node(
+        package="cinematographic_adjustment_agent",
+        executable="cinematic_bspline_filter",
+        name="cinematic_bspline_filter",
+        output="screen",
+        condition=IfCondition(use_cinematic_bspline),
+        parameters=[
+            {'bspline_in_topic': PythonExpression(["'/drone_' + str(", drone_id, ") + '_planning/bspline'"])},
+            {'bspline_out_topic': PythonExpression(["'/drone_' + str(", drone_id, ") + '_planning/cinematic_bspline'"])},
+        ],
+    )
+
+    simulated_object_detector_node = Node(
+        package="cinematographic_adjustment_agent",
+        executable="simulated_object_detector",
+        name="simulated_object_detector",
+        output="screen",
+        condition=IfCondition(use_cinematic_bspline),
+        remappings=[
+            ('depth/image_raw', depth_topic),
+        ],
+        parameters=[
+            {'cx': 320.5},
+            {'cy': 240.5},
+            {'fx': 387.229248046875},
+            {'fy': 387.229248046875},
+            {'width': 640},
+            {'height': 480},
+        ],
+    )
     
     # Include simulator 
     simulator_include = IncludeLaunchDescription(PythonLaunchDescriptionSource(
@@ -204,6 +257,9 @@ def generate_launch_description():
     ld.add_action(mockamap_node)
     ld.add_action(advanced_param_include)
     ld.add_action(traj_server_node)
+    ld.add_action(simulated_object_detector_node)
+    ld.add_action(cinematic_intent_node)
+    ld.add_action(cinematic_bspline_filter_node)
     ld.add_action(simulator_include)
 
     return ld

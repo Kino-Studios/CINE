@@ -1,7 +1,8 @@
+import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from geometry_msgs.msg import PoseStamped
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 class WaypointPublisher:
     def __init__(self, node: Node, topic_name: str = "/move_base_simple/goal"):
@@ -37,6 +38,36 @@ class WaypointPublisher:
         msg.pose.orientation.w = 1.0
 
         self.goal_pub.publish(msg)
+
+
+class WaypointSenderNode(Node):
+    def __init__(self):
+        super().__init__("waypoint_sender")
+        self.declare_parameter("input_topic", "/cinematographic/goal")
+        self.declare_parameter("output_topic", "/move_base_simple/goal")
+
+        input_topic = str(self.get_parameter("input_topic").value)
+        output_topic = str(self.get_parameter("output_topic").value)
+
+        self._pub = self.create_publisher(PoseStamped, output_topic, 10)
+        self._sub = self.create_subscription(PoseStamped, input_topic, self._cb, 10)
+        self._last: Optional[PoseStamped] = None
+
+    def _cb(self, msg: PoseStamped):
+        self._last = msg
+        self._pub.publish(msg)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = WaypointSenderNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
     
     def publish_single_waypoint(self, x: float, y: float, z: float):
         msg = PoseStamped()

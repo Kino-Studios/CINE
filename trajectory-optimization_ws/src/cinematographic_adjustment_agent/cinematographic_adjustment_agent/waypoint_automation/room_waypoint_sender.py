@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 
-import rclpy
-from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped
-from nav_msgs.msg import Odometry
-from std_msgs.msg import Float32MultiArray
 import math
 import time
 
+import rclpy
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Odometry
+from rclpy.node import Node
+from std_msgs.msg import Float32MultiArray
+
 
 class RoomWaypointSender(Node):
-    
     def __init__(self):
         super().__init__('room_waypoint_sender')
         
@@ -26,7 +26,7 @@ class RoomWaypointSender(Node):
             self.odom_callback,
             10
         )
-        # Some setups publish visual odom instead; subscribe to both for robustness.
+
         self.visual_odom_sub = self.create_subscription(
             Odometry,
             '/drone_0_visual_odom',
@@ -46,14 +46,13 @@ class RoomWaypointSender(Node):
         self.ready_time = None
         self.STARTUP_DELAY = 5.0
         self.velocity_settled = False
-        self.VELOCITY_THRESHOLD = 0.01        
+        self.VELOCITY_THRESHOLD = 0.01
+        self.current_vel = (0.0, 0.0, 0.0)
         self.object_detection_time = None
-        self.DETECTION_DEBOUNCE = 2.0        
+        self.DETECTION_DEBOUNCE = 2.0
         self.DISTANCE_THRESHOLD_M = 0.5
         self.current_pos = None
 
-        # Camera model for converting detections to meters (pinhole).
-        # These defaults match the simulated detector unless overridden.
         self.declare_parameter('image_width', 640)
         self.declare_parameter('image_height', 480)
         self.declare_parameter('camera_fx', 387.229248046875)
@@ -65,6 +64,9 @@ class RoomWaypointSender(Node):
         self.declare_parameter('max_altitude_m', 3.0)
         self.declare_parameter('min_orbit_radius_m', 0.6)
         self.declare_parameter('max_waypoint_jump_m', 1.0)
+        self.declare_parameter('bezier_blend_length_m', 0.75)
+        self.declare_parameter('bezier_transition_points', 6)
+        self.declare_parameter('bezier_min_speed_mps', 0.05)
         self.declare_parameter('world_bounds_min', [-10.0, -10.0, 0.0])
         self.declare_parameter('world_bounds_max', [10.0, 10.0, 5.0])
 
@@ -79,6 +81,9 @@ class RoomWaypointSender(Node):
         self.max_altitude_m = float(self.get_parameter('max_altitude_m').value)
         self.min_orbit_radius_m = float(self.get_parameter('min_orbit_radius_m').value)
         self.max_waypoint_jump_m = float(self.get_parameter('max_waypoint_jump_m').value)
+        self.bezier_blend_length_m = float(self.get_parameter('bezier_blend_length_m').value)
+        self.bezier_transition_points = int(self.get_parameter('bezier_transition_points').value)
+        self.bezier_min_speed_mps = float(self.get_parameter('bezier_min_speed_mps').value)
         self.world_bounds_min = [float(v) for v in self.get_parameter('world_bounds_min').value]
         self.world_bounds_max = [float(v) for v in self.get_parameter('world_bounds_max').value]
 
@@ -141,9 +146,11 @@ class RoomWaypointSender(Node):
             msg.pose.pose.position.y,
             msg.pose.pose.position.z,
         )
+
         vx = msg.twist.twist.linear.x
         vy = msg.twist.twist.linear.y
         vz = msg.twist.twist.linear.z
+        self.current_vel = (float(vx), float(vy), float(vz))
         velocity_mag = (vx**2 + vy**2 + vz**2)**0.5
         
         if self.start_pos is None:
@@ -153,21 +160,19 @@ class RoomWaypointSender(Node):
                 msg.pose.pose.position.z
             )
             self.ready_time = self.get_clock().now()
-            self.get_logger().info(f'[ODOMETRY] Drone starting position: ({self.start_pos[0]:.2f}, {self.start_pos[1]:.2f}, {self.start_pos[2]:.2f})')
-            self.get_logger().info(f'[ODOMETRY] Waiting for velocity to settle below {self.VELOCITY_THRESHOLD} m/s...')
+            self.get_logger().info(f'global drone starting position: ({self.start_pos[0]:.2f}, {self.start_pos[1]:.2f}, {self.start_pos[2]:.2f})')
+            self.get_logger().info(f'waiting for velocity settle to: {self.VELOCITY_THRESHOLD}')
 
         if velocity_mag < self.VELOCITY_THRESHOLD:
             
             if not self.velocity_settled:
                 self.velocity_settled = True
-                self.get_logger().info(f'[ODOMETRY] Velocity settled: {velocity_mag:.4f} m/s')
+                self.get_logger().info(f'velocity settled: {velocity_mag:.4f}')
         else:
             self.velocity_settled = False
     
     def detection_callback(self, msg):
         try:
-            # Once we start executing a waypoint sequence, ignore further detections to avoid
-            # swapping waypoint sets mid-flight (planner instability).
             if self.active_waypoints is not None:
                 return
 
@@ -193,31 +198,31 @@ class RoomWaypointSender(Node):
             self.get_logger().warn(f'Error processing: {e}')
 
     def _parse_detection(self, msg: Float32MultiArray):
-        """
-        Supports two schemas:
-        1) SimulatedObjectDetector: [num_objects, center_x_px, center_y_px, depth_m, area, coverage, centering, norm_x, norm_y, ...]
-        2) Legacy/handmade: [x_center, y_center, depth_m, bbox_width, bbox_height, (confidence)]
-        """
         if msg is None or msg.data is None:
             return None
+
         data = [float(x) for x in msg.data]
+
         if len(data) < 1:
             return None
 
-        # Schema 1: count-prefixed list.
         num_objects = int(round(data[0]))
+
         if num_objects >= 1 and len(data) >= 4:
-            # First object starts at index 1.
             center_x = data[1]
             center_y = data[2]
             depth_m = data[3]
+
             if not (depth_m > 0.1 and math.isfinite(depth_m)):
                 return None
+                
             norm_x = None
             norm_y = None
+
             if len(data) >= 9:
                 norm_x = data[7]
                 norm_y = data[8]
+
             return {
                 'center_x': center_x,
                 'center_y': center_y,
@@ -226,13 +231,14 @@ class RoomWaypointSender(Node):
                 'norm_y': norm_y,
             }
 
-        # Schema 2: direct fields (often normalized [0..1] for x/y).
         if len(data) >= 3:
             x_center = data[0]
             y_center = data[1]
             depth_m = data[2]
+
             if not (depth_m > 0.1 and math.isfinite(depth_m)):
                 return None
+
             return {
                 'center_x': x_center,
                 'center_y': y_center,
@@ -244,21 +250,49 @@ class RoomWaypointSender(Node):
         return None
 
     def process_detection_synchronously(self, detection_msg):
-        """Process detection message directly without waiting for async callback."""
         try:
             det = self._parse_detection(detection_msg)
             if det is None:
                 return
             self.detected_object = det
             self.get_logger().info(
-                f"[CINEMATOGRAPHY] Object detected at ({det['center_x']:.2f}, {det['center_y']:.2f}) depth={det['depth']:.2f}m"
+                f"object coordinate and depth: ({det['center_x']:.2f}, {det['center_y']:.2f}) depth={det['depth']:.2f}"
             )
 
             self.generate_cinematographic_waypoints()
             self.use_dynamic_waypoints = True
             self.object_detection_time = self.get_clock().now()
         except Exception as e:
-            self.get_logger().warn(f'Error in process_detection_synchronously: {e}')
+            self.get_logger().warn(f'object detection error: {e}')
+
+    def _normalize3(self, v):
+        x, y, z = float(v[0]), float(v[1]), float(v[2])
+        n = (x * x + y * y + z * z) ** 0.5
+        if n <= 1e-9:
+            return (0.0, 0.0, 0.0), 0.0
+        return (x / n, y / n, z / n), n
+
+    def _sample_cubic_bezier(self, p0, p1, p2, p3, n_points):
+        n_points = int(n_points)
+        if n_points <= 0:
+            return []
+
+        out = []
+        for i in range(1, n_points + 1):
+            t = i / (n_points + 1)
+            u = 1.0 - t
+            b0 = u * u * u
+            b1 = 3.0 * u * u * t
+            b2 = 3.0 * u * t * t
+            b3 = t * t * t
+            out.append(
+                (
+                    b0 * p0[0] + b1 * p1[0] + b2 * p2[0] + b3 * p3[0],
+                    b0 * p0[1] + b1 * p1[1] + b2 * p2[1] + b3 * p3[1],
+                    b0 * p0[2] + b1 * p1[2] + b2 * p2[2] + b3 * p3[2],
+                )
+            )
+        return out
 
     def generate_cinematographic_waypoints(self):
         if self.detected_object is None or self.start_pos is None:
@@ -270,7 +304,6 @@ class RoomWaypointSender(Node):
         norm_x = self.detected_object.get('norm_x', None)
         norm_y = self.detected_object.get('norm_y', None)
 
-        # Convert center to pixel coords if normalized was provided.
         if norm_x is not None and norm_y is not None:
             u = float(norm_x) * float(self.image_width)
             v = float(norm_y) * float(self.image_height)
@@ -278,7 +311,6 @@ class RoomWaypointSender(Node):
             u = center_x
             v = center_y
 
-        # Convert to meters in camera frame (approx; assumes camera aligned with world frame).
         if self.fx > 0 and self.fy > 0:
             obj_x_m = (u - self.cx) / self.fx * obj_depth
             obj_y_m = (v - self.cy) / self.fy * obj_depth
@@ -294,6 +326,7 @@ class RoomWaypointSender(Node):
         start_angle = -arc_span / 2
         
         cinematographic_waypoints = []
+        circle_center_abs = None
         
         for i in range(num_waypoints):
             angle = start_angle + (arc_span * i / (num_waypoints - 1))
@@ -301,7 +334,6 @@ class RoomWaypointSender(Node):
             dx_circle = circle_radius * math.cos(angle)
             dy_circle = circle_radius * math.sin(angle)
             
-            # Small composition bias based on normalized position if available.
             thirds_offset_x_m = 0.0
             thirds_offset_y_m = 0.0
             if norm_x is not None and norm_y is not None:
@@ -311,21 +343,61 @@ class RoomWaypointSender(Node):
             wp_x_m = obj_x_m + dx_circle + thirds_offset_x_m
             wp_y_m = obj_y_m + dy_circle + thirds_offset_y_m
 
-            # Depth is NOT altitude; keep a stable flight altitude for the orbit.
             wp_z_m = max(self.min_altitude_m, min(self.max_altitude_m, self.orbit_altitude_m))
 
             abs_x = self.start_pos[0] + wp_x_m
             abs_y = self.start_pos[1] + wp_y_m
             abs_z = wp_z_m
+
+            if circle_center_abs is None:
+                circle_center_abs = (
+                    self.start_pos[0] + obj_x_m + thirds_offset_x_m,
+                    self.start_pos[1] + obj_y_m + thirds_offset_y_m,
+                    wp_z_m,
+                )
             
             safe = self._clamp_waypoint_to_bounds((abs_x, abs_y, abs_z))
             cinematographic_waypoints.append(safe)
+
+        transition = []
         
+        if (
+            self.current_pos is not None
+            and circle_center_abs is not None
+            and len(cinematographic_waypoints) >= 2
+            and self.bezier_transition_points > 0
+            and self.bezier_blend_length_m > 0.0
+        ):
+            p0 = self.current_pos
+            p3 = cinematographic_waypoints[0]
+            p_next = cinematographic_waypoints[1]
+
+            v0_dir, v0_mag = self._normalize3(self.current_vel)
+
+            if v0_mag < self.bezier_min_speed_mps:
+                fallback = (p3[0] - p0[0], p3[1] - p0[1], p3[2] - p0[2])
+                v0_dir, _ = self._normalize3(fallback)
+
+            v3_dir, _ = self._normalize3((p_next[0] - p3[0], p_next[1] - p3[1], p_next[2] - p3[2]))
+
+            alpha = float(self.bezier_blend_length_m)
+            beta = float(self.bezier_blend_length_m)
+            p1 = (p0[0] + alpha * v0_dir[0], p0[1] + alpha * v0_dir[1], p0[2] + alpha * v0_dir[2])
+            p2 = (p3[0] - beta * v3_dir[0], p3[1] - beta * v3_dir[1], p3[2] - beta * v3_dir[2])
+
+            transition = self._sample_cubic_bezier(
+                p0, p1, p2, p3, self.bezier_transition_points
+            )
+            transition = [self._clamp_waypoint_to_bounds(wp) for wp in transition]
+
+        if transition:
+            cinematographic_waypoints = transition + cinematographic_waypoints
+
         self.dynamic_waypoints = cinematographic_waypoints
         
         self.publish_simulated_detection()
+
         self.get_logger().info(
-            f"[CINEMATOGRAPHY] Generated {len(cinematographic_waypoints)} arc waypoints "
             f"(radius={circle_radius:.2f}m, depth={obj_depth:.2f}m, z={self.orbit_altitude_m:.2f}m)"
         )
 
@@ -341,15 +413,15 @@ class RoomWaypointSender(Node):
         
         fake_detection = Float32MultiArray()
         fake_detection.data = [
-            1.0,      # num_objects
-            320.0,    # center_x (px)
-            240.0,    # center_y (px)
-            1.5,      # depth (m)
-            5000.0,   # area (px)
-            0.05,     # coverage
-            0.9,      # centering_score
-            0.5,      # norm_x
-            0.5,      # norm_y
+            1.0,
+            320.0,
+            240.0,
+            1.5,
+            5000.0,
+            0.05,
+            0.9,
+            0.5,
+            0.5,
         ]
         
         self.fake_detection_pub.publish(fake_detection)
@@ -367,57 +439,54 @@ class RoomWaypointSender(Node):
             self.get_logger().debug(f'[SENDER] Waiting: start_pos={self.start_pos is not None}, waypoints_sent={self.waypoints_sent}, velocity_settled={self.velocity_settled}, elapsed={elapsed:.1f}s/{self.STARTUP_DELAY}s')
     
     def _initialize_waypoint_sequence(self):
-        # First, ensure dynamic waypoints are generated by directly calling arc generation
         if self.start_pos is not None and self.detected_object is None:
-            # Generate arc waypoints for simulated object
             fake_detection = Float32MultiArray()
             fake_detection.data = [
-                1.0,      # num_objects
-                320.0,    # center_x (px)
-                240.0,    # center_y (px)
-                1.5,      # depth (m)
-                5000.0,   # area (px)
-                0.05,     # coverage
-                0.9,      # centering_score
-                0.5,      # norm_x
-                0.5,      # norm_y
+                1.0,
+                320.0,
+                240.0,
+                1.5,
+                5000.0,
+                0.05,
+                0.9,
+                0.5,
+                0.5,
             ]
-            # Directly process the detection instead of publishing
+
             self.process_detection_synchronously(fake_detection)
         
         if self.use_dynamic_waypoints and self.dynamic_waypoints is not None:
             waypoints_to_send = self.dynamic_waypoints
-            mode = "CINEMATOGRAPHIC"
-            self.get_logger().info(f'[SENDER] Sending {len(waypoints_to_send)} cinematographic arc waypoints')
         else:
             absolute_waypoints = [
                 (self.start_pos[0] + dx, self.start_pos[1] + dy, self.start_pos[2] + dz)
                 for dx, dy, dz in self.static_waypoints
             ]
             waypoints_to_send = absolute_waypoints
-            mode = "STATIC ELLIPTICAL"
-            self.get_logger().info(f'[SENDER] Sending {len(waypoints_to_send)} static elliptical waypoints')
 
         clamped = [self._clamp_waypoint_to_bounds(wp) for wp in waypoints_to_send]
         self.active_waypoints = self._limit_consecutive_waypoint_jumps(clamped)
         self.active_waypoint_index = 0
         self.active_waypoint_sent = False
-        self.get_logger().info(f'[SENDER] Waypoint mode={mode}, sequential send enabled (threshold={self.DISTANCE_THRESHOLD_M}m)')
 
     def _limit_consecutive_waypoint_jumps(self, waypoints):
         if not waypoints or self.max_waypoint_jump_m <= 0:
             return waypoints
+
         out = [waypoints[0]]
+
         for wp in waypoints[1:]:
             prev = out[-1]
             dx = wp[0] - prev[0]
             dy = wp[1] - prev[1]
             dz = wp[2] - prev[2]
             dist = (dx * dx + dy * dy + dz * dz) ** 0.5
+
             if dist <= self.max_waypoint_jump_m:
                 out.append(wp)
                 continue
             steps = max(1, int(math.ceil(dist / self.max_waypoint_jump_m)))
+
             for s in range(1, steps + 1):
                 t = s / steps
                 out.append(
@@ -427,8 +496,10 @@ class RoomWaypointSender(Node):
                         prev[2] + t * dz,
                     )
                 )
+
         if len(out) != len(waypoints):
-            self.get_logger().info(f'[SENDER] Inserted {len(out) - len(waypoints)} intermediate waypoints (max_jump={self.max_waypoint_jump_m}m)')
+            self.get_logger().info(f'inserted {len(out) - len(waypoints)} intermediate waypoints (max_jump={self.max_waypoint_jump_m}m)')
+
         return out
 
     def _step_waypoint_sequence(self):
@@ -436,7 +507,7 @@ class RoomWaypointSender(Node):
             return
 
         if self.active_waypoint_index >= len(self.active_waypoints):
-            self.get_logger().info(f'[SENDER] Completed waypoint sequence ({len(self.active_waypoints)} waypoints)')
+            self.get_logger().info(f'completed waypoints sequence')
             self.waypoints_sent = True
             self.timer.cancel()
             return
@@ -458,16 +529,20 @@ class RoomWaypointSender(Node):
             goal.pose.orientation.w = 1.0
             self.goal_pub.publish(goal)
             self.active_waypoint_sent = True
+
             self.get_logger().info(
-                f'[SENDER] Sent waypoint {self.active_waypoint_index + 1}/{len(self.active_waypoints)}: '
+                f'sent waypoint {self.active_waypoint_index + 1}/{len(self.active_waypoints)}: '
                 f'({x:.2f}, {y:.2f}, {z:.2f})'
             )
+
             return
 
         if dist <= self.DISTANCE_THRESHOLD_M:
+
             self.get_logger().info(
-                f'[SENDER] Reached waypoint {self.active_waypoint_index + 1}/{len(self.active_waypoints)} (dist={dist:.2f}m)'
+                f'reached waypoint {self.active_waypoint_index + 1}/{len(self.active_waypoints)} (dist={dist:.2f}m)'
             )
+
             self.active_waypoint_index += 1
             self.active_waypoint_sent = False
             return

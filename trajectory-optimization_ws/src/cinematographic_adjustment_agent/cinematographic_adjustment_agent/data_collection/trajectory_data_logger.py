@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
+import csv
 import rclpy
 import rclpy.time
 from rclpy.node import Node
 from traj_utils.msg import Bspline
 from nav_msgs.msg import Odometry
 import numpy as np
-import pandas as pd
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
@@ -134,16 +134,21 @@ class TrajectoryDataLogger(Node):
         self.output_dir = output_dir
         
         # Subscribe to B-spline messages to evaluate planned trajectories
+        self.declare_parameter("baseline_bspline_topic", "/drone_0_planning/bspline")
+        self.declare_parameter("cinematic_bspline_topic", "/drone_0_planning/cinematic_bspline")
+        baseline_topic = str(self.get_parameter("baseline_bspline_topic").value)
+        cinematic_topic = str(self.get_parameter("cinematic_bspline_topic").value)
+
         self.baseline_bspline_sub = self.create_subscription(
             Bspline,
-            '/drone_0_planning/bspline',
+            baseline_topic,
             self.baseline_bspline_callback,
             10
         )
         
         self.constrained_bspline_sub = self.create_subscription(
             Bspline,
-            '/drone_0_planning/cinematic_bspline',
+            cinematic_topic,
             self.constrained_bspline_callback,
             10
         )
@@ -203,8 +208,23 @@ class TrajectoryDataLogger(Node):
                     'planned_speed': speed,
                 }
                 self.baseline_data.append(baseline_entry)
-        
-        # TODO: For constrained mode, would need separate odometry or marker to distinguish
+
+        if self.current_constrained_bspline:
+            pos, vel = self._evaluate_bspline(self.current_constrained_bspline, current_time)
+            if pos is not None and self.start_position is not None:
+                rel_pos = pos - self.start_position
+                speed = np.linalg.norm(vel)
+                constrained_entry = {
+                    'time': global_elapsed,
+                    'planned_x': rel_pos[0],
+                    'planned_y': rel_pos[1],
+                    'planned_z': rel_pos[2],
+                    'planned_vx': vel[0],
+                    'planned_vy': vel[1],
+                    'planned_vz': vel[2],
+                    'planned_speed': speed,
+                }
+                self.constrained_data.append(constrained_entry)
         
         if len(self.baseline_data) % 500 == 0:
             constrained_info = f'Constrained: {len(self.constrained_data)} samples' if self.constrained_data else 'No constrained data'
@@ -251,39 +271,11 @@ class TrajectoryDataLogger(Node):
         except Exception as e:
             self.get_logger().error(f'Error evaluating B-spline: {e}')
             return None, None
-            
-            # Get valid time span from knot vector
-            # In uniform B-spline: t_min = knots[order], t_max = knots[len(knots) - order - 1]
-            t_min = knots[order]
-            t_max = knots[len(knots) - order - 1]
-            
-            # Clamp time to valid range
-            t_clamped = np.clip(time_in_traj, 0.0, t_max - t_min)
-            u = t_min + t_clamped
-            
-            # Create scipy BSpline for each dimension and evaluate
-            pos = np.zeros(3)
-            vel = np.zeros(3)
-            
-            for dim in range(3):
-                # Create BSpline for this dimension
-                spl = BSpline(knots, control_points[:, dim], order - 1)
-                
-                # Evaluate position and derivative (velocity)
-                pos[dim] = spl(u)
-                vel[dim] = spl(u, 1)  # First derivative
-            
-            return pos, vel
-        except Exception as e:
-            self.get_logger().warn(f'Error evaluating B-spline: {e}')
-            return np.array([0.0, 0.0, 0.0]), np.array([0.0, 0.0, 0.0])
     
     def save_data(self):
         if len(self.baseline_data) == 0:
             self.get_logger().warn('No data to save')
             return
-        
-        baseline_df = pd.DataFrame(self.baseline_data)
         
         # Determine filename based on mode
         if self.mode == 'baseline' and self.run_number is not None:
@@ -298,35 +290,47 @@ class TrajectoryDataLogger(Node):
             filename = f'baseline_sim_{self.timestamp}.csv'
         
         baseline_path = self.output_dir / filename
-        baseline_df.to_csv(baseline_path, index=False)
-        self.get_logger().info(f'Saved {len(baseline_df)} baseline data points to: {baseline_path}')
+        self._write_csv(baseline_path, self.baseline_data)
+        self.get_logger().info(f'Saved {len(self.baseline_data)} baseline data points to: {baseline_path}')
         
         # Only save constrained data if it was actually collected
         if len(self.constrained_data) > 0:
-            constrained_df = pd.DataFrame(self.constrained_data)
             constrained_path = self.output_dir / f'constrained_sim_{self.timestamp}.csv'
-            constrained_df.to_csv(constrained_path, index=False)
-            self.get_logger().info(f'Saved {len(constrained_df)} constrained data points to: {constrained_path}')
+            self._write_csv(constrained_path, self.constrained_data)
+            self.get_logger().info(f'Saved {len(self.constrained_data)} constrained data points to: {constrained_path}')
             
             # Print comparison statistics
+            baseline_speeds = np.array([float(r["planned_speed"]) for r in self.baseline_data], dtype=float)
+            constrained_speeds = np.array([float(r["planned_speed"]) for r in self.constrained_data], dtype=float)
             self.get_logger().info(
-                f'Baseline - Mean speed: {baseline_df["planned_speed"].mean():.3f} m/s, '
-                f'Max: {baseline_df["planned_speed"].max():.3f} m/s'
+                f'Baseline - Mean speed: {float(np.mean(baseline_speeds)):.3f} m/s, '
+                f'Max: {float(np.max(baseline_speeds)):.3f} m/s'
             )
             self.get_logger().info(
-                f'Constrained - Mean speed: {constrained_df["planned_speed"].mean():.3f} m/s, '
-                f'Max: {constrained_df["planned_speed"].max():.3f} m/s'
+                f'Constrained - Mean speed: {float(np.mean(constrained_speeds)):.3f} m/s, '
+                f'Max: {float(np.max(constrained_speeds)):.3f} m/s'
             )
             self.get_logger().info(
-                f'Speed reduction: {baseline_df["planned_speed"].mean() - constrained_df["planned_speed"].mean():.3f} m/s'
+                f'Speed reduction: {float(np.mean(baseline_speeds) - np.mean(constrained_speeds)):.3f} m/s'
             )
         else:
             # Only baseline data collected
+            baseline_speeds = np.array([float(r["planned_speed"]) for r in self.baseline_data], dtype=float)
             self.get_logger().info(
-                f'Baseline - Mean speed: {baseline_df["planned_speed"].mean():.3f} m/s, '
-                f'Max: {baseline_df["planned_speed"].max():.3f} m/s'
+                f'Baseline - Mean speed: {float(np.mean(baseline_speeds)):.3f} m/s, '
+                f'Max: {float(np.max(baseline_speeds)):.3f} m/s'
             )
             self.get_logger().info('No constrained data collected (cinematic filter not running)')
+
+    def _write_csv(self, path: Path, rows: list[dict]):
+        if not rows:
+            return
+        fieldnames = list(rows[0].keys())
+        with open(path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
 
 
 
