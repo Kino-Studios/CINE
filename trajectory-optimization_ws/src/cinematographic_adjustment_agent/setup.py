@@ -28,7 +28,7 @@ setup(
             'waypoint_sender = cinematographic_adjustment_agent.setpoint_sender.waypoint_sender:main',
             'cinematic_bspline_filter = cinematographic_adjustment_agent.setpoint_adjustment.cinematic_bspline_filter:main',
             'trajectory_data_logger = cinematographic_adjustment_agent.data_collection.trajectory_data_logger:main',
-            'room_waypoint_sender = cinematographic_adjustment_agent.waypoint_automation.room_waypoint_sender:main',
+            'cinematic_waypoint_generator = cinematographic_adjustment_agent.waypoint_automation.cinematic_waypoint_generator:main',
             'simulated_object_detector = cinematographic_adjustment_agent.object_detection.simulated_object_detector:main',
         ],
     },
