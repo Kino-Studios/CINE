@@ -273,54 +273,38 @@ class TrajectoryDataLogger(Node):
             return None, None
     
     def save_data(self):
+        # Constrained runs should emit a single cinematic file (no extra constrained_* output).
+        if self.mode == 'constrained':
+            if len(self.constrained_data) == 0 and len(self.baseline_data) == 0:
+                self.get_logger().warn('No data to save')
+                return
+
+            filename = f'cinematic_sim_{self.timestamp}.csv' if self.run_number is None else f'cinematic_replay_run{self.run_number}_{self.timestamp}.csv'
+            data_to_save = self.constrained_data if len(self.constrained_data) > 0 else self.baseline_data
+            path = self.output_dir / filename
+            self._write_csv(path, data_to_save)
+            self.get_logger().info(f'Saved {len(data_to_save)} cinematic data points to: {path}')
+            return
+
         if len(self.baseline_data) == 0:
             self.get_logger().warn('No data to save')
             return
-        
-        # Determine filename based on mode
+
+        # Determine filename based on mode (baseline / sim)
         if self.mode == 'baseline' and self.run_number is not None:
             filename = f'baseline_replay_run{self.run_number}_{self.timestamp}.csv'
-        elif self.mode == 'constrained' and self.run_number is not None:
-            filename = f'constrained_replay_run{self.run_number}_{self.timestamp}.csv'
-        elif self.mode == 'constrained':
-            # Constrained mode without run number (direct data collection)
-            filename = f'cinematic_sim_{self.timestamp}.csv'
         else:
-            # Default to baseline_sim for 'sim' mode or backward compatibility
             filename = f'baseline_sim_{self.timestamp}.csv'
         
         baseline_path = self.output_dir / filename
         self._write_csv(baseline_path, self.baseline_data)
         self.get_logger().info(f'Saved {len(self.baseline_data)} baseline data points to: {baseline_path}')
-        
-        # Only save constrained data if it was actually collected
+
+        # Only save constrained data in non-constrained mode for comparison
         if len(self.constrained_data) > 0:
             constrained_path = self.output_dir / f'constrained_sim_{self.timestamp}.csv'
             self._write_csv(constrained_path, self.constrained_data)
             self.get_logger().info(f'Saved {len(self.constrained_data)} constrained data points to: {constrained_path}')
-            
-            # Print comparison statistics
-            baseline_speeds = np.array([float(r["planned_speed"]) for r in self.baseline_data], dtype=float)
-            constrained_speeds = np.array([float(r["planned_speed"]) for r in self.constrained_data], dtype=float)
-            self.get_logger().info(
-                f'Baseline - Mean speed: {float(np.mean(baseline_speeds)):.3f} m/s, '
-                f'Max: {float(np.max(baseline_speeds)):.3f} m/s'
-            )
-            self.get_logger().info(
-                f'Constrained - Mean speed: {float(np.mean(constrained_speeds)):.3f} m/s, '
-                f'Max: {float(np.max(constrained_speeds)):.3f} m/s'
-            )
-            self.get_logger().info(
-                f'Speed reduction: {float(np.mean(baseline_speeds) - np.mean(constrained_speeds)):.3f} m/s'
-            )
-        else:
-            # Only baseline data collected
-            baseline_speeds = np.array([float(r["planned_speed"]) for r in self.baseline_data], dtype=float)
-            self.get_logger().info(
-                f'Baseline - Mean speed: {float(np.mean(baseline_speeds)):.3f} m/s, '
-                f'Max: {float(np.max(baseline_speeds)):.3f} m/s'
-            )
-            self.get_logger().info('No constrained data collected (cinematic filter not running)')
 
     def _write_csv(self, path: Path, rows: list[dict]):
         if not rows:

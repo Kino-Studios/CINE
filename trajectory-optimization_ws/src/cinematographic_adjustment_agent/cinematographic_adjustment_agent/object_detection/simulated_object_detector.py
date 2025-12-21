@@ -14,11 +14,10 @@ class SimulatedObjectDetector(Node):
         
         self.bridge = CvBridge()
         
-        # TODO: update these parameters properly
-        self.declare_parameter('cx', 320.5)
-        self.declare_parameter('cy', 240.5)
-        self.declare_parameter('fx', 387.229248046875)
-        self.declare_parameter('fy', 387.229248046875)
+        self.declare_parameter('cx', 576.0)
+        self.declare_parameter('cy', 324.0)
+        self.declare_parameter('fx', 525.0)
+        self.declare_parameter('fy', 525.0)
         self.declare_parameter('width', 1152)
         self.declare_parameter('height', 648)
         

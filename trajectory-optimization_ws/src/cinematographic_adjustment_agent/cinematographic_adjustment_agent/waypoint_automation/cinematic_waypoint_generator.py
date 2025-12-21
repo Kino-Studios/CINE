@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import math
 import time
 
@@ -20,6 +18,7 @@ class CinematicWaypointGenerator(Node):
         self.detection_sub = self.create_subscription(Float32MultiArray, "/object_detections", self.detection_callback, 10)
 
         self.start_pos = None
+        self.current_yaw = 0.0
         self.waypoints_sent = False
         self.ready_time = None
         self.STARTUP_DELAY = 5.0
@@ -68,38 +67,12 @@ class CinematicWaypointGenerator(Node):
         self.world_bounds_max = [float(v) for v in self.get_parameter("world_bounds_max").value]
 
         self.static_waypoints = [
-            (0.1, 0.3, 0.3),
-            (0.15, 0.8, 0.32),
-            (0.2, 1.3, 0.35),
-            (0.25, 1.8, 0.38),
-            (0.3, 2.3, 0.42),
-            (0.35, 2.8, 0.48),
-            (0.4, 3.2, 0.58),
-            (0.45, 3.5, 0.7),
-            (0.5, 3.6, 0.8),
-            (0.5, 3.5, 0.82),
-            (0.48, 3.2, 0.78),
-            (0.45, 2.8, 0.7),
-            (0.4, 2.3, 0.58),
-            (0.3, 1.8, 0.48),
-            (0.2, 1.2, 0.38),
-            (0.05, 0.6, 0.32),
-            (-0.1, 0.0, 0.3),
-            (-0.25, -0.6, 0.3),
-            (-0.35, -1.2, 0.32),
-            (-0.4, -1.8, 0.38),
-            (-0.42, -2.3, 0.48),
-            (-0.4, -2.8, 0.58),
-            (-0.35, -3.2, 0.7),
-            (-0.25, -3.5, 0.8),
-            (-0.2, -3.6, 0.82),
-            (-0.15, -3.5, 0.78),
-            (-0.1, -3.2, 0.7),
-            (-0.05, -2.8, 0.58),
-            (0.05, -2.3, 0.48),
-            (0.15, -1.8, 0.38),
-            (0.25, -1.2, 0.32),
-            (0.3, -0.6, 0.3),
+            (1.2, 0.5, 1.2),
+            (2.8, 1.4, 1.35),
+            (4.2, 1.6, 1.5),
+            (5.6, 2.4, 1.7),
+            (6.9, 3.6, 1.9),
+            (8.6, 4.4, 2.0),
         ]
 
         self.dynamic_waypoints = None
@@ -112,6 +85,22 @@ class CinematicWaypointGenerator(Node):
         self.fake_detection_pub = self.create_publisher(Float32MultiArray, "/object_detections", 10)
 
         self.timer = self.create_timer(0.5, self.check_and_send_waypoints)
+
+    def _build_room_orbit(self):
+        # Small, simple loop to reduce collisions: near-circle with gentle Z changes.
+        radius = max(self.min_orbit_radius_m, 1.0)
+        radius = min(radius, 1.5)
+        num_pts = 16
+        pts = []
+
+        for i in range(num_pts):
+            t = 2.0 * math.pi * i / num_pts
+            x = radius * math.cos(t)
+            y = radius * math.sin(t)
+            z = self.orbit_altitude_m + 0.2 * math.sin(t)
+            z = max(self.min_altitude_m, min(self.max_altitude_m, z))
+            pts.append((x, y, z))
+        return pts
 
     def odom_callback(self, msg: Odometry):
         self.current_pos = (
@@ -133,6 +122,14 @@ class CinematicWaypointGenerator(Node):
                 msg.pose.pose.position.z,
             )
             self.ready_time = self.get_clock().now()
+
+        w = msg.pose.pose.orientation.w
+        x = msg.pose.pose.orientation.x
+        y = msg.pose.pose.orientation.y
+        z = msg.pose.pose.orientation.z
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        self.current_yaw = math.atan2(siny_cosp, cosy_cosp)
 
         self.velocity_settled = velocity_mag < self.VELOCITY_THRESHOLD
 
@@ -283,15 +280,24 @@ class CinematicWaypointGenerator(Node):
             wp_x_m = obj_x_m + dx_circle + thirds_offset_x_m
             wp_y_m = obj_y_m + dy_circle + thirds_offset_y_m
 
+            base_pos = self.current_pos if self.current_pos is not None else self.start_pos
+            if base_pos is None:
+                continue
+
+            cos_yaw = math.cos(self.current_yaw)
+            sin_yaw = math.sin(self.current_yaw)
+            world_dx = cos_yaw * wp_x_m - sin_yaw * wp_y_m
+            world_dy = sin_yaw * wp_x_m + cos_yaw * wp_y_m
+
             wp_z_m = max(self.min_altitude_m, min(self.max_altitude_m, self.orbit_altitude_m))
-            abs_x = self.start_pos[0] + wp_x_m
-            abs_y = self.start_pos[1] + wp_y_m
+            abs_x = base_pos[0] + world_dx
+            abs_y = base_pos[1] + world_dy
             abs_z = wp_z_m
 
             if circle_center_abs is None:
                 circle_center_abs = (
-                    self.start_pos[0] + obj_x_m + thirds_offset_x_m,
-                    self.start_pos[1] + obj_y_m + thirds_offset_y_m,
+                    base_pos[0] + cos_yaw * (obj_x_m + thirds_offset_x_m) - sin_yaw * (obj_y_m + thirds_offset_y_m),
+                    base_pos[1] + sin_yaw * (obj_x_m + thirds_offset_x_m) + cos_yaw * (obj_y_m + thirds_offset_y_m),
                     wp_z_m,
                 )
 
@@ -441,4 +447,3 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
-

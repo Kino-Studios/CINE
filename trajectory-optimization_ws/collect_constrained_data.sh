@@ -27,10 +27,16 @@ if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
     echo "⏳ Ego planner simulation not detected. Starting it now..."
     echo ""
     
-    # Start simulation in background
+    # Start simulation with visible output
     cd ~/bspline-nvidia-isaac-tsdf/trajectory-optimization_ws
-    ./start_simulation.sh &
+    echo "Starting simulation (output will be shown below)..."
+    echo "================================================================"
+    ./start_simulation.sh > /tmp/ego_planner_constrained.log 2>&1 &
     SIM_PID=$!
+    
+    # Show output in real-time
+    tail -f /tmp/ego_planner_constrained.log &
+    TAIL_PID=$!
     
     echo "⏳ Waiting for simulation to initialize (30 seconds)..."
     for i in {1..30}; do
@@ -45,7 +51,8 @@ if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
     if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
         echo ""
         echo "✗ ERROR: Simulation failed to start!"
-        kill $SIM_PID 2>/dev/null
+        echo "Check /tmp/ego_planner_constrained.log for details"
+        kill $SIM_PID $TAIL_PID 2>/dev/null
         exit 1
     fi
 else
@@ -69,8 +76,8 @@ LOGGER_PID=$!
 sleep 2
 
 # Start waypoint sender
-echo "Starting room waypoint sender..."
-~/bspline-nvidia-isaac-tsdf/trajectory-optimization_ws/install/cinematographic_adjustment_agent/bin/room_waypoint_sender &
+# Use the new cinematic_waypoint_generator
+~/bspline-nvidia-isaac-tsdf/trajectory-optimization_ws/install/cinematographic_adjustment_agent/bin/cinematic_waypoint_generator &
 WAYPOINT_PID=$!
 
 echo ""
@@ -92,7 +99,7 @@ echo "=================================================="
 echo ""
 
 # Wait for user interrupt
-trap "echo ''; echo 'Stopping data collection...'; kill $LOGGER_PID $WAYPOINT_PID $FILTER_PID 2>/dev/null; exit 0" INT TERM
+trap "echo ''; echo 'Stopping data collection...'; kill $LOGGER_PID $WAYPOINT_PID $FILTER_PID $TAIL_PID 2>/dev/null; exit 0" INT TERM
 
 # Keep script running
 wait
