@@ -42,7 +42,7 @@ class CinematicWaypointGenerator(Node):
         self.declare_parameter("min_altitude_m", 0.2)
         self.declare_parameter("max_altitude_m", 3.0)
         self.declare_parameter("min_orbit_radius_m", 0.6)
-        self.declare_parameter("max_waypoint_jump_m", 1.0)
+        self.declare_parameter("max_waypoint_jump_m", 2.5)
         self.declare_parameter("bezier_blend_length_m", 0.75)
         self.declare_parameter("bezier_transition_points", 6)
         self.declare_parameter("bezier_min_speed_mps", 0.05)
@@ -67,12 +67,20 @@ class CinematicWaypointGenerator(Node):
         self.world_bounds_max = [float(v) for v in self.get_parameter("world_bounds_max").value]
 
         self.static_waypoints = [
-            (1.2, 0.5, 1.2),
-            (2.8, 1.4, 1.35),
-            (4.2, 1.6, 1.5),
-            (5.6, 2.4, 1.7),
-            (6.9, 3.6, 1.9),
-            (8.6, 4.4, 2.0),
+            (0.54, 0.225, 1.0),
+            (1.17, 0.81, 1.1),
+            (1.35, 1.44, 1.15),
+            (0.81, 2.025, 1.2),
+            (0.99, 2.79, 1.15),
+            (1.62, 3.24, 1.1),
+            (2.34, 3.375, 1.4),
+            (3.3, 3.4, 2.2),
+            (3.285, 2.43, 2.0),
+            (3.285, 1.8, 1.95),
+            (3.06, 1.26, 1.75),
+            (2.61, 0.63, 1.45),
+            (2.475, 0.09, 1.25),
+            (2.43, -0.45, 1.15),
         ]
 
         self.dynamic_waypoints = None
@@ -81,13 +89,22 @@ class CinematicWaypointGenerator(Node):
         self.active_waypoints = None
         self.active_waypoint_index = 0
         self.active_waypoint_sent = False
+        self.simulated_detection_active = False
+
+        self.stuck_progress_threshold_m = 0.25
+        self.stuck_time_s = 2.5
+        self.nudge_offset_xy_m = 0.5
+        self.nudge_offset_z_m = 0.4
+        self.max_stuck_nudges = 2
+        self.last_progress_time = None
+        self.last_progress_dist = None
+        self.stuck_attempts = 0
 
         self.fake_detection_pub = self.create_publisher(Float32MultiArray, "/object_detections", 10)
 
         self.timer = self.create_timer(0.5, self.check_and_send_waypoints)
 
     def _build_room_orbit(self):
-        # Small, simple loop to reduce collisions: near-circle with gentle Z changes.
         radius = max(self.min_orbit_radius_m, 1.0)
         radius = min(radius, 1.5)
         num_pts = 16
@@ -237,6 +254,12 @@ class CinematicWaypointGenerator(Node):
         if self.detected_object is None or self.start_pos is None:
             return
 
+        if self.simulated_detection_active:
+            self.dynamic_waypoints = [self._clamp_waypoint_to_bounds(wp) for wp in self.static_waypoints]
+            self.object_detection_time = self.get_clock().now()
+            self.publish_simulated_detection()
+            return
+
         obj_depth = float(self.detected_object["depth"])
         center_x = float(self.detected_object["center_x"])
         center_y = float(self.detected_object["center_y"])
@@ -364,15 +387,14 @@ class CinematicWaypointGenerator(Node):
             fake_detection = Float32MultiArray()
             fake_detection.data = [1.0, 320.0, 240.0, 1.5, 5000.0, 0.05, 0.9, 0.5, 0.5]
             self.detected_object = self._parse_detection(fake_detection)
+            self.simulated_detection_active = True
             self.generate_cinematographic_waypoints()
             self.use_dynamic_waypoints = True
 
         if self.use_dynamic_waypoints and self.dynamic_waypoints is not None:
             waypoints_to_send = self.dynamic_waypoints
         else:
-            waypoints_to_send = [
-                (self.start_pos[0] + dx, self.start_pos[1] + dy, self.start_pos[2] + dz) for dx, dy, dz in self.static_waypoints
-            ]
+            waypoints_to_send = list(self.static_waypoints)
 
         clamped = [self._clamp_waypoint_to_bounds(wp) for wp in waypoints_to_send]
         self.active_waypoints = self._limit_consecutive_waypoint_jumps(clamped)
@@ -426,11 +448,80 @@ class CinematicWaypointGenerator(Node):
             goal.pose.orientation.w = 1.0
             self.goal_pub.publish(goal)
             self.active_waypoint_sent = True
+            self.last_progress_time = self.get_clock().now()
+            self.last_progress_dist = dist
+            self.stuck_attempts = 0
             return
+
+        now = self.get_clock().now()
+        if self.last_progress_time is None:
+            self.last_progress_time = now
+            self.last_progress_dist = dist
+
+        if dist < (self.last_progress_dist or 0.0) - self.stuck_progress_threshold_m:
+            self.last_progress_time = now
+            self.last_progress_dist = dist
+        else:
+            elapsed_stuck = (now - self.last_progress_time).nanoseconds / 1e9
+            if elapsed_stuck >= self.stuck_time_s:
+                if self._nudge_active_waypoint(elapsed_stuck):
+                    return
 
         if dist <= self.DISTANCE_THRESHOLD_M:
             self.active_waypoint_index += 1
             self.active_waypoint_sent = False
+            self.last_progress_time = None
+            self.last_progress_dist = None
+            self.stuck_attempts = 0
+
+    def _nudge_active_waypoint(self, elapsed_stuck: float):
+        if self.active_waypoints is None or self.active_waypoint_index >= len(self.active_waypoints):
+            return False
+
+        current = self.active_waypoints[self.active_waypoint_index]
+
+        if self.stuck_attempts >= self.max_stuck_nudges:
+            self.get_logger().warn(
+                f"Waypoint {self.active_waypoint_index} stuck after {self.stuck_attempts} nudges; skipping it ({current})"
+            )
+            self.active_waypoint_index += 1
+            self.active_waypoint_sent = False
+            self.last_progress_time = None
+            self.last_progress_dist = None
+            self.stuck_attempts = 0
+            return True
+
+        lateral_offset = (self.nudge_offset_xy_m, self.nudge_offset_xy_m, self.nudge_offset_z_m)
+        if self.active_waypoint_index > 0 and self.active_waypoint_index + 1 < len(self.active_waypoints):
+            prev_wp = self.active_waypoints[self.active_waypoint_index - 1]
+            next_wp = self.active_waypoints[self.active_waypoint_index + 1]
+            tangent = (next_wp[0] - prev_wp[0], next_wp[1] - prev_wp[1], 0.0)
+            lateral = (-tangent[1], tangent[0], 0.0)
+            lateral_dir, mag = self._normalize3(lateral)
+            if mag > 0.0:
+                lateral_offset = (
+                    lateral_dir[0] * self.nudge_offset_xy_m,
+                    lateral_dir[1] * self.nudge_offset_xy_m,
+                    self.nudge_offset_z_m,
+                )
+
+        nudged = (
+            current[0] + lateral_offset[0],
+            current[1] + lateral_offset[1],
+            current[2] + lateral_offset[2],
+        )
+        nudged = self._clamp_waypoint_to_bounds(nudged)
+
+        self.active_waypoints[self.active_waypoint_index] = nudged
+        self.active_waypoint_sent = False
+        self.last_progress_time = self.get_clock().now()
+        self.last_progress_dist = None
+        self.stuck_attempts += 1
+
+        self.get_logger().warn(
+            f"Waypoint {self.active_waypoint_index} stuck for {elapsed_stuck:.1f}s at {current}, nudging to {nudged} (attempt {self.stuck_attempts}/{self.max_stuck_nudges})"
+        )
+        return True
 
 
 def main(args=None):

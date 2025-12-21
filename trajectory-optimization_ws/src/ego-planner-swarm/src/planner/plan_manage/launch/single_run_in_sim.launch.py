@@ -58,15 +58,15 @@ def generate_launch_description():
         parameters=[
             {'map/x_size': 26.0},
             {'map/y_size': 20.0},
-            {'map/z_size': 3.0},
+            {'map/z_size': 4.0},
             {'map/resolution': 0.1},
             {'ObstacleShape/seed': 1.0},
-            {'map/obs_num': 250},
+            {'map/obs_num': 10},
             {'ObstacleShape/lower_rad': 0.5},
             {'ObstacleShape/upper_rad': 0.7},
             {'ObstacleShape/lower_hei': 0.0},
             {'ObstacleShape/upper_hei': 3.0},
-            {'map/circle_num': 250},
+            {'map/circle_num': 10},
             {'ObstacleShape/radius_l': 0.7},
             {'ObstacleShape/radius_h': 0.5},
             {'ObstacleShape/z_l': 0.7},
@@ -114,7 +114,6 @@ def generate_launch_description():
             'odometry_topic': odom_topic,
             'obj_num_set': obj_num,
             
-            # Pass through your topic configurations
             'camera_pose_topic': camera_pose_topic,
             'depth_topic': depth_topic,
             'cloud_topic': cloud_topic,
@@ -126,8 +125,8 @@ def generate_launch_description():
             'max_vel': str(2.5),
             'max_acc': str(7.0),
             'planning_horizon': str(7.5),
-            'use_distinctive_trajs': 'False',  # DISABLED for reproducible trajectories
-            'flight_type': str(1),  # 1 = manual goal, waits for /move_base_simple/goal
+            'use_distinctive_trajs': 'False', # TODO: check if needed false or true
+            'flight_type': str(1),
             'point_num': str(4),
             'point0_x': str(15.0),
             'point0_y': str(0.0),
