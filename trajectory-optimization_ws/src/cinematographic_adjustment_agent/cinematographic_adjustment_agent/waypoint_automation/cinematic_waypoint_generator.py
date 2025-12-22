@@ -42,12 +42,13 @@ class CinematicWaypointGenerator(Node):
         self.declare_parameter("min_altitude_m", 0.2)
         self.declare_parameter("max_altitude_m", 3.0)
         self.declare_parameter("min_orbit_radius_m", 0.6)
-        self.declare_parameter("max_waypoint_jump_m", 2.5)
+        self.declare_parameter("max_waypoint_jump_m", 1.5)
         self.declare_parameter("bezier_blend_length_m", 0.75)
         self.declare_parameter("bezier_transition_points", 6)
         self.declare_parameter("bezier_min_speed_mps", 0.05)
         self.declare_parameter("world_bounds_min", [-10.0, -10.0, 0.0])
-        self.declare_parameter("world_bounds_max", [10.0, 10.0, 5.0])
+        self.declare_parameter("world_bounds_max", [10.0, 10.0, 2.8])
+        self.declare_parameter("virtual_ceiling_m", 2.8)
 
         self.image_width = int(self.get_parameter("image_width").value)
         self.image_height = int(self.get_parameter("image_height").value)
@@ -65,6 +66,8 @@ class CinematicWaypointGenerator(Node):
         self.bezier_min_speed_mps = float(self.get_parameter("bezier_min_speed_mps").value)
         self.world_bounds_min = [float(v) for v in self.get_parameter("world_bounds_min").value]
         self.world_bounds_max = [float(v) for v in self.get_parameter("world_bounds_max").value]
+        self.virtual_ceiling_m = float(self.get_parameter("virtual_ceiling_m").value)
+        self.max_altitude_m = min(self.max_altitude_m, self.virtual_ceiling_m)
 
         self.static_waypoints = [
             (0.54, 0.225, 1.0),
@@ -73,14 +76,12 @@ class CinematicWaypointGenerator(Node):
             (0.81, 2.025, 1.2),
             (0.99, 2.79, 1.15),
             (1.62, 3.24, 1.1),
-            (2.34, 3.375, 1.4),
-            (3.3, 3.4, 2.2),
-            (3.285, 2.43, 2.0),
-            (3.285, 1.8, 1.95),
-            (3.06, 1.26, 1.75),
-            (2.61, 0.63, 1.45),
-            (2.475, 0.09, 1.25),
-            (2.43, -0.45, 1.15),
+            (2.34, 3.375, 1.15),
+            (3.05, 3, 1.2),
+            (3.285, 2.43, 1.23),
+            (3.0,1.5,1.26),
+            (2.61,0.63,1.28),
+            (2.43,-0.45,1.295),
         ]
 
         self.dynamic_waypoints = None
@@ -94,7 +95,7 @@ class CinematicWaypointGenerator(Node):
         self.stuck_progress_threshold_m = 0.25
         self.stuck_time_s = 2.5
         self.nudge_offset_xy_m = 0.5
-        self.nudge_offset_z_m = 0.4
+        self.nudge_offset_z_m = 0.25
         self.max_stuck_nudges = 2
         self.last_progress_time = None
         self.last_progress_dist = None
@@ -362,7 +363,8 @@ class CinematicWaypointGenerator(Node):
         x, y, z = wp
         x = max(self.world_bounds_min[0], min(self.world_bounds_max[0], float(x)))
         y = max(self.world_bounds_min[1], min(self.world_bounds_max[1], float(y)))
-        z = max(self.world_bounds_min[2], min(self.world_bounds_max[2], float(z)))
+        ceiling = min(self.world_bounds_max[2], self.virtual_ceiling_m)
+        z = max(self.world_bounds_min[2], min(ceiling, float(z)))
         z = max(self.min_altitude_m, min(self.max_altitude_m, z))
         return (x, y, z)
 

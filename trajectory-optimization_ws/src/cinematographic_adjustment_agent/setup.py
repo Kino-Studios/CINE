@@ -21,6 +21,8 @@ setup(
     description='Cinematographic adjustment agent for trajectory optimization',
     license='MIT',
     tests_require=['pytest'],
+    # Ensure console_script entrypoints are installed to lib/<pkg> so ROS2 launch can find them
+    options={'install': {'install_scripts': os.path.join('lib', package_name)}},
     entry_points={
         'console_scripts': [
             'cinematographic_adjustment_node = cinematographic_adjustment_agent.setpoint_adjustment.cinematographic_adjustment_node:main',

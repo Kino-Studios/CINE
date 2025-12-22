@@ -120,6 +120,7 @@ class TrajectoryDataLogger(Node):
         self.constrained_data = []
         self.current_baseline_bspline = None
         self.current_constrained_bspline = None
+        self.current_odom = None
         self.logging_active = False
         self.global_start_time = None  # Global time when logging started
         self.start_position = None  # Store first position as origin for relative coordinates
@@ -136,8 +137,10 @@ class TrajectoryDataLogger(Node):
         # Subscribe to B-spline messages to evaluate planned trajectories
         self.declare_parameter("baseline_bspline_topic", "/drone_0_planning/bspline")
         self.declare_parameter("cinematic_bspline_topic", "/drone_0_planning/cinematic_bspline")
+        self.declare_parameter("odom_topic", "/drone_0_odometry")
         baseline_topic = str(self.get_parameter("baseline_bspline_topic").value)
         cinematic_topic = str(self.get_parameter("cinematic_bspline_topic").value)
+        odom_topic = str(self.get_parameter("odom_topic").value)
 
         self.baseline_bspline_sub = self.create_subscription(
             Bspline,
@@ -151,6 +154,13 @@ class TrajectoryDataLogger(Node):
             cinematic_topic,
             self.constrained_bspline_callback,
             10
+        )
+
+        self.odom_sub = self.create_subscription(
+            Odometry,
+            odom_topic,
+            self.odom_callback,
+            50
         )
         
         # Sample at 50 Hz to get very dense trajectory data
@@ -176,55 +186,59 @@ class TrajectoryDataLogger(Node):
     def constrained_bspline_callback(self, msg):
         """Store latest constrained B-spline"""
         self.current_constrained_bspline = msg
+
+    def odom_callback(self, msg: Odometry):
+        """Store latest odometry and start logging when first received"""
+        self.current_odom = msg
+        if not self.logging_active:
+            self.logging_active = True
+            self.global_start_time = self.get_clock().now()
+            pos = np.array([
+                msg.pose.pose.position.x,
+                msg.pose.pose.position.y,
+                msg.pose.pose.position.z,
+            ])
+            self.start_position = pos.copy()
+            self.get_logger().info(f'[LOGGER] Received first odometry; origin set to ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})')
     
     def log_data(self):
         """Evaluate B-spline trajectories at 20 Hz to get planned position/velocity"""
-        if not self.logging_active:
+        if not self.logging_active or self.current_odom is None:
             return
         
         current_time = self.get_clock().now()
         global_elapsed = (current_time - self.global_start_time).nanoseconds / 1e9
-        
-        # Evaluate baseline B-spline at current time
-        if self.current_baseline_bspline:
-            pos, vel = self._evaluate_bspline(self.current_baseline_bspline, current_time)
-            if pos is not None:
-                # Store first position as origin
-                if self.start_position is None:
-                    self.start_position = pos.copy()
-                    self.get_logger().info(f'Origin set to: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})')
-                
-                # Store positions relative to start (so all plots start at 0,0,0)
-                rel_pos = pos - self.start_position
-                speed = np.linalg.norm(vel)
-                baseline_entry = {
-                    'time': global_elapsed,
-                    'planned_x': rel_pos[0],
-                    'planned_y': rel_pos[1],
-                    'planned_z': rel_pos[2],
-                    'planned_vx': vel[0],
-                    'planned_vy': vel[1],
-                    'planned_vz': vel[2],
-                    'planned_speed': speed,
-                }
-                self.baseline_data.append(baseline_entry)
 
-        if self.current_constrained_bspline:
-            pos, vel = self._evaluate_bspline(self.current_constrained_bspline, current_time)
-            if pos is not None and self.start_position is not None:
-                rel_pos = pos - self.start_position
-                speed = np.linalg.norm(vel)
-                constrained_entry = {
-                    'time': global_elapsed,
-                    'planned_x': rel_pos[0],
-                    'planned_y': rel_pos[1],
-                    'planned_z': rel_pos[2],
-                    'planned_vx': vel[0],
-                    'planned_vy': vel[1],
-                    'planned_vz': vel[2],
-                    'planned_speed': speed,
-                }
-                self.constrained_data.append(constrained_entry)
+        # Log odometry relative to the first received pose
+        msg = self.current_odom
+        pos = np.array([
+            msg.pose.pose.position.x,
+            msg.pose.pose.position.y,
+            msg.pose.pose.position.z,
+        ])
+        vel = np.array([
+            msg.twist.twist.linear.x,
+            msg.twist.twist.linear.y,
+            msg.twist.twist.linear.z,
+        ])
+
+        if self.start_position is None:
+            self.start_position = pos.copy()
+            self.get_logger().info(f'[LOGGER] Origin set to: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})')
+
+        rel_pos = pos - self.start_position
+        speed = np.linalg.norm(vel)
+        odom_entry = {
+            'time': global_elapsed,
+            'odom_x': rel_pos[0],
+            'odom_y': rel_pos[1],
+            'odom_z': rel_pos[2],
+            'odom_vx': vel[0],
+            'odom_vy': vel[1],
+            'odom_vz': vel[2],
+            'odom_speed': speed,
+        }
+        self.baseline_data.append(odom_entry)
         
         if len(self.baseline_data) % 500 == 0:
             constrained_info = f'Constrained: {len(self.constrained_data)} samples' if self.constrained_data else 'No constrained data'

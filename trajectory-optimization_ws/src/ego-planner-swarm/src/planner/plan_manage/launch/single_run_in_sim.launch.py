@@ -16,13 +16,12 @@ def generate_launch_description():
     
     map_size_x = LaunchConfiguration('map_size_x', default = 50.0)
     map_size_y = LaunchConfiguration('map_size_y', default = 25.0)
-    map_size_z = LaunchConfiguration('map_size_z', default = 2.0)
+    map_size_z = LaunchConfiguration('map_size_z', default = 5.0)
     
-    # CHANGE THESE TO YOUR ACTUAL TOPIC NAMES:
-    odom_topic = LaunchConfiguration('odom_topic', default = 'odometry')  # Simulated odometry topic
-    depth_topic = LaunchConfiguration('depth_topic', default = 'depth/image_raw')  # Depth image topic
-    camera_pose_topic = LaunchConfiguration('camera_pose_topic', default = 'camera_pose')  # Camera pose topic
-    cloud_topic = LaunchConfiguration('cloud_topic', default = '/map_generator/global_cloud')  # Global point cloud from map generator
+    odom_topic = LaunchConfiguration('odom_topic', default = 'odometry')
+    depth_topic = LaunchConfiguration('depth_topic', default = 'depth/image_raw')
+    camera_pose_topic = LaunchConfiguration('camera_pose_topic', default = 'camera_pose')
+    cloud_topic = LaunchConfiguration('cloud_topic', default = '/map_generator/global_cloud')
     
     
     # 声明全局参数
@@ -45,9 +44,8 @@ def generate_launch_description():
     use_dynamic = LaunchConfiguration('use_dynamic', default=False)  
     use_dynamic_cmd = DeclareLaunchArgument('use_dynamic', default_value=use_dynamic, description='Use Drone Simulation Considering Dynamics or Not')
     
-    # Cinematographic mode
-    use_cinematic_bspline = LaunchConfiguration('use_cinematic_bspline', default=False)
-    use_cinematic_bspline_cmd = DeclareLaunchArgument('use_cinematic_bspline', default_value='false', description='Use cinematographic B-spline filter')
+    use_cinematic_bspline = LaunchConfiguration('use_cinematic_bspline', default=True)
+    use_cinematic_bspline_cmd = DeclareLaunchArgument('use_cinematic_bspline', default_value='true', description='Use cinematographic B-spline filter')
 
     # map
     map_generator_node = Node(
@@ -56,17 +54,17 @@ def generate_launch_description():
         name='random_forest',
         output='screen',
         parameters=[
-            {'map/x_size': 26.0},
-            {'map/y_size': 20.0},
-            {'map/z_size': 4.0},
+            {'map/x_size': 45.0},
+            {'map/y_size': 45.0},
+            {'map/z_size': map_size_z},
             {'map/resolution': 0.1},
             {'ObstacleShape/seed': 1.0},
-            {'map/obs_num': 10},
+            {'map/obs_num': 25},
             {'ObstacleShape/lower_rad': 0.5},
             {'ObstacleShape/upper_rad': 0.7},
             {'ObstacleShape/lower_hei': 0.0},
             {'ObstacleShape/upper_hei': 3.0},
-            {'map/circle_num': 10},
+            {'map/circle_num': 25},
             {'ObstacleShape/radius_l': 0.7},
             {'ObstacleShape/radius_h': 0.5},
             {'ObstacleShape/z_l': 0.7},

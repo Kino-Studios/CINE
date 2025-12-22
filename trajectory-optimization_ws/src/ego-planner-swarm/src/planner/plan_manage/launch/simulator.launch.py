@@ -12,7 +12,6 @@ from launch.conditions import IfCondition, UnlessCondition, LaunchConfigurationE
 from launch.substitutions import PythonExpression
 
 def generate_launch_description():
-    # LaunchConfigurations
     init_x = LaunchConfiguration('init_x_', default=0.0)
     init_y = LaunchConfiguration('init_y_', default=0.0)
     init_z = LaunchConfiguration('init_z_', default=0.0)
@@ -26,7 +25,6 @@ def generate_launch_description():
     odometry_topic = LaunchConfiguration('odometry_topic', default='visual_slam/odom')
     drone_id = LaunchConfiguration('drone_id', default=0)
 
-    # DeclareLaunchArguments
     init_x_arg = DeclareLaunchArgument('init_x_', default_value=init_x, description='Initial X position')
     init_y_arg = DeclareLaunchArgument('init_y_', default_value=init_y, description='Initial Y position')
     init_z_arg = DeclareLaunchArgument('init_z_', default_value=init_z, description='Initial Z position')
@@ -48,7 +46,6 @@ def generate_launch_description():
     use_dynamic = LaunchConfiguration('use_dynamic', default=True)  
     use_dynamic_arg = DeclareLaunchArgument('use_dynamic', default_value=use_dynamic, description='Use Drone Simulation Considering Dynamics or Not')
 
-    # Node Definitions
     random_forest_node = Node(
         package='map_generator',
         executable='random_forest',
