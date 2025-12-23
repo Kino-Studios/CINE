@@ -1,6 +1,17 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-cd /home/vtsyp/bspline-nvidia-isaac-tsdf/trajectory-optimization_ws
-source install/setup.bash
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
-/home/vtsyp/bspline-nvidia-isaac-tsdf/trajectory-optimization_ws/install/cinematographic_adjustment_agent/bin/trajectory_data_logger
+source /opt/ros/jazzy/setup.bash
+if [ -f "${SCRIPT_DIR}/install/setup.bash" ]; then
+  source "${SCRIPT_DIR}/install/setup.bash"
+elif [ -f "${REPO_ROOT}/install/setup.bash" ]; then
+  source "${REPO_ROOT}/install/setup.bash"
+else
+  echo "Could not find install/setup.bash under ${SCRIPT_DIR} or ${REPO_ROOT}" >&2
+  exit 1
+fi
+
+exec ros2 run cinematographic_adjustment_agent trajectory_data_logger "$@"

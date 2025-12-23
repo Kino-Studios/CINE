@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Toggles ego planner and cinematographic adjustment algorithm.
+# Toggles ego planner cinematic mode by updating the default value for the
+# `use_cinematic_bspline` launch argument.
 
 set -euo pipefail
 
@@ -19,6 +20,11 @@ inplace_sed() {
     fi
 }
 
+toggle_default() {
+    local value="$1" # true|false
+    inplace_sed "/DeclareLaunchArgument('use_cinematic_bspline'/{s/default_value='[^']*'/default_value='${value}'/;}" "$LAUNCH_FILE"
+}
+
 if [ -z "$MODE" ]; then
     echo "Usage: $0 [baseline|constrained]"
     echo ""
@@ -33,29 +39,12 @@ if [ ! -f "$LAUNCH_FILE" ]; then
 fi
 
 if [ "$MODE" = "baseline" ]; then
-    echo "Setting mode to BASELINE (unconstrained)..."
-    inplace_sed "s/'traj_server\\/use_cinematic_bspline': True/'traj_server\\/use_cinematic_bspline': False/" "$LAUNCH_FILE"
-    echo "✓ Launch file updated"
-    echo ""
-    echo "traj_server will now use: planning/bspline"
-    echo ""
-    echo "To apply changes:"
-    echo "  1. Stop simulation (Ctrl+C)"
-    echo "  2. Rebuild: colcon build --packages-select ego_planner"
-    echo "  3. Restart: ./start_simulation.sh"
+    toggle_default "false"
+    echo "Set to baseline."
     
 elif [ "$MODE" = "constrained" ]; then
-    echo "Setting mode to CONSTRAINED (cinematographic)..."
-    inplace_sed "s/'traj_server\\/use_cinematic_bspline': False/'traj_server\\/use_cinematic_bspline': True/" "$LAUNCH_FILE"
-    echo "✓ Launch file updated"
-    echo ""
-    echo "traj_server will now use: planning/cinematic_bspline"
-    echo ""
-    echo "To apply changes:"
-    echo "  1. Stop simulation (Ctrl+C)"
-    echo "  2. Rebuild: colcon build --packages-select ego_planner"
-    echo "  3. Restart: ./start_simulation.sh"
-    echo "  4. Start cinematic filter: (automatic in collect_constrained_data.sh)"
+    toggle_default "true"
+    echo "Set to constrained."
     
 else
     echo "Invalid mode: $MODE"

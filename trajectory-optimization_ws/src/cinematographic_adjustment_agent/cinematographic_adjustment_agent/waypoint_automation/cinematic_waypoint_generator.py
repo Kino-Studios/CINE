@@ -1,5 +1,4 @@
 import math
-import time
 
 import rclpy
 from geometry_msgs.msg import PoseStamped
@@ -13,9 +12,14 @@ class CinematicWaypointGenerator(Node):
         super().__init__("cinematic_waypoint_generator")
 
         self.goal_pub = self.create_publisher(PoseStamped, "/move_base_simple/goal", 10)
-        self.odom_sub = self.create_subscription(Odometry, "/drone_0_odometry", self.odom_callback, 10)
-        self.visual_odom_sub = self.create_subscription(Odometry, "/drone_0_visual_odom", self.odom_callback, 10)
-        self.detection_sub = self.create_subscription(Float32MultiArray, "/object_detections", self.detection_callback, 10)
+        self.declare_parameter("odom_topic", "/drone_0_visual_slam/odom")
+        self.declare_parameter("detections_topic", "/object_detections")
+
+        odom_topic = str(self.get_parameter("odom_topic").value)
+        detections_topic = str(self.get_parameter("detections_topic").value)
+
+        self.odom_sub = self.create_subscription(Odometry, odom_topic, self.odom_callback, 10)
+        self.detection_sub = self.create_subscription(Float32MultiArray, detections_topic, self.detection_callback, 10)
 
         self.start_pos = None
         self.current_yaw = 0.0

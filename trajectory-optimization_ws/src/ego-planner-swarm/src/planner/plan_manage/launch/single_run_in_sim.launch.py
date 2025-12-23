@@ -18,11 +18,10 @@ def generate_launch_description():
     map_size_y = LaunchConfiguration('map_size_y', default = 25.0)
     map_size_z = LaunchConfiguration('map_size_z', default = 5.0)
     
-    odom_topic = LaunchConfiguration('odom_topic', default = 'odometry')
+    odom_topic = LaunchConfiguration('odom_topic', default = 'visual_slam/odom')
     depth_topic = LaunchConfiguration('depth_topic', default = 'depth/image_raw')
     camera_pose_topic = LaunchConfiguration('camera_pose_topic', default = 'camera_pose')
     cloud_topic = LaunchConfiguration('cloud_topic', default = '/map_generator/global_cloud')
-    
     
     # 声明全局参数
     obj_num_cmd = DeclareLaunchArgument('obj_num', default_value=obj_num, description='Number of objects')
@@ -41,11 +40,18 @@ def generate_launch_description():
     
     use_mockamap_cmd = DeclareLaunchArgument('use_mockamap', default_value=use_mockamap, description='Choose map type, map_generator or mockamap')
     
-    use_dynamic = LaunchConfiguration('use_dynamic', default=False)  
+    use_dynamic = LaunchConfiguration('use_dynamic', default=True)  
     use_dynamic_cmd = DeclareLaunchArgument('use_dynamic', default_value=use_dynamic, description='Use Drone Simulation Considering Dynamics or Not')
     
     use_cinematic_bspline = LaunchConfiguration('use_cinematic_bspline', default=True)
     use_cinematic_bspline_cmd = DeclareLaunchArgument('use_cinematic_bspline', default_value='true', description='Use cinematographic B-spline filter')
+
+    use_distinctive_trajs = LaunchConfiguration('use_distinctive_trajs', default='false')
+    use_distinctive_trajs_cmd = DeclareLaunchArgument(
+        'use_distinctive_trajs',
+        default_value=use_distinctive_trajs,
+        description='Enable multi-trajectory search'
+    )
 
     # map
     map_generator_node = Node(
@@ -123,7 +129,7 @@ def generate_launch_description():
             'max_vel': str(2.5),
             'max_acc': str(7.0),
             'planning_horizon': str(7.5),
-            'use_distinctive_trajs': 'False', # TODO: check if needed false or true
+            'use_distinctive_trajs': use_distinctive_trajs,
             'flight_type': str(1),
             'point_num': str(4),
             'point0_x': str(15.0),
@@ -173,17 +179,17 @@ def generate_launch_description():
         condition=IfCondition(use_cinematic_bspline),
         parameters=[
             {'waypoints_topic': '/move_base_simple/goal'},
-            {'odom_topic': odom_topic},
+            {'odom_topic': PythonExpression(["'/drone_' + str(", drone_id, ") + '_", odom_topic, "'"])},
             {'depth_topic': depth_topic},
             {'center_topic': '/object_detection/center_point'},
             {'bbox_topic': '/object_detection/bounding_box'},
             {'dimensions_topic': '/object_detection/dimensions'},
-            {'image_width': 640},
-            {'image_height': 480},
-            {'camera_fx': 387.229248046875},
-            {'camera_fy': 387.229248046875},
-            {'camera_cx': 320.5},
-            {'camera_cy': 240.5},
+            {'image_width': 1152},
+            {'image_height': 648},
+            {'camera_fx': 750.99681791},
+            {'camera_fy': 748.9227188},
+            {'camera_cx': 578.86898934},
+            {'camera_cy': 326.60855341},
         ],
     )
 
@@ -248,6 +254,7 @@ def generate_launch_description():
     ld.add_action(use_dynamic_cmd)
     ld.add_action(use_mockamap_cmd)
     ld.add_action(use_cinematic_bspline_cmd)
+    ld.add_action(use_distinctive_trajs_cmd)
 
     # 添加 Map Generator 节点
     ld.add_action(map_generator_node)

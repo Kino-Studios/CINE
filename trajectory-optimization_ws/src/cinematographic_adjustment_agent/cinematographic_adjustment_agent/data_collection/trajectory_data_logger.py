@@ -118,14 +118,16 @@ class TrajectoryDataLogger(Node):
         self.constraints = CinematicConstraints()
         self.baseline_data = []
         self.constrained_data = []
+        self.odom_data = []
         self.current_baseline_bspline = None
         self.current_constrained_bspline = None
         self.current_odom = None
-        self.logging_active = False
-        self.global_start_time = None  # Global time when logging started
-        self.start_position = None  # Store first position as origin for relative coordinates
+        self.time0 = None
+        self.origin_position = None
+        self.planned_time0_s = None
+        self.last_logged_t = None
+        self.sample_period_s = 0.02
         
-        # Support different modes: 'sim' for normal runs, 'baseline' and 'constrained' for replay runs
         self.mode = mode
         self.run_number = run_number
         
@@ -134,10 +136,9 @@ class TrajectoryDataLogger(Node):
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.output_dir = output_dir
         
-        # Subscribe to B-spline messages to evaluate planned trajectories
         self.declare_parameter("baseline_bspline_topic", "/drone_0_planning/bspline")
         self.declare_parameter("cinematic_bspline_topic", "/drone_0_planning/cinematic_bspline")
-        self.declare_parameter("odom_topic", "/drone_0_odometry")
+        self.declare_parameter("odom_topic", "/drone_0_visual_slam/odom")
         baseline_topic = str(self.get_parameter("baseline_bspline_topic").value)
         cinematic_topic = str(self.get_parameter("cinematic_bspline_topic").value)
         odom_topic = str(self.get_parameter("odom_topic").value)
@@ -163,95 +164,130 @@ class TrajectoryDataLogger(Node):
             50
         )
         
-        # Sample at 50 Hz to get very dense trajectory data
-        self.timer = self.create_timer(0.02, self.log_data)
-        
         self.get_logger().info('Trajectory data logger initialized')
-        self.get_logger().info(f'Output directory: {self.output_dir}')
-        self.get_logger().info('Sampling rate: 50 Hz (every 0.02s)')
     
     def baseline_bspline_callback(self, msg):
-        """Store latest baseline B-spline and start logging"""
         self.current_baseline_bspline = msg
-        if not self.logging_active:
-            self.logging_active = True
-            self.global_start_time = self.get_clock().now()
-            self.get_logger().info(f'[LOGGER] Received first B-spline! Started logging trajectory data. '
-                                 f'B-spline has {len(msg.pos_pts)} control points')
-        else:
-            # Log periodic updates
-            if len(self.baseline_data) % 100 == 0:
-                self.get_logger().debug(f'[LOGGER] Received B-spline #{len(self.baseline_data)//100}')
     
     def constrained_bspline_callback(self, msg):
-        """Store latest constrained B-spline"""
         self.current_constrained_bspline = msg
 
     def odom_callback(self, msg: Odometry):
-        """Store latest odometry and start logging when first received"""
         self.current_odom = msg
-        if not self.logging_active:
-            self.logging_active = True
-            self.global_start_time = self.get_clock().now()
-            pos = np.array([
-                msg.pose.pose.position.x,
-                msg.pose.pose.position.y,
-                msg.pose.pose.position.z,
-            ])
-            self.start_position = pos.copy()
-            self.get_logger().info(f'[LOGGER] Received first odometry; origin set to ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})')
-    
-    def log_data(self):
-        """Evaluate B-spline trajectories at 20 Hz to get planned position/velocity"""
-        if not self.logging_active or self.current_odom is None:
-            return
-        
-        current_time = self.get_clock().now()
-        global_elapsed = (current_time - self.global_start_time).nanoseconds / 1e9
+        stamp = rclpy.time.Time.from_msg(msg.header.stamp)
 
-        # Log odometry relative to the first received pose
-        msg = self.current_odom
-        pos = np.array([
-            msg.pose.pose.position.x,
-            msg.pose.pose.position.y,
-            msg.pose.pose.position.z,
-        ])
-        vel = np.array([
-            msg.twist.twist.linear.x,
-            msg.twist.twist.linear.y,
-            msg.twist.twist.linear.z,
-        ])
-
-        if self.start_position is None:
-            self.start_position = pos.copy()
-            self.get_logger().info(f'[LOGGER] Origin set to: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})')
-
-        rel_pos = pos - self.start_position
-        speed = np.linalg.norm(vel)
-        odom_entry = {
-            'time': global_elapsed,
-            'odom_x': rel_pos[0],
-            'odom_y': rel_pos[1],
-            'odom_z': rel_pos[2],
-            'odom_vx': vel[0],
-            'odom_vy': vel[1],
-            'odom_vz': vel[2],
-            'odom_speed': speed,
-        }
-        self.baseline_data.append(odom_entry)
-        
-        if len(self.baseline_data) % 500 == 0:
-            constrained_info = f'Constrained: {len(self.constrained_data)} samples' if self.constrained_data else 'No constrained data'
-            self.get_logger().info(
-                f'Logged {len(self.baseline_data)} baseline samples | {constrained_info}'
+        if self.time0 is None:
+            self.time0 = stamp
+            pos0 = np.array(
+                [msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z],
+                dtype=float,
             )
+            self.origin_position = pos0.copy()
+            self.get_logger().info(
+                f'[LOGGER] Received first odometry; origin set to ({pos0[0]:.2f}, {pos0[1]:.2f}, {pos0[2]:.2f})'
+            )
+
+        t = (stamp - self.time0).nanoseconds / 1e9
+        if self.last_logged_t is not None and (t - self.last_logged_t) < (self.sample_period_s * 0.8):
+            return
+        self.last_logged_t = t
+
+        pos = np.array(
+            [msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z],
+            dtype=float,
+        )
+        vel = np.array(
+            [msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z],
+            dtype=float,
+        )
+
+        origin = self.origin_position if self.origin_position is not None else pos
+        rel_pos = pos - origin
+        speed = float(np.linalg.norm(vel))
+
+        self.odom_data.append(
+            {
+                'time': float(t),
+                'odom_x': float(rel_pos[0]),
+                'odom_y': float(rel_pos[1]),
+                'odom_z': float(rel_pos[2]),
+                'odom_vx': float(vel[0]),
+                'odom_vy': float(vel[1]),
+                'odom_vz': float(vel[2]),
+                'odom_speed': speed,
+            }
+        )
+
+        if self.mode != 'constrained':
+            self._log_planned_baseline(stamp, t)
+        else:
+            self._log_planned_baseline(stamp, t)
+            self._log_planned_constrained(stamp, t)
+
+        if len(self.odom_data) % 500 == 0:
+            self.get_logger().info(f'Logged {len(self.odom_data)} odom samples')
+
+    def _log_planned_baseline(self, stamp: rclpy.time.Time, t: float):
+        if self.current_baseline_bspline is None:
+            return
+
+        position, velocity = self._evaluate_bspline(self.current_baseline_bspline, stamp)
+        if position is None or velocity is None:
+            return
+
+        if self.planned_time0_s is None:
+            self.planned_time0_s = float(t)
+        t_rel = float(t) - float(self.planned_time0_s)
+
+        origin = self.origin_position if self.origin_position is not None else position
+        rel_pos = position - origin
+        speed = float(np.linalg.norm(velocity))
+
+        self.baseline_data.append(
+            {
+                'time': float(t_rel),
+                'traj_id': int(self.current_baseline_bspline.traj_id),
+                'planned_x': float(rel_pos[0]),
+                'planned_y': float(rel_pos[1]),
+                'planned_z': float(rel_pos[2]),
+                'planned_vx': float(velocity[0]),
+                'planned_vy': float(velocity[1]),
+                'planned_vz': float(velocity[2]),
+                'planned_speed': speed,
+            }
+        )
+
+    def _log_planned_constrained(self, stamp: rclpy.time.Time, t: float):
+        if self.current_constrained_bspline is None:
+            return
+
+        position, velocity = self._evaluate_bspline(self.current_constrained_bspline, stamp)
+        if position is None or velocity is None:
+            return
+
+        if self.planned_time0_s is None:
+            self.planned_time0_s = float(t)
+        t_rel = float(t) - float(self.planned_time0_s)
+
+        origin = self.origin_position if self.origin_position is not None else position
+        rel_pos = position - origin
+        speed = float(np.linalg.norm(velocity))
+
+        self.constrained_data.append(
+            {
+                'time': float(t_rel),
+                'traj_id': int(self.current_constrained_bspline.traj_id),
+                'planned_x': float(rel_pos[0]),
+                'planned_y': float(rel_pos[1]),
+                'planned_z': float(rel_pos[2]),
+                'planned_vx': float(velocity[0]),
+                'planned_vy': float(velocity[1]),
+                'planned_vz': float(velocity[2]),
+                'planned_speed': speed,
+            }
+        )
     
     def _evaluate_bspline(self, bspline_msg, current_ros_time):
-        """
-        Evaluate B-spline position and velocity at current ROS time.
-        Uses the B-spline's start_time to compute time offset.
-        Returns (position, velocity) or (None, None) if out of range.
-        """
         try:
             order = bspline_msg.order
             knots = np.array(bspline_msg.knots, dtype=float)
@@ -260,23 +296,17 @@ class TrajectoryDataLogger(Node):
             if len(control_points) == 0:
                 return None, None
             
-            # Compute time since this B-spline's start_time
             bspline_start = rclpy.time.Time.from_msg(bspline_msg.start_time)
             time_offset = (current_ros_time - bspline_start).nanoseconds / 1e9
             
-            # Create position B-spline
             pos_bspline = UniformBspline(control_points, order, knots)
             
-            # Get valid time range
             time_sum = pos_bspline.getTimeSum()
             if time_offset < 0 or time_offset > time_sum:
-                # Outside valid range - trajectory not active yet or expired
                 return None, None
             
-            # Evaluate position
             position = pos_bspline.evaluateDeBoorT(time_offset)
             
-            # Get derivative B-spline for velocity
             vel_bspline = pos_bspline.getDerivative()
             velocity = vel_bspline.evaluateDeBoorT(time_offset)
             
@@ -287,38 +317,38 @@ class TrajectoryDataLogger(Node):
             return None, None
     
     def save_data(self):
-        # Constrained runs should emit a single cinematic file (no extra constrained_* output).
-        if self.mode == 'constrained':
-            if len(self.constrained_data) == 0 and len(self.baseline_data) == 0:
-                self.get_logger().warn('No data to save')
-                return
-
-            filename = f'cinematic_sim_{self.timestamp}.csv' if self.run_number is None else f'cinematic_replay_run{self.run_number}_{self.timestamp}.csv'
-            data_to_save = self.constrained_data if len(self.constrained_data) > 0 else self.baseline_data
-            path = self.output_dir / filename
-            self._write_csv(path, data_to_save)
-            self.get_logger().info(f'Saved {len(data_to_save)} cinematic data points to: {path}')
-            return
-
-        if len(self.baseline_data) == 0:
+        if len(self.odom_data) == 0 and len(self.baseline_data) == 0 and len(self.constrained_data) == 0:
             self.get_logger().warn('No data to save')
             return
 
-        # Determine filename based on mode (baseline / sim)
-        if self.mode == 'baseline' and self.run_number is not None:
-            filename = f'baseline_replay_run{self.run_number}_{self.timestamp}.csv'
-        else:
-            filename = f'baseline_sim_{self.timestamp}.csv'
-        
-        baseline_path = self.output_dir / filename
-        self._write_csv(baseline_path, self.baseline_data)
-        self.get_logger().info(f'Saved {len(self.baseline_data)} baseline data points to: {baseline_path}')
+        if len(self.baseline_data) > 0:
+            if self.mode == 'baseline':
+                if self.run_number is not None:
+                    baseline_name = f'baseline_replay_run{self.run_number}_{self.timestamp}.csv'
+                else:
+                    baseline_name = f'baseline_sim_{self.timestamp}.csv'
+            else:
+                baseline_name = f'baseline_in_constrained_sim_{self.timestamp}.csv'
+            baseline_path = self.output_dir / baseline_name
+            self._write_csv(baseline_path, self.baseline_data)
+            self.get_logger().info(f'Saved {len(self.baseline_data)} planned baseline points to: {baseline_path}')
 
-        # Only save constrained data in non-constrained mode for comparison
         if len(self.constrained_data) > 0:
-            constrained_path = self.output_dir / f'constrained_sim_{self.timestamp}.csv'
-            self._write_csv(constrained_path, self.constrained_data)
-            self.get_logger().info(f'Saved {len(self.constrained_data)} constrained data points to: {constrained_path}')
+            cinematic_name = (
+                f'cinematic_replay_run{self.run_number}_{self.timestamp}.csv'
+                if self.run_number is not None
+                else f'cinematic_sim_{self.timestamp}.csv'
+            )
+            cinematic_path = self.output_dir / cinematic_name
+            self._write_csv(cinematic_path, self.constrained_data)
+            self.get_logger().info(f'Saved {len(self.constrained_data)} planned cinematic points to: {cinematic_path}')
+
+        if len(self.odom_data) > 0:
+            odom_prefix = 'cinematic_odom' if self.mode == 'constrained' else 'baseline_odom'
+            odom_name = f'{odom_prefix}_sim_{self.timestamp}.csv'
+            odom_path = self.output_dir / odom_name
+            self._write_csv(odom_path, self.odom_data)
+            self.get_logger().info(f'Saved {len(self.odom_data)} odometry points to: {odom_path}')
 
     def _write_csv(self, path: Path, rows: list[dict]):
         if not rows:
@@ -335,19 +365,20 @@ class TrajectoryDataLogger(Node):
 def main(args=None):
     import argparse
     
-    # Parse command line arguments
     parser = argparse.ArgumentParser(description='Log trajectory data')
     parser.add_argument('--mode', type=str, default='sim', 
                        choices=['sim', 'baseline', 'constrained'],
-                       help='Logging mode: sim (normal), baseline (replay), or constrained (replay)')
+                       help='Logging mode: sim/baseline (planned baseline), or constrained (planned baseline + cinematic)')
     parser.add_argument('--run-number', type=int, default=None,
                        help='Run number for replay mode')
     parsed_args = parser.parse_args()
     
     rclpy.init(args=args)
-    logger = TrajectoryDataLogger(mode=parsed_args.mode, run_number=parsed_args.run_number)
+    mode = parsed_args.mode
+    if mode == 'sim':
+        mode = 'baseline'
+    logger = TrajectoryDataLogger(mode=mode, run_number=parsed_args.run_number)
     
-    # Set up signal handler for graceful shutdown
     def signal_handler(sig, frame):
         logger.get_logger().info('Received shutdown signal...')
         logger.save_data()

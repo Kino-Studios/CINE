@@ -1,5 +1,6 @@
 import sys
 import os
+from pathlib import Path
 
 user_site = os.path.expanduser('~/.local/lib/python3.12/site-packages')
 if user_site in sys.path:
@@ -26,6 +27,8 @@ class DepthPublisherNode(Node):
         self.declare_parameter('depth_encoding', '32FC1')
         self.declare_parameter('depth_scale', 1.0)
         self.declare_parameter('max_depth', 10.0)
+        self.declare_parameter('depth_anything_path', '')
+        self.declare_parameter('venv_site_path', '')
         
         self.depth_encoding = self.get_parameter('depth_encoding').value
         self.depth_scale = self.get_parameter('depth_scale').value
@@ -48,8 +51,35 @@ class DepthPublisherNode(Node):
     
     def initialize_depth_model(self):
         try:
-            venv_site = os.path.expanduser('~/bspline-nvidia-isaac-tsdf/venv/lib/python3.12/site-packages')
-            depth_anything_path = os.path.expanduser('~/bspline-nvidia-isaac-tsdf/src/Depth-Anything')
+            configured_depth_anything = str(self.get_parameter('depth_anything_path').value).strip()
+            configured_venv_site = str(self.get_parameter('venv_site_path').value).strip()
+
+            repo_root = None
+            here = Path(__file__).resolve()
+            for parent in [here] + list(here.parents):
+                if (parent / 'src' / 'Depth-Anything').is_dir() and (parent / 'venv').is_dir():
+                    repo_root = parent
+                    break
+
+            py_ver = f"python{sys.version_info.major}.{sys.version_info.minor}"
+            default_depth_anything = (repo_root / 'src' / 'Depth-Anything') if repo_root else None
+            default_venv_site = (repo_root / 'venv' / 'lib' / py_ver / 'site-packages') if repo_root else None
+
+            depth_anything_path = configured_depth_anything or os.getenv('DEPTH_ANYTHING_PATH', '') or (
+                str(default_depth_anything) if default_depth_anything else ''
+            )
+            venv_site = configured_venv_site or os.getenv('DEPTH_ANYTHING_VENV_SITE', '') or (
+                str(default_venv_site) if default_venv_site else ''
+            )
+
+            if not depth_anything_path:
+                raise RuntimeError(
+                    "Depth-Anything path not set; provide ROS param `depth_anything_path` or env `DEPTH_ANYTHING_PATH`."
+                )
+            if not venv_site:
+                raise RuntimeError(
+                    "Venv site-packages path not set; provide ROS param `venv_site_path` or env `DEPTH_ANYTHING_VENV_SITE`."
+                )
             
             if venv_site not in sys.path:
                 sys.path.insert(0, venv_site)

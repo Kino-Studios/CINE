@@ -11,9 +11,6 @@ from launch.substitutions import PythonExpression
 from launch.conditions import IfCondition, UnlessCondition
 
 def generate_cinematic_waypoints():
-    """Generate simple straight-line cinematographic waypoints - guaranteed obstacle-free"""
-    # Simple path: start area (-15, 0) moving toward goal area (1.5, -3.0)
-    # Create 8 waypoints along a smooth path
     waypoints = [
         (-14.0, 0.0, 1.0),
         (-12.0, -0.5, 1.0),
@@ -27,7 +24,6 @@ def generate_cinematic_waypoints():
     return waypoints
 
 def generate_cinematic_waypoints_UNUSED():
-    """Original arc waypoints - kept for reference"""
     center_x, center_y = 0.5, -1.0
     radius = 0.4
     z_height = 1.0
@@ -45,10 +41,8 @@ def generate_cinematic_waypoints_UNUSED():
     return waypoints
 
 def generate_launch_description():
-    # Generate cinematographic waypoints
     waypoints = generate_cinematic_waypoints()
     
-    # Basic parameters
     obj_num = LaunchConfiguration('obj_num', default=10)
     drone_id = LaunchConfiguration('drone_id', default=0)
     
@@ -56,12 +50,11 @@ def generate_launch_description():
     map_size_y = LaunchConfiguration('map_size_y', default = 25.0)
     map_size_z = LaunchConfiguration('map_size_z', default = 2.0)
     
-    odom_topic = LaunchConfiguration('odom_topic', default = 'odometry')
+    odom_topic = LaunchConfiguration('odom_topic', default = 'visual_slam/odom')
     depth_topic = LaunchConfiguration('depth_topic', default = 'depth/image_raw')
     camera_pose_topic = LaunchConfiguration('camera_pose_topic', default = 'camera_pose')
     cloud_topic = LaunchConfiguration('cloud_topic', default = '/map_generator/global_cloud')
     
-    # Declare arguments
     obj_num_cmd = DeclareLaunchArgument('obj_num', default_value=obj_num)
     drone_id_cmd = DeclareLaunchArgument('drone_id', default_value=drone_id)
     map_size_x_cmd = DeclareLaunchArgument('map_size_x', default_value=map_size_x)
@@ -75,13 +68,12 @@ def generate_launch_description():
     use_mockamap = LaunchConfiguration('use_mockamap', default=False)
     use_mockamap_cmd = DeclareLaunchArgument('use_mockamap', default_value=use_mockamap)
     
-    use_dynamic = LaunchConfiguration('use_dynamic', default=False)  
+    use_dynamic = LaunchConfiguration('use_dynamic', default=True)  
     use_dynamic_cmd = DeclareLaunchArgument('use_dynamic', default_value=use_dynamic)
     
     use_cinematic_bspline = LaunchConfiguration('use_cinematic_bspline', default=True)
     use_cinematic_bspline_cmd = DeclareLaunchArgument('use_cinematic_bspline', default_value='true')
     
-    # Map generator - NO OBSTACLES for clean cinematographic trajectory
     map_generator_node = Node(
         package='map_generator',
         executable='random_forest',
@@ -93,12 +85,12 @@ def generate_launch_description():
             {'map/z_size': 3.0},
             {'map/resolution': 0.1},
             {'ObstacleShape/seed': 1.0},
-            {'map/obs_num': 0},  # DISABLED obstacles
+            {'map/obs_num': 0},
             {'ObstacleShape/lower_rad': 0.5},
             {'ObstacleShape/upper_rad': 0.7},
             {'ObstacleShape/lower_hei': 0.0},
             {'ObstacleShape/upper_hei': 3.0},
-            {'map/circle_num': 0},  # DISABLED obstacles
+            {'map/circle_num': 0},
             {'ObstacleShape/radius_l': 0.7},
             {'ObstacleShape/radius_h': 0.5},
             {'ObstacleShape/z_l': 0.7},
@@ -110,19 +102,16 @@ def generate_launch_description():
         condition = UnlessCondition(use_mockamap)
     )
     
-    # Build launch arguments for waypoints
     waypoint_args = {
-        'flight_type': str(2),  # PRESET_TARGET mode
+        'flight_type': str(2),
         'point_num': str(len(waypoints)),
     }
     
-    # Add all 16 waypoints
     for i, (x, y, z) in enumerate(waypoints):
         waypoint_args[f'point{i}_x'] = str(x)
         waypoint_args[f'point{i}_y'] = str(y)
         waypoint_args[f'point{i}_z'] = str(z)
     
-    # Include advanced parameters with cinematographic waypoints
     advanced_param_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('ego_planner'), 'launch', 'advanced_param.launch.py')),
@@ -144,11 +133,10 @@ def generate_launch_description():
             'max_acc': str(7.0),
             'planning_horizon': str(7.5),
             'use_distinctive_trajs': 'False',
-            **waypoint_args  # Add cinematographic waypoints
+            **waypoint_args
         }.items()
     )
     
-    # Trajectory server with cinematic mode enabled
     traj_server_node = Node(
         package='ego_planner',
         executable='traj_server',
@@ -164,8 +152,60 @@ def generate_launch_description():
             {'traj_server/use_cinematic_bspline': use_cinematic_bspline}
         ]
     )
+
+    cinematic_intent_node = Node(
+        package="cinematographic_adjustment_agent",
+        executable="cinematographic_adjustment_node",
+        name="cinematic_intent_node",
+        output="screen",
+        condition=IfCondition(use_cinematic_bspline),
+        parameters=[
+            {'waypoints_topic': '/move_base_simple/goal'},
+            {'odom_topic': PythonExpression(["'/drone_' + str(", drone_id, ") + '_", odom_topic, "'"])},
+            {'depth_topic': depth_topic},
+            {'center_topic': '/object_detection/center_point'},
+            {'bbox_topic': '/object_detection/bounding_box'},
+            {'dimensions_topic': '/object_detection/dimensions'},
+            {'image_width': 640},
+            {'image_height': 480},
+            {'camera_fx': 387.229248046875},
+            {'camera_fy': 387.229248046875},
+            {'camera_cx': 320.5},
+            {'camera_cy': 240.5},
+        ],
+    )
+
+    cinematic_bspline_filter_node = Node(
+        package="cinematographic_adjustment_agent",
+        executable="cinematic_bspline_filter",
+        name="cinematic_bspline_filter",
+        output="screen",
+        condition=IfCondition(use_cinematic_bspline),
+        parameters=[
+            {'bspline_in_topic': PythonExpression(["'/drone_' + str(", drone_id, ") + '_planning/bspline'"])},
+            {'bspline_out_topic': PythonExpression(["'/drone_' + str(", drone_id, ") + '_planning/cinematic_bspline'"])},
+        ],
+    )
+
+    simulated_object_detector_node = Node(
+        package="cinematographic_adjustment_agent",
+        executable="simulated_object_detector",
+        name="simulated_object_detector",
+        output="screen",
+        condition=IfCondition(use_cinematic_bspline),
+        remappings=[
+            ('depth/image_raw', depth_topic),
+        ],
+        parameters=[
+            {'cx': 320.5},
+            {'cy': 240.5},
+            {'fx': 387.229248046875},
+            {'fy': 387.229248046875},
+            {'width': 640},
+            {'height': 480},
+        ],
+    )
     
-    # Simulator
     simulator_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('ego_planner'), 'launch', 'simulator.launch.py')),
@@ -184,7 +224,6 @@ def generate_launch_description():
     
     ld = LaunchDescription()
     
-    # Add all actions
     ld.add_action(map_size_x_cmd)
     ld.add_action(map_size_y_cmd)
     ld.add_action(map_size_z_cmd)
@@ -201,6 +240,9 @@ def generate_launch_description():
     ld.add_action(map_generator_node)
     ld.add_action(advanced_param_include)
     ld.add_action(traj_server_node)
+    ld.add_action(simulated_object_detector_node)
+    ld.add_action(cinematic_intent_node)
+    ld.add_action(cinematic_bspline_filter_node)
     ld.add_action(simulator_include)
     
     return ld
