@@ -29,6 +29,8 @@ fi
 rm -rf /tmp/cyclonedds* ~/.local/share/cyclonedds* 2>/dev/null
 sleep 2
 
+export TRAJECTORY_DATA_DIR="${REPO_ROOT}/trajectory_data"
+
 SIM_PID=""
 TAIL_PID=""
 FILTER_PID=""
@@ -64,7 +66,7 @@ ros2 run cinematographic_adjustment_agent cinematic_bspline_filter &
 FILTER_PID=$!
 sleep 2
 
-ros2 run cinematographic_adjustment_agent trajectory_data_logger --mode constrained --ros-args -p odom_topic:=/drone_0_visual_slam/odom &
+ros2 run cinematographic_adjustment_agent trajectory_data_logger --mode constrained --ros-args -p odom_topic:=/visual_slam/odom &
 LOGGER_PID=$!
 sleep 2
 

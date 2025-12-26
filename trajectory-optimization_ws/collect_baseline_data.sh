@@ -16,6 +16,19 @@ unset ROS_LOCALHOST_ONLY
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
+cd "${REPO_ROOT}"
+
+if set -o | grep -q 'nounset *on'; then
+  _SAVED_NOUNSET=1
+  set +u
+fi
+
+AMENT_TRACE_SETUP_FILES=${AMENT_TRACE_SETUP_FILES-}
+AMENT_PYTHON_EXECUTABLE=${AMENT_PYTHON_EXECUTABLE-}
+COLCON_TRACE=${COLCON_TRACE-}
+COLCON_PYTHON_EXECUTABLE=${COLCON_PYTHON_EXECUTABLE-}
+export AMENT_TRACE_SETUP_FILES AMENT_PYTHON_EXECUTABLE COLCON_TRACE COLCON_PYTHON_EXECUTABLE
+
 source /opt/ros/jazzy/setup.bash
 if [ -f "${SCRIPT_DIR}/install/setup.bash" ]; then
   source "${SCRIPT_DIR}/install/setup.bash"
@@ -26,8 +39,15 @@ else
   exit 1
 fi
 
+if [ "${_SAVED_NOUNSET-}" = "1" ]; then
+  set -u
+  unset _SAVED_NOUNSET
+fi
+
 rm -rf /tmp/cyclonedds* ~/.local/share/cyclonedds* 2>/dev/null
 sleep 2
+
+export TRAJECTORY_DATA_DIR="${REPO_ROOT}/trajectory_data"
 
 SIM_PID=""
 TAIL_PID=""
@@ -56,13 +76,29 @@ if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
   fi
 fi
 
-ros2 run cinematographic_adjustment_agent trajectory_data_logger --mode baseline --ros-args -p odom_topic:=/drone_0_visual_slam/odom &
+ros2 run cinematographic_adjustment_agent trajectory_data_logger --mode baseline --ros-args -p odom_topic:=/visual_slam/odom &
 LOGGER_PID=$!
 sleep 2
 
 ros2 run cinematographic_adjustment_agent cinematic_waypoint_generator --ros-args -p odom_topic:=/drone_0_visual_slam/odom &
 WAYPOINT_PID=$!
 
-trap 'echo ""; echo "stopping data collection."; for pid in "${LOGGER_PID:-}" "${WAYPOINT_PID:-}" "${TAIL_PID:-}" "${SIM_PID:-}"; do if [ -n "${pid}" ]; then kill "${pid}" 2>/dev/null || true; fi; done; exit 0' INT TERM
+cleanup() {
+  echo ""
+  echo "stopping data collection."
+  if [ -n "${LOGGER_PID:-}" ]; then
+    kill -INT "${LOGGER_PID}" 2>/dev/null || true
+    wait "${LOGGER_PID}" 2>/dev/null || true
+  fi
+
+  for pid in "${WAYPOINT_PID:-}" "${TAIL_PID:-}" "${SIM_PID:-}"; do
+    if [ -n "${pid}" ]; then
+      kill "${pid}" 2>/dev/null || true
+    fi
+  done
+  exit 0
+}
+
+trap 'cleanup' INT TERM
 
 wait

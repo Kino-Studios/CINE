@@ -25,16 +25,16 @@ class CinematicWaypointGenerator(Node):
         self.current_yaw = 0.0
         self.waypoints_sent = False
         self.ready_time = None
-        self.STARTUP_DELAY = 5.0
+        self.STARTUP_DELAY = 0.5
 
         self.velocity_settled = False
-        self.VELOCITY_THRESHOLD = 0.01
+        self.VELOCITY_THRESHOLD = 0.2
         self.current_vel = (0.0, 0.0, 0.0)
         self.current_pos = None
 
         self.object_detection_time = None
         self.DETECTION_DEBOUNCE = 2.0
-        self.DISTANCE_THRESHOLD_M = 0.5
+        self.DISTANCE_THRESHOLD_M = 0.8
 
         self.declare_parameter("image_width", 640)
         self.declare_parameter("image_height", 480)
@@ -46,7 +46,7 @@ class CinematicWaypointGenerator(Node):
         self.declare_parameter("min_altitude_m", 0.2)
         self.declare_parameter("max_altitude_m", 3.0)
         self.declare_parameter("min_orbit_radius_m", 0.6)
-        self.declare_parameter("max_waypoint_jump_m", 1.5)
+        self.declare_parameter("max_waypoint_jump_m", 3.0)
         self.declare_parameter("bezier_blend_length_m", 0.75)
         self.declare_parameter("bezier_transition_points", 6)
         self.declare_parameter("bezier_min_speed_mps", 0.05)
@@ -75,17 +75,17 @@ class CinematicWaypointGenerator(Node):
 
         self.static_waypoints = [
             (0.54, 0.225, 1.0),
-            (1.17, 0.81, 1.1),
-            (1.35, 1.44, 1.15),
-            (0.81, 2.025, 1.2),
-            (0.99, 2.79, 1.15),
-            (1.62, 3.24, 1.1),
-            (2.34, 3.375, 1.15),
-            (3.05, 3, 1.2),
-            (3.285, 2.43, 1.23),
-            (3.0,1.5,1.26),
-            (2.61,0.63,1.28),
-            (2.43,-0.45,1.295),
+            (1.17, 0.81, 1.15),
+            (1.35, 1.44, 1.25),
+            (0.81, 2.025, 1.35),
+            (0.99, 2.79, 1.4),
+            (1.62, 3.24, 1.42),
+            (2.34, 3.375, 1.38),
+            (3.05, 3, 1.32),
+            (3.285, 2.43, 1.25),
+            (3.0,1.5,1.22),
+            (2.61,0.63,1.2),
+            (2.43,-0.45,1.3),
         ]
 
         self.dynamic_waypoints = None
@@ -97,7 +97,7 @@ class CinematicWaypointGenerator(Node):
         self.simulated_detection_active = False
 
         self.stuck_progress_threshold_m = 0.25
-        self.stuck_time_s = 2.5
+        self.stuck_time_s = 0.8
         self.nudge_offset_xy_m = 0.5
         self.nudge_offset_z_m = 0.25
         self.max_stuck_nudges = 2
@@ -107,7 +107,8 @@ class CinematicWaypointGenerator(Node):
 
         self.fake_detection_pub = self.create_publisher(Float32MultiArray, "/object_detections", 10)
 
-        self.timer = self.create_timer(0.5, self.check_and_send_waypoints)
+        # Publish goals quickly so the planner keeps moving
+        self.timer = self.create_timer(0.1, self.check_and_send_waypoints)
 
     def _build_room_orbit(self):
         radius = max(self.min_orbit_radius_m, 1.0)
@@ -119,7 +120,7 @@ class CinematicWaypointGenerator(Node):
             t = 2.0 * math.pi * i / num_pts
             x = radius * math.cos(t)
             y = radius * math.sin(t)
-            z = self.orbit_altitude_m + 0.2 * math.sin(t)
+            z = self.orbit_altitude_m + 0.6 * math.sin(t)
             z = max(self.min_altitude_m, min(self.max_altitude_m, z))
             pts.append((x, y, z))
         return pts
@@ -317,7 +318,8 @@ class CinematicWaypointGenerator(Node):
             world_dx = cos_yaw * wp_x_m - sin_yaw * wp_y_m
             world_dy = sin_yaw * wp_x_m + cos_yaw * wp_y_m
 
-            wp_z_m = max(self.min_altitude_m, min(self.max_altitude_m, self.orbit_altitude_m))
+            wp_z_m = self.orbit_altitude_m + 0.6 * math.sin(angle)
+            wp_z_m = max(self.min_altitude_m, min(self.max_altitude_m, wp_z_m))
             abs_x = base_pos[0] + world_dx
             abs_y = base_pos[1] + world_dy
             abs_z = wp_z_m
@@ -381,9 +383,9 @@ class CinematicWaypointGenerator(Node):
         if self.start_pos is not None and self.waypoints_sent:
             return
 
-        if self.start_pos is not None and self.velocity_settled and self.ready_time is not None:
+        if self.start_pos is not None and self.ready_time is not None:
             elapsed = (self.get_clock().now() - self.ready_time).nanoseconds / 1e9
-            if elapsed >= self.STARTUP_DELAY:
+            if elapsed >= self.STARTUP_DELAY or self.velocity_settled:
                 if self.active_waypoints is None:
                     self._initialize_waypoint_sequence()
                 self._step_waypoint_sequence()
@@ -403,6 +405,7 @@ class CinematicWaypointGenerator(Node):
             waypoints_to_send = list(self.static_waypoints)
 
         clamped = [self._clamp_waypoint_to_bounds(wp) for wp in waypoints_to_send]
+
         self.active_waypoints = self._limit_consecutive_waypoint_jumps(clamped)
         self.active_waypoint_index = 0
         self.active_waypoint_sent = False

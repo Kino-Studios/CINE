@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import csv
+import os
 import rclpy
 import rclpy.time
 from rclpy.node import Node
@@ -12,6 +13,7 @@ from datetime import datetime
 from dataclasses import dataclass
 import signal
 import sys
+import atexit
 
 
 class UniformBspline:
@@ -131,14 +133,42 @@ class TrajectoryDataLogger(Node):
         self.mode = mode
         self.run_number = run_number
         
-        output_dir = Path('./trajectory_data')
+        # Output directory: allow override via TRAJECTORY_DATA_DIR, otherwise use current CWD/trajectory_data
+        default_dir = Path.cwd() / "trajectory_data"
+        output_dir = Path(os.environ.get("TRAJECTORY_DATA_DIR", default_dir))
         output_dir.mkdir(exist_ok=True, parents=True)
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.output_dir = output_dir
-        
+
+        # Precompute filenames so autosaves are consistent
+        if self.mode == 'baseline':
+            base_name = (
+                f'baseline_replay_run{self.run_number}_{self.timestamp}.csv'
+                if self.run_number is not None
+                else f'baseline_sim_{self.timestamp}.csv'
+            )
+            odom_prefix = 'baseline_odom'
+        elif self.mode == 'constrained':
+            base_name = f'baseline_in_constrained_sim_{self.timestamp}.csv'
+            odom_prefix = 'cinematic_odom'
+        else:
+            base_name = f'baseline_sim_{self.timestamp}.csv'
+            odom_prefix = 'baseline_odom'
+
+        cinematic_name = (
+            f'cinematic_replay_run{self.run_number}_{self.timestamp}.csv'
+            if self.run_number is not None
+            else f'cinematic_sim_{self.timestamp}.csv'
+        )
+
+        self.baseline_path = self.output_dir / base_name
+        self.cinematic_path = self.output_dir / cinematic_name
+        self.odom_path = self.output_dir / f'{odom_prefix}_sim_{self.timestamp}.csv'
+
         self.declare_parameter("baseline_bspline_topic", "/drone_0_planning/bspline")
         self.declare_parameter("cinematic_bspline_topic", "/drone_0_planning/cinematic_bspline")
-        self.declare_parameter("odom_topic", "/drone_0_visual_slam/odom")
+        # Default odom topic matches ego-planner single_run_in_sim launch (visual_slam/odom)
+        self.declare_parameter("odom_topic", "/visual_slam/odom")
         baseline_topic = str(self.get_parameter("baseline_bspline_topic").value)
         cinematic_topic = str(self.get_parameter("cinematic_bspline_topic").value)
         odom_topic = str(self.get_parameter("odom_topic").value)
@@ -163,17 +193,45 @@ class TrajectoryDataLogger(Node):
             self.odom_callback,
             50
         )
+
+        self._have_odom = False
+        self._have_baseline = False
+        self._warned_no_odom = False
+        self._warned_no_baseline = False
+
+        # Autosave periodically so data is flushed even if interrupted
+        self.save_timer = self.create_timer(2.0, self._autosave)
+        self.health_timer = self.create_timer(5.0, self._health_check)
+        atexit.register(self._autosave)
+        self.get_logger().info(
+            f"Trajectory data logger initialized | Output dir: {self.output_dir} | "
+            f"Baseline topic: {baseline_topic} | Cinematic topic: {cinematic_topic} | Odom topic: {odom_topic}"
+        )
         
         self.get_logger().info('Trajectory data logger initialized')
     
     def baseline_bspline_callback(self, msg):
         self.current_baseline_bspline = msg
+        self._have_baseline = True
+        if not getattr(self, "_logged_baseline_info", False):
+            self.get_logger().info(
+                f"[LOGGER] Received first B-spline! Started logging trajectory data. "
+                f"B-spline has {len(msg.pos_pts)} control points"
+            )
+            self._logged_baseline_info = True
     
     def constrained_bspline_callback(self, msg):
         self.current_constrained_bspline = msg
 
     def odom_callback(self, msg: Odometry):
+        self._have_odom = True
         self.current_odom = msg
+        if not getattr(self, "_logged_odom_info", False):
+            pos = msg.pose.pose.position
+            self.get_logger().info(
+                f"Origin set to: ({pos.x:.2f}, {pos.y:.2f}, {pos.z:.2f})"
+            )
+            self._logged_odom_info = True
         stamp = rclpy.time.Time.from_msg(msg.header.stamp)
 
         if self.time0 is None:
@@ -316,39 +374,27 @@ class TrajectoryDataLogger(Node):
             self.get_logger().error(f'Error evaluating B-spline: {e}')
             return None, None
     
-    def save_data(self):
+    def save_data(self, log_empty: bool = True):
         if len(self.odom_data) == 0 and len(self.baseline_data) == 0 and len(self.constrained_data) == 0:
-            self.get_logger().warn('No data to save')
+            if log_empty:
+                self.get_logger().warn('No data to save')
             return
 
         if len(self.baseline_data) > 0:
-            if self.mode == 'baseline':
-                if self.run_number is not None:
-                    baseline_name = f'baseline_replay_run{self.run_number}_{self.timestamp}.csv'
-                else:
-                    baseline_name = f'baseline_sim_{self.timestamp}.csv'
-            else:
-                baseline_name = f'baseline_in_constrained_sim_{self.timestamp}.csv'
-            baseline_path = self.output_dir / baseline_name
-            self._write_csv(baseline_path, self.baseline_data)
-            self.get_logger().info(f'Saved {len(self.baseline_data)} planned baseline points to: {baseline_path}')
+            self._write_csv(self.baseline_path, self.baseline_data)
+            self.get_logger().info(f'Saved {len(self.baseline_data)} planned baseline points to: {self.baseline_path}')
 
         if len(self.constrained_data) > 0:
-            cinematic_name = (
-                f'cinematic_replay_run{self.run_number}_{self.timestamp}.csv'
-                if self.run_number is not None
-                else f'cinematic_sim_{self.timestamp}.csv'
-            )
-            cinematic_path = self.output_dir / cinematic_name
-            self._write_csv(cinematic_path, self.constrained_data)
-            self.get_logger().info(f'Saved {len(self.constrained_data)} planned cinematic points to: {cinematic_path}')
+            self._write_csv(self.cinematic_path, self.constrained_data)
+            self.get_logger().info(f'Saved {len(self.constrained_data)} planned cinematic points to: {self.cinematic_path}')
 
         if len(self.odom_data) > 0:
-            odom_prefix = 'cinematic_odom' if self.mode == 'constrained' else 'baseline_odom'
-            odom_name = f'{odom_prefix}_sim_{self.timestamp}.csv'
-            odom_path = self.output_dir / odom_name
-            self._write_csv(odom_path, self.odom_data)
-            self.get_logger().info(f'Saved {len(self.odom_data)} odometry points to: {odom_path}')
+            self._write_csv(self.odom_path, self.odom_data)
+            self.get_logger().info(f'Saved {len(self.odom_data)} odometry points to: {self.odom_path}')
+
+    def _autosave(self):
+        # Quiet autosave to ensure CSVs land even if interrupted
+        self.save_data(log_empty=False)
 
     def _write_csv(self, path: Path, rows: list[dict]):
         if not rows:
@@ -360,6 +406,17 @@ class TrajectoryDataLogger(Node):
             for row in rows:
                 writer.writerow(row)
 
+    def _health_check(self):
+        if not self._have_odom and not self._warned_no_odom:
+            self.get_logger().warn(
+                f"No odometry received yet on topic '{self.get_parameter('odom_topic').value}'"
+            )
+            self._warned_no_odom = True
+        if not self._have_baseline and not self._warned_no_baseline:
+            self.get_logger().warn(
+                f"No baseline B-spline received yet on topic '{self.get_parameter('baseline_bspline_topic').value}'"
+            )
+            self._warned_no_baseline = True
 
 
 def main(args=None):
@@ -378,14 +435,14 @@ def main(args=None):
     if mode == 'sim':
         mode = 'baseline'
     logger = TrajectoryDataLogger(mode=mode, run_number=parsed_args.run_number)
-    
+
     def signal_handler(sig, frame):
         logger.get_logger().info('Received shutdown signal...')
         logger.save_data()
         logger.destroy_node()
         rclpy.shutdown()
         sys.exit(0)
-    
+
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
@@ -393,6 +450,9 @@ def main(args=None):
         rclpy.spin(logger)
     except KeyboardInterrupt:
         logger.get_logger().info('Shutting down...')
+        logger.save_data()
+    except Exception as e:
+        logger.get_logger().error(f'Unhandled error: {e}')
         logger.save_data()
     finally:
         logger.destroy_node()
