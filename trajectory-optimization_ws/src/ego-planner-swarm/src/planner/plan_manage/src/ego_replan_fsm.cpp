@@ -220,7 +220,10 @@ namespace ego_planner
     if (msg->pose.position.z < -0.1)
       return;
 
-    Eigen::Vector3d end_wp(msg->pose.position.x, msg->pose.position.y, 1.0);
+    // Honor the incoming z so landing/descents are respected; clamp to avoid underground targets.
+    constexpr double MIN_WAYPOINT_Z = 0.0;
+    double target_z = std::max(MIN_WAYPOINT_Z, msg->pose.position.z);
+    Eigen::Vector3d end_wp(msg->pose.position.x, msg->pose.position.y, target_z);
 
     if (exec_state_ == WAIT_TARGET)
     {

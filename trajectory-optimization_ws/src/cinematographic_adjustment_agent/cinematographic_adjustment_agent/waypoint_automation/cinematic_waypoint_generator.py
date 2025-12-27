@@ -27,6 +27,8 @@ class CinematicWaypointGenerator(Node):
         self.waypoints_sent = False
         self.ready_time = None
         self.STARTUP_DELAY = 0.5
+        self.WAYPOINT_TIMER_PERIOD_S = 0.05 # planner must be rapidly fed to prevent stalling
+        self.WAYPOINT_LOOKAHEAD = 3
 
         self.velocity_settled = False
         self.VELOCITY_THRESHOLD = 0.2
@@ -36,6 +38,8 @@ class CinematicWaypointGenerator(Node):
         self.object_detection_time = None
         self.DETECTION_DEBOUNCE = 2.0
         self.DISTANCE_THRESHOLD_M = 0.8
+        self.PROGRESS_EPS_M = 0.05
+        self.PROGRESS_TIMEOUT_S = 2.0
 
         self.declare_parameter("image_width", 640)
         self.declare_parameter("image_height", 480)
@@ -51,9 +55,20 @@ class CinematicWaypointGenerator(Node):
         self.declare_parameter("bezier_blend_length_m", 0.75)
         self.declare_parameter("bezier_transition_points", 6)
         self.declare_parameter("bezier_min_speed_mps", 0.05)
+        self.declare_parameter("waypoint_xy_scale", 1.1)
+        self.declare_parameter("waypoint_y_extra_scale", 1.05)
+        self.declare_parameter("waypoint_z_scale", 1.1)
+        self.declare_parameter("enable_z_clamp", False)
+        self.declare_parameter("z_ceiling_override_m", -1.0)
         self.declare_parameter("world_bounds_min", [-10.0, -10.0, 0.0])
         self.declare_parameter("world_bounds_max", [10.0, 10.0, 2.8])
         self.declare_parameter("virtual_ceiling_m", 2.8)
+        self.declare_parameter("simulate_fake_object", True)
+        # Place a fake object slightly ahead of, and to the right of, the outer-most Y waypoint.
+        self.declare_parameter("fake_object_world_offset", [0.3, 0.6, 0.0])
+        self.declare_parameter("fake_object_side_offset_m", 0.6)
+        self.declare_parameter("fake_object_radius_m", 0.8)
+        self.declare_parameter("fake_object_outward_offset_m", 1.0)
 
         self.image_width = int(self.get_parameter("image_width").value)
         self.image_height = int(self.get_parameter("image_height").value)
@@ -69,34 +84,43 @@ class CinematicWaypointGenerator(Node):
         self.bezier_blend_length_m = float(self.get_parameter("bezier_blend_length_m").value)
         self.bezier_transition_points = int(self.get_parameter("bezier_transition_points").value)
         self.bezier_min_speed_mps = float(self.get_parameter("bezier_min_speed_mps").value)
+        self.waypoint_xy_scale = float(self.get_parameter("waypoint_xy_scale").value)
+        self.waypoint_y_extra_scale = float(self.get_parameter("waypoint_y_extra_scale").value)
+        self.waypoint_z_scale = float(self.get_parameter("waypoint_z_scale").value)
+        self.enable_z_clamp = bool(self.get_parameter("enable_z_clamp").value)
+        self.z_ceiling_override_m = float(self.get_parameter("z_ceiling_override_m").value)
         self.world_bounds_min = [float(v) for v in self.get_parameter("world_bounds_min").value]
         self.world_bounds_max = [float(v) for v in self.get_parameter("world_bounds_max").value]
         self.virtual_ceiling_m = float(self.get_parameter("virtual_ceiling_m").value)
         self.max_altitude_m = min(self.max_altitude_m, self.virtual_ceiling_m)
+        self.simulate_fake_object = bool(self.get_parameter("simulate_fake_object").value)
+        self.fake_object_world_offset = [float(v) for v in self.get_parameter("fake_object_world_offset").value]
+        self.fake_object_side_offset_m = float(self.get_parameter("fake_object_side_offset_m").value)
+        self.fake_object_radius_m = float(self.get_parameter("fake_object_radius_m").value)
+        self.fake_object_outward_offset_m = float(self.get_parameter("fake_object_outward_offset_m").value)
 
         self.static_waypoints = [
-            (0, 0, 0.3),
-            (0.54, 0.225, 0.38),
-            (1.17, 0.81, 0.55),
-            (1.35, 1.44, 0.7),
-            (0.81, 2.025, 0.85),
-            (0.99, 2.79, 0.95),
-            (1.62, 3.24, 1.05),
-            (2.34, 3.375, 1.15),
-            (3.05, 3, 1.1),
-            (3.285, 2.43, 1.05),
-            (3.0,1.5,1.02),
-            (2.61,0.63,1.0),
-            (2.43,-0.45,0.9),
+            (0.54, 0.425, 0.28),
+            (1.15, 1.2, 0.5),
+            (0.91, 2.025, 0.85),
+            (0.99, 2.79, 1.05),
+            (1.62, 3.24, 1.25),
+            (2.34, 3.375, 1.35),
+            (3.05, 3.0, 1.4),
+            (3.285, 2.43, 1.15),
+            (3.0, 1.5, 0.8),
+            (2.61, 0.63, 0.7),
+            (2.43, -0.45, 0.65),
         ]
 
         self.dynamic_waypoints = None
         self.detected_object = None
         self.use_dynamic_waypoints = False
         self.active_waypoints = None
-        self.active_waypoint_index = 0
-        self.active_waypoint_sent = False
+        self.current_target_index = 0
+        self.last_published_index = -1
         self.simulated_detection_active = False
+        self.pending_detection_merge = False
 
         self.stuck_progress_threshold_m = 0.25
         self.stuck_time_s = 0.8
@@ -109,8 +133,7 @@ class CinematicWaypointGenerator(Node):
 
         self.fake_detection_pub = self.create_publisher(Float32MultiArray, "/object_detections", 10)
 
-        # Publish goals quickly so the planner keeps moving
-        self.timer = self.create_timer(0.1, self.check_and_send_waypoints)
+        self.timer = self.create_timer(self.WAYPOINT_TIMER_PERIOD_S, self.check_and_send_waypoints)
 
     def _build_room_orbit(self):
         radius = max(self.min_orbit_radius_m, 1.0)
@@ -153,6 +176,7 @@ class CinematicWaypointGenerator(Node):
         x = msg.pose.pose.orientation.x
         y = msg.pose.pose.orientation.y
         z = msg.pose.pose.orientation.z
+        
         siny_cosp = 2.0 * (w * z + x * y)
         cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
         self.current_yaw = math.atan2(siny_cosp, cosy_cosp)
@@ -160,11 +184,22 @@ class CinematicWaypointGenerator(Node):
         self.velocity_settled = velocity_mag < self.VELOCITY_THRESHOLD
 
     def detection_callback(self, msg: Float32MultiArray):
-        # Ignore relative/object-based waypoint generation; always use the static absolute waypoints.
-        if not getattr(self, "_logged_ignore_detection", False):
-            self.get_logger().info("Ignoring detections; using static waypoints")
-            self._logged_ignore_detection = True
-        return
+        now = self.get_clock().now()
+        if self.object_detection_time is not None:
+            elapsed = (now - self.object_detection_time).nanoseconds / 1e9
+            if elapsed < self.DETECTION_DEBOUNCE:
+                return
+
+        parsed = self._parse_detection(msg)
+        if parsed is None:
+            return
+
+        self.detected_object = parsed
+        self.object_detection_time = now
+        self.simulated_detection_active = False
+        self.use_dynamic_waypoints = False
+        self.pending_detection_merge = True
+        self._rebuild_active_with_detection()
 
     def _parse_detection(self, msg: Float32MultiArray):
         if msg is None or msg.data is None:
@@ -353,7 +388,6 @@ class CinematicWaypointGenerator(Node):
         self.dynamic_waypoints = [
             (wp[0] - origin[0], wp[1] - origin[1], wp[2] - origin[2]) for wp in cinematographic_waypoints
         ]
-        self.publish_simulated_detection()
 
     def _clamp_waypoint_to_bounds(self, wp):
         x, y, z = wp
@@ -366,9 +400,20 @@ class CinematicWaypointGenerator(Node):
 
         x = max(x_min, min(x_max, float(x)))
         y = max(y_min, min(y_max, float(y)))
-        ceiling = min(self.world_bounds_max[2], self.virtual_ceiling_m)
-        z = max(self.world_bounds_min[2], min(ceiling, float(z)))
-        z = max(self.min_altitude_m, min(self.max_altitude_m, z))
+        original_z = float(z)
+        if self.enable_z_clamp:
+            ceiling = (
+                float(self.z_ceiling_override_m)
+                if self.z_ceiling_override_m > 0.0
+                else min(self.world_bounds_max[2], self.virtual_ceiling_m)
+            )
+            z = max(self.world_bounds_min[2], min(ceiling, float(z)))
+            z = max(self.min_altitude_m, min(self.max_altitude_m, z))
+            if abs(z - original_z) > 1e-6:
+                self.get_logger().debug(f"Z clamped from {original_z:.2f} to {z:.2f}")
+        else:
+            # Only enforce minimum altitude to avoid ground collisions.
+            z = max(self.world_bounds_min[2], max(self.min_altitude_m, float(z)))
         return (x, y, z)
 
     def publish_simulated_detection(self):
@@ -388,23 +433,32 @@ class CinematicWaypointGenerator(Node):
                 self._step_waypoint_sequence()
 
     def _initialize_waypoint_sequence(self):
-        if self.start_pos is not None and self.detected_object is None:
-            fake_detection = Float32MultiArray()
-            fake_detection.data = [1.0, 320.0, 240.0, 1.5, 5000.0, 0.05, 0.9, 0.5, 0.5]
-            self.detected_object = self._parse_detection(fake_detection)
-            self.simulated_detection_active = True
-            self.generate_cinematographic_waypoints()
-            self.use_dynamic_waypoints = True
-
         if self.use_dynamic_waypoints and self.dynamic_waypoints is not None:
-            waypoints_to_send = self.dynamic_waypoints  # already relative pattern
+            waypoints_to_send = self.dynamic_waypoints
         else:
-            waypoints_to_send = list(self.static_waypoints)  # relative pattern
+            waypoints_to_send = list(self.static_waypoints)
 
-        # Store relative waypoints; we will translate them using origin_offset when sending.
+        if self.waypoint_xy_scale != 1.0 or self.waypoint_y_extra_scale != 1.0:
+            sx = self.waypoint_xy_scale
+            sy = self.waypoint_xy_scale * self.waypoint_y_extra_scale
+            waypoints_to_send = [(wp[0] * sx, wp[1] * sy, wp[2]) for wp in waypoints_to_send]
+
+        if self.pending_detection_merge and self.detected_object is not None:
+            waypoints_to_send = self._merge_framing_with_static(waypoints_to_send, self.detected_object)
+            self.pending_detection_merge = False
+        elif self.simulate_fake_object:
+            waypoints_to_send = self._insert_fake_object_orbit(waypoints_to_send)
+
+        waypoints_to_send = self._deduplicate_waypoints(waypoints_to_send, min_separation=0.3)
+        waypoints_to_send = self._apply_descent_tail(waypoints_to_send)
+
         self.active_waypoints = self._limit_consecutive_waypoint_jumps(waypoints_to_send)
-        self.active_waypoint_index = 0
-        self.active_waypoint_sent = False
+        self.current_target_index = 0
+        self.last_published_index = -1
+        self.last_progress_time = None
+        self.last_progress_dist = None
+        self.waypoints_sent = False
+        self._prefill_waypoint_queue()
 
     def _limit_consecutive_waypoint_jumps(self, waypoints):
         if not waypoints or self.max_waypoint_jump_m <= 0:
@@ -417,6 +471,7 @@ class CinematicWaypointGenerator(Node):
             dy = wp[1] - prev[1]
             dz = wp[2] - prev[2]
             dist = (dx * dx + dy * dy + dz * dz) ** 0.5
+
             if dist <= self.max_waypoint_jump_m:
                 out.append(wp)
                 continue
@@ -427,116 +482,260 @@ class CinematicWaypointGenerator(Node):
                 out.append((prev[0] + t * dx, prev[1] + t * dy, prev[2] + t * dz))
         return out
 
-    def _step_waypoint_sequence(self):
-        if self.active_waypoints is None or self.current_pos is None:
-            return
+    def _apply_descent_tail(self, waypoints):
+        if not waypoints or len(waypoints) < 3:
+            return waypoints
 
-        if self.active_waypoint_index >= len(self.active_waypoints):
-            self.waypoints_sent = True
-            self.timer.cancel()
-            return
+        tail_count = max(3, int(len(waypoints) * 0.3))
+        start_idx = max(0, len(waypoints) - tail_count)
+        start_z = waypoints[start_idx][2]
+        target_z = max(self.min_altitude_m, self.world_bounds_min[2])
 
-        # Convert relative waypoint into world frame using the recorded origin.
-        target_rel = self.active_waypoints[self.active_waypoint_index]
+        if start_z <= target_z + 1e-3:
+            return waypoints
+
+        adjusted = list(waypoints)
+        for i in range(len(waypoints) - start_idx):
+            t = (i + 1) / (len(waypoints) - start_idx)
+            z = start_z + t * (target_z - start_z)
+            wp = adjusted[start_idx + i]
+            adjusted[start_idx + i] = (wp[0], wp[1], z)
+        return adjusted
+
+    def _deduplicate_waypoints(self, waypoints, min_separation=0.3):
+        if not waypoints:
+            return waypoints
+        out = []
+        prev = None
+        for wp in waypoints:
+            if prev is not None:
+                dx = wp[0] - prev[0]
+                dy = wp[1] - prev[1]
+                dz = wp[2] - prev[2]
+                if (dx * dx + dy * dy + dz * dz) ** 0.5 < min_separation:
+                    continue
+            out.append(wp)
+            prev = wp
+        return out
+
+    def _compute_object_world(self, detection):
+        if detection is None:
+            return None
+        obj_depth = float(detection["depth"])
+        center_x = float(detection["center_x"])
+        center_y = float(detection["center_y"])
+        norm_x = detection.get("norm_x", None)
+        norm_y = detection.get("norm_y", None)
+
+        if norm_x is not None and norm_y is not None:
+            u = float(norm_x) * float(self.image_width)
+            v = float(norm_y) * float(self.image_height)
+        else:
+            u = center_x
+            v = center_y
+
+        if self.fx > 0 and self.fy > 0:
+            obj_x_m = (u - self.cx) / self.fx * obj_depth
+            obj_y_m = (v - self.cy) / self.fy * obj_depth
+        else:
+            obj_x_m = 0.0
+            obj_y_m = 0.0
+
+        base_pos = self.current_pos if self.current_pos is not None else self.start_pos
+        if base_pos is None:
+            return None, obj_depth
+
+        cos_yaw = math.cos(self.current_yaw)
+        sin_yaw = math.sin(self.current_yaw)
+        world_dx = cos_yaw * obj_x_m - sin_yaw * obj_y_m
+        world_dy = sin_yaw * obj_x_m + cos_yaw * obj_y_m
+        center_world = (base_pos[0] + world_dx, base_pos[1] + world_dy, base_pos[2])
+        return center_world, obj_depth
+
+    def _build_orbit_segment(self, center_world, radius, z, num_pts=16):
+        radius = max(self.min_orbit_radius_m, radius)
+        z = max(self.min_altitude_m, min(self.max_altitude_m, z))
+        waypoints = []
+        for i in range(num_pts):
+            t = 2.0 * math.pi * i / num_pts
+            x = center_world[0] + radius * math.cos(t)
+            y = center_world[1] + radius * math.sin(t)
+            waypoints.append(self._clamp_waypoint_to_bounds((x, y, z)))
+        return waypoints
+
+    def _merge_framing_with_static(self, rel_waypoints, detection):
+        if not rel_waypoints or detection is None:
+            return rel_waypoints
+
+        origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
+        wps_world = [(wp[0] + origin[0], wp[1] + origin[1], wp[2] + origin[2]) for wp in rel_waypoints]
+
+        center_world, obj_depth = self._compute_object_world(detection)
+        if center_world is None:
+            return rel_waypoints
+
+        idx_anchor = max(range(len(wps_world)), key=lambda i: wps_world[i][1])
+        anchor_wp = wps_world[idx_anchor]
+        orbit_radius = max(self.min_orbit_radius_m, obj_depth * 0.4)
+        orbit = self._build_orbit_segment(center_world, orbit_radius, anchor_wp[2])
+
+        overlap_thresh = 0.35
+        def too_close(wp):
+            for o in orbit:
+                dx = wp[0] - o[0]
+                dy = wp[1] - o[1]
+                dz = wp[2] - o[2]
+                if (dx * dx + dy * dy + dz * dz) ** 0.5 < overlap_thresh:
+                    return True
+            return False
+
+        head = [wp for wp in wps_world[: idx_anchor + 1] if not too_close(wp)]
+        tail = [wp for wp in wps_world[idx_anchor + 1 :] if not too_close(wp)]
+        merged_world = head + orbit + tail
+
+        return [(wp[0] - origin[0], wp[1] - origin[1], wp[2] - origin[2]) for wp in merged_world]
+
+    def _rel_to_world(self, target_rel):
         origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
         target_world = (
             target_rel[0] + origin[0],
             target_rel[1] + origin[1],
             target_rel[2] + origin[2],
         )
-        target_world = self._clamp_waypoint_to_bounds(target_world)
+        return self._clamp_waypoint_to_bounds(target_world)
+
+    def _distance_to(self, target_world):
+        dx = self.current_pos[0] - target_world[0]
+        dy = self.current_pos[1] - target_world[1]
+        dz = self.current_pos[2] - target_world[2]
+        return (dx * dx + dy * dy + dz * dz) ** 0.5
+
+    def _publish_waypoint(self, target_world, idx: int):
+        goal = PoseStamped()
+        goal.header.stamp = self.get_clock().now().to_msg()
+        goal.header.frame_id = "world"
+        goal.pose.position.x = float(target_world[0])
+        goal.pose.position.y = float(target_world[1])
+        goal.pose.position.z = float(target_world[2])
+        goal.pose.orientation.w = 1.0
+        self.goal_pub.publish(goal)
+
+        if idx == self.current_target_index:
+            self.last_progress_time = self.get_clock().now()
+            self.last_progress_dist = self._distance_to(target_world)
+            self.stuck_attempts = 0
+
+    def _prefill_waypoint_queue(self):
+        if self.active_waypoints is None or self.current_pos is None:
+            return
+
+        while (
+            self.last_published_index < len(self.active_waypoints) - 1
+            and (self.last_published_index - self.current_target_index + 1) < self.WAYPOINT_LOOKAHEAD
+        ):
+            next_idx = self.last_published_index + 1
+            target_world = self._rel_to_world(self.active_waypoints[next_idx])
+            self._publish_waypoint(target_world, next_idx)
+            self.last_published_index = next_idx
+
+    def _step_waypoint_sequence(self):
+        if self.active_waypoints is None or self.current_pos is None:
+            return
+
+        if self.current_target_index >= len(self.active_waypoints):
+            self.waypoints_sent = True
+            self.timer.cancel()
+            return
+
+        self._prefill_waypoint_queue()
+
+        target_world = self._rel_to_world(self.active_waypoints[self.current_target_index])
 
         dx = self.current_pos[0] - target_world[0]
         dy = self.current_pos[1] - target_world[1]
         dz = self.current_pos[2] - target_world[2]
         dist = (dx * dx + dy * dy + dz * dz) ** 0.5
 
-        if not self.active_waypoint_sent:
-            x, y, z = target_world
-            goal = PoseStamped()
-            goal.header.stamp = self.get_clock().now().to_msg()
-            goal.header.frame_id = "world"
-            goal.pose.position.x = float(x)
-            goal.pose.position.y = float(y)
-            goal.pose.position.z = float(z)
-            goal.pose.orientation.w = 1.0
-            self.goal_pub.publish(goal)
-            self.active_waypoint_sent = True
-            self.last_progress_time = self.get_clock().now()
-            self.last_progress_dist = dist
-            self.stuck_attempts = 0
-            return
-
         now = self.get_clock().now()
         if self.last_progress_time is None:
             self.last_progress_time = now
             self.last_progress_dist = dist
 
-        if dist < (self.last_progress_dist or 0.0) - self.stuck_progress_threshold_m:
+        if dist < (self.last_progress_dist or 0.0) - self.PROGRESS_EPS_M:
             self.last_progress_time = now
             self.last_progress_dist = dist
         else:
             elapsed_stuck = (now - self.last_progress_time).nanoseconds / 1e9
-            if elapsed_stuck >= self.stuck_time_s:
-                if self._nudge_active_waypoint(elapsed_stuck):
-                    return
+            if elapsed_stuck >= self.PROGRESS_TIMEOUT_S and dist > self.DISTANCE_THRESHOLD_M * 0.5:
+                self.get_logger().warn(
+                    f"No progress toward waypoint {self.current_target_index} for {elapsed_stuck:.1f}s; skipping it"
+                )
+                self.current_target_index += 1
+                self.last_progress_time = None
+                self.last_progress_dist = None
+                self.stuck_attempts = 0
+                self._prefill_waypoint_queue()
+                return
 
         if dist <= self.DISTANCE_THRESHOLD_M:
-            self.active_waypoint_index += 1
-            self.active_waypoint_sent = False
+            self.current_target_index += 1
             self.last_progress_time = None
             self.last_progress_dist = None
             self.stuck_attempts = 0
+            self._prefill_waypoint_queue()
+            if self.current_target_index >= len(self.active_waypoints):
+                self.waypoints_sent = True
+                self.timer.cancel()
 
-    def _nudge_active_waypoint(self, elapsed_stuck: float):
-        if self.active_waypoints is None or self.active_waypoint_index >= len(self.active_waypoints):
-            return False
+    def _build_fake_object_waypoints(self, obj_world, radius, base_z):
+        radius = max(self.min_orbit_radius_m, radius)
+        num_pts = 16
+        waypoints = []
+        z = max(self.min_altitude_m, min(self.max_altitude_m, base_z))
+        for i in range(num_pts):
+            t = 2.0 * math.pi * i / num_pts
+            x = obj_world[0] + radius * math.cos(t)
+            y = obj_world[1] + radius * math.sin(t)
+            waypoints.append(self._clamp_waypoint_to_bounds((x, y, z)))
+        return waypoints
 
-        current = self.active_waypoints[self.active_waypoint_index]
+    def _compute_fake_object_position(self, anchor_wp):
+        """
+        Place a fake object just to the right of the initial trajectory direction,
+        with an optional absolute offset. This keeps the orbit circular and offset
+        from the nominal path.
+        """
+        base_x, base_y, base_z = anchor_wp
+        yaw = self.current_yaw
+        # Right-hand side offset relative to heading
+        dx_side = math.sin(yaw) * self.fake_object_side_offset_m
+        dy_side = -math.cos(yaw) * self.fake_object_side_offset_m
+        # Outward along Y (same sign as anchor Y) to keep it outside the path and force an inward curve.
+        sign_y = 1.0 if base_y >= 0.0 else -1.0
+        dy_out = sign_y * self.fake_object_outward_offset_m
 
-        if self.stuck_attempts >= self.max_stuck_nudges:
-            self.get_logger().warn(
-                f"Waypoint {self.active_waypoint_index} stuck after {self.stuck_attempts} nudges; skipping it ({current})"
-            )
-            self.active_waypoint_index += 1
-            self.active_waypoint_sent = False
-            self.last_progress_time = None
-            self.last_progress_dist = None
-            self.stuck_attempts = 0
-            return True
-
-        lateral_offset = (self.nudge_offset_xy_m, self.nudge_offset_xy_m, self.nudge_offset_z_m)
-        if self.active_waypoint_index > 0 and self.active_waypoint_index + 1 < len(self.active_waypoints):
-            prev_wp = self.active_waypoints[self.active_waypoint_index - 1]
-            next_wp = self.active_waypoints[self.active_waypoint_index + 1]
-            tangent = (next_wp[0] - prev_wp[0], next_wp[1] - prev_wp[1], 0.0)
-            lateral = (-tangent[1], tangent[0], 0.0)
-            lateral_dir, mag = self._normalize3(lateral)
-            if mag > 0.0:
-                lateral_offset = (
-                    lateral_dir[0] * self.nudge_offset_xy_m,
-                    lateral_dir[1] * self.nudge_offset_xy_m,
-                    self.nudge_offset_z_m,
-                )
-
-        nudged = (
-            current[0] + lateral_offset[0],
-            current[1] + lateral_offset[1],
-            current[2] + lateral_offset[2],
+        obj_world = (
+            base_x + self.fake_object_world_offset[0] + dx_side,
+            base_y + self.fake_object_world_offset[1] + dy_side + dy_out,
+            base_z + self.fake_object_world_offset[2],
         )
-        nudged = self._clamp_waypoint_to_bounds(nudged)
-
-        self.active_waypoints[self.active_waypoint_index] = nudged
-        self.active_waypoint_sent = False
-        self.last_progress_time = self.get_clock().now()
-        self.last_progress_dist = None
-        self.stuck_attempts += 1
-
-        self.get_logger().warn(
-            f"Waypoint {self.active_waypoint_index} stuck for {elapsed_stuck:.1f}s at {current}, nudging to {nudged} (attempt {self.stuck_attempts}/{self.max_stuck_nudges})"
+        obj_world = (
+            obj_world[0],
+            obj_world[1],
+            max(self.min_altitude_m, min(self.max_altitude_m, obj_world[2])),
         )
-        return True
+        return obj_world
 
+    def _insert_fake_object_orbit(self, waypoints):
+        if not waypoints:
+            return waypoints
+
+        # Pick the waypoint with the largest Y (outer-most on Y-axis).
+        idx_max_y = max(range(len(waypoints)), key=lambda i: waypoints[i][1])
+        anchor_wp = waypoints[idx_max_y]
+        obj_world = self._compute_fake_object_position(anchor_wp)
+        orbit = self._build_fake_object_waypoints(obj_world, self.fake_object_radius_m, anchor_wp[2])
+        return waypoints[: idx_max_y + 1] + orbit + waypoints[idx_max_y + 1 :]
 
 def main(args=None):
     rclpy.init(args=args)

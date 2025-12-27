@@ -1,27 +1,34 @@
+import json
+import sys
+import os
+from pathlib import Path
 import rclpy
 from rclpy.node import Node
 from traj_utils.msg import Bspline
-import json
-import sys
-from pathlib import Path
-
 
 class BsplineRecorder(Node):
-    def __init__(self, output_file='reference_trajectory.json'):
+    def __init__(self, output_file='reference_trajectory.json', mode: str = 'baseline'):
         super().__init__('bspline_recorder')
         self.output_file = output_file
         self.trajectory_received = False
-        
+
+        mode = mode.lower()
+        if mode not in ('baseline', 'cinematic'):
+            self.get_logger().warn(f"Unknown mode '{mode}', defaulting to baseline")
+            mode = 'baseline'
+
+        topic = '/drone_0_planning/cinematic_bspline' if mode == 'cinematic' else '/drone_0_planning/bspline'
+
         self.subscription = self.create_subscription(
             Bspline,
-            '/drone_0_planning/bspline',
+            topic,
             self.bspline_callback,
             10
         )
         
     def bspline_callback(self, msg):
         if self.trajectory_received:
-            return  # record the first ONLY
+            return
         
         pos_pts = []
         for pt in msg.pos_pts:
@@ -57,8 +64,11 @@ def main(args=None):
         rclpy.init(args=args)
     
     output_file = sys.argv[1] if len(sys.argv) > 1 else 'reference_trajectory.json'
-    
-    recorder = BsplineRecorder(output_file)
+    mode = os.getenv("BSPLINE_RECORDER_MODE", "baseline")
+    if len(sys.argv) > 2:
+        mode = sys.argv[2]
+
+    recorder = BsplineRecorder(output_file, mode)
     
     try:
         timeout_start = recorder.get_clock().now()
@@ -68,6 +78,7 @@ def main(args=None):
             rclpy.spin_once(recorder, timeout_sec=0.1)
             spin_count += 1
             elapsed = (recorder.get_clock().now() - timeout_start).nanoseconds / 1e9
+
             if spin_count % 100 == 0:
                 recorder.get_logger().info(f'spinning: trajectory_received={recorder.trajectory_received}')
             if elapsed > 40:
@@ -79,7 +90,6 @@ def main(args=None):
         recorder.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
