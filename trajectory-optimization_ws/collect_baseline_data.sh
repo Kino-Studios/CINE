@@ -48,6 +48,11 @@ rm -rf /tmp/cyclonedds* ~/.local/share/cyclonedds* 2>/dev/null
 sleep 2
 
 export TRAJECTORY_DATA_DIR="${REPO_ROOT}/trajectory_data"
+export DRONE_ID="${DRONE_ID:-0}"
+
+ODOM_TOPIC="/drone_${DRONE_ID}_visual_slam/odom"
+BASELINE_TOPIC="/drone_${DRONE_ID}_planning/bspline"
+CINEMATIC_TOPIC="/drone_${DRONE_ID}_planning/cinematic_bspline"
 
 SIM_PID=""
 TAIL_PID=""
@@ -76,11 +81,14 @@ if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
   fi
 fi
 
-ros2 run cinematographic_adjustment_agent trajectory_data_logger --mode baseline --ros-args -p odom_topic:=/visual_slam/odom &
+ros2 run cinematographic_adjustment_agent trajectory_data_logger --mode baseline --ros-args \
+  -p odom_topic:=${ODOM_TOPIC} \
+  -p baseline_bspline_topic:=${BASELINE_TOPIC} \
+  -p cinematic_bspline_topic:=${CINEMATIC_TOPIC} &
 LOGGER_PID=$!
 sleep 2
 
-ros2 run cinematographic_adjustment_agent cinematic_waypoint_generator --ros-args -p odom_topic:=/drone_0_visual_slam/odom &
+ros2 run cinematographic_adjustment_agent cinematic_waypoint_generator --ros-args -p odom_topic:=${ODOM_TOPIC} &
 WAYPOINT_PID=$!
 
 cleanup() {

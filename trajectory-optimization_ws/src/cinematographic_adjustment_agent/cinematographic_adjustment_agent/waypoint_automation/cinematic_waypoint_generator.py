@@ -22,6 +22,7 @@ class CinematicWaypointGenerator(Node):
         self.detection_sub = self.create_subscription(Float32MultiArray, detections_topic, self.detection_callback, 10)
 
         self.start_pos = None
+        self.origin_offset = None
         self.current_yaw = 0.0
         self.waypoints_sent = False
         self.ready_time = None
@@ -74,18 +75,19 @@ class CinematicWaypointGenerator(Node):
         self.max_altitude_m = min(self.max_altitude_m, self.virtual_ceiling_m)
 
         self.static_waypoints = [
-            (0.54, 0.225, 1.0),
-            (1.17, 0.81, 1.15),
-            (1.35, 1.44, 1.25),
-            (0.81, 2.025, 1.35),
-            (0.99, 2.79, 1.4),
-            (1.62, 3.24, 1.42),
-            (2.34, 3.375, 1.38),
-            (3.05, 3, 1.32),
-            (3.285, 2.43, 1.25),
-            (3.0,1.5,1.22),
-            (2.61,0.63,1.2),
-            (2.43,-0.45,1.3),
+            (0, 0, 0.3),
+            (0.54, 0.225, 0.38),
+            (1.17, 0.81, 0.55),
+            (1.35, 1.44, 0.7),
+            (0.81, 2.025, 0.85),
+            (0.99, 2.79, 0.95),
+            (1.62, 3.24, 1.05),
+            (2.34, 3.375, 1.15),
+            (3.05, 3, 1.1),
+            (3.285, 2.43, 1.05),
+            (3.0,1.5,1.02),
+            (2.61,0.63,1.0),
+            (2.43,-0.45,0.9),
         ]
 
         self.dynamic_waypoints = None
@@ -144,6 +146,7 @@ class CinematicWaypointGenerator(Node):
                 msg.pose.pose.position.y,
                 msg.pose.pose.position.z,
             )
+            self.origin_offset = self.start_pos
             self.ready_time = self.get_clock().now()
 
         w = msg.pose.pose.orientation.w
@@ -157,29 +160,11 @@ class CinematicWaypointGenerator(Node):
         self.velocity_settled = velocity_mag < self.VELOCITY_THRESHOLD
 
     def detection_callback(self, msg: Float32MultiArray):
-        try:
-            if self.active_waypoints is not None:
-                return
-
-            det = self._parse_detection(msg)
-            if det is None:
-                return
-
-            self.detected_object = det
-
-            if self.start_pos is not None and not self.waypoints_sent:
-                now = self.get_clock().now()
-                if self.object_detection_time is None:
-                    self.generate_cinematographic_waypoints()
-                    self.use_dynamic_waypoints = True
-                    self.object_detection_time = now
-                else:
-                    elapsed = (now - self.object_detection_time).nanoseconds / 1e9
-                    if elapsed >= self.DETECTION_DEBOUNCE:
-                        self.generate_cinematographic_waypoints()
-                        self.object_detection_time = now
-        except Exception as e:
-            self.get_logger().warn(f"Error processing: {e}")
+        # Ignore relative/object-based waypoint generation; always use the static absolute waypoints.
+        if not getattr(self, "_logged_ignore_detection", False):
+            self.get_logger().info("Ignoring detections; using static waypoints")
+            self._logged_ignore_detection = True
+        return
 
     def _parse_detection(self, msg: Float32MultiArray):
         if msg is None or msg.data is None:
@@ -261,7 +246,8 @@ class CinematicWaypointGenerator(Node):
             return
 
         if self.simulated_detection_active:
-            self.dynamic_waypoints = [self._clamp_waypoint_to_bounds(wp) for wp in self.static_waypoints]
+            # Keep the relative pattern; translation to world happens at publish time.
+            self.dynamic_waypoints = list(self.static_waypoints)
             self.object_detection_time = self.get_clock().now()
             self.publish_simulated_detection()
             return
@@ -362,13 +348,24 @@ class CinematicWaypointGenerator(Node):
         if transition:
             cinematographic_waypoints = transition + cinematographic_waypoints
 
-        self.dynamic_waypoints = cinematographic_waypoints
+        # Store as relative to the recorded origin so publishing always does origin + relative.
+        origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
+        self.dynamic_waypoints = [
+            (wp[0] - origin[0], wp[1] - origin[1], wp[2] - origin[2]) for wp in cinematographic_waypoints
+        ]
         self.publish_simulated_detection()
 
     def _clamp_waypoint_to_bounds(self, wp):
         x, y, z = wp
-        x = max(self.world_bounds_min[0], min(self.world_bounds_max[0], float(x)))
-        y = max(self.world_bounds_min[1], min(self.world_bounds_max[1], float(y)))
+        # Shift XY bounds by the recorded origin so relative goals are not clipped back to the default box.
+        ox, oy = (self.origin_offset or (0.0, 0.0, 0.0))[:2]
+        x_min = self.world_bounds_min[0] + ox
+        x_max = self.world_bounds_max[0] + ox
+        y_min = self.world_bounds_min[1] + oy
+        y_max = self.world_bounds_max[1] + oy
+
+        x = max(x_min, min(x_max, float(x)))
+        y = max(y_min, min(y_max, float(y)))
         ceiling = min(self.world_bounds_max[2], self.virtual_ceiling_m)
         z = max(self.world_bounds_min[2], min(ceiling, float(z)))
         z = max(self.min_altitude_m, min(self.max_altitude_m, z))
@@ -400,13 +397,12 @@ class CinematicWaypointGenerator(Node):
             self.use_dynamic_waypoints = True
 
         if self.use_dynamic_waypoints and self.dynamic_waypoints is not None:
-            waypoints_to_send = self.dynamic_waypoints
+            waypoints_to_send = self.dynamic_waypoints  # already relative pattern
         else:
-            waypoints_to_send = list(self.static_waypoints)
+            waypoints_to_send = list(self.static_waypoints)  # relative pattern
 
-        clamped = [self._clamp_waypoint_to_bounds(wp) for wp in waypoints_to_send]
-
-        self.active_waypoints = self._limit_consecutive_waypoint_jumps(clamped)
+        # Store relative waypoints; we will translate them using origin_offset when sending.
+        self.active_waypoints = self._limit_consecutive_waypoint_jumps(waypoints_to_send)
         self.active_waypoint_index = 0
         self.active_waypoint_sent = False
 
@@ -440,14 +436,23 @@ class CinematicWaypointGenerator(Node):
             self.timer.cancel()
             return
 
-        target = self.active_waypoints[self.active_waypoint_index]
-        dx = self.current_pos[0] - target[0]
-        dy = self.current_pos[1] - target[1]
-        dz = self.current_pos[2] - target[2]
+        # Convert relative waypoint into world frame using the recorded origin.
+        target_rel = self.active_waypoints[self.active_waypoint_index]
+        origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
+        target_world = (
+            target_rel[0] + origin[0],
+            target_rel[1] + origin[1],
+            target_rel[2] + origin[2],
+        )
+        target_world = self._clamp_waypoint_to_bounds(target_world)
+
+        dx = self.current_pos[0] - target_world[0]
+        dy = self.current_pos[1] - target_world[1]
+        dz = self.current_pos[2] - target_world[2]
         dist = (dx * dx + dy * dy + dz * dz) ** 0.5
 
         if not self.active_waypoint_sent:
-            x, y, z = target
+            x, y, z = target_world
             goal = PoseStamped()
             goal.header.stamp = self.get_clock().now().to_msg()
             goal.header.frame_id = "world"
