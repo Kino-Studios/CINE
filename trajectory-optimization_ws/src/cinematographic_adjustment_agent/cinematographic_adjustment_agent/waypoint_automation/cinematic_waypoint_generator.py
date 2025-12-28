@@ -17,7 +17,7 @@ class CinematicWaypointGenerator(Node):
         self.detections_topic = str(self.declare_parameter("detections_topic", "/object_detections").value)
         self.light_vector_topic = str(self.declare_parameter("light_vector_topic", "/cinematography/light_vector").value)
         self.enable_cost_optimization = bool(self.declare_parameter("enable_cost_optimization", True).value)
-        self.use_dynamic_waypoints_on_detection = bool(self.declare_parameter("use_dynamic_waypoints_on_detection", False).value)
+        self.use_dynamic_waypoints_on_detection = bool(self.declare_parameter("use_dynamic_waypoints_on_detection", True).value)
         self.candidate_angle_window_rad = float(self.declare_parameter("candidate_angle_window_rad", 0.6).value)
         self.candidate_angle_samples = int(self.declare_parameter("candidate_angle_samples", 7).value)
         self.candidate_radius_samples = int(self.declare_parameter("candidate_radius_samples", 5).value)
@@ -72,7 +72,7 @@ class CinematicWaypointGenerator(Node):
         self.world_bounds_min = [float(v) for v in self.declare_parameter("world_bounds_min", [-10.0, -10.0, 0.0]).value]
         self.world_bounds_max = [float(v) for v in self.declare_parameter("world_bounds_max", [10.0, 10.0, 2.8]).value]
         self.virtual_ceiling_m = float(self.declare_parameter("virtual_ceiling_m", 2.8).value)
-        self.simulate_fake_object = bool(self.declare_parameter("simulate_fake_object", True).value)
+        self.simulate_fake_object = bool(self.declare_parameter("simulate_fake_object", False).value)
         self.fake_object_world_offset = [float(v) for v in self.declare_parameter("fake_object_world_offset", [0.3, 0.6, 0.0]).value]
         self.fake_object_side_offset_m = float(self.declare_parameter("fake_object_side_offset_m", 0.6).value)
         self.fake_object_radius_m = float(self.declare_parameter("fake_object_radius_m", 0.8).value)
@@ -86,7 +86,7 @@ class CinematicWaypointGenerator(Node):
             (0.91, 2.025, 0.85),
             (0.99, 2.79, 1.05),
             (1.62, 3.24, 1.25),
-            (2.34, 3.375, 1.35),
+            (2.34, 4.9, 1.5),
             (3.05, 3.0, 1.4),
             (3.285, 2.43, 1.15),
             (3.0, 1.5, 0.8),
@@ -120,6 +120,7 @@ class CinematicWaypointGenerator(Node):
         self.timer = self.create_timer(self.WAYPOINT_TIMER_PERIOD_S, self.check_and_send_waypoints)
         self.focus_depth_m: float | None = None
         self.target_world: tuple[float, float, float] | None = None
+        self.last_target_world: tuple[float, float, float] | None = None
         self.light_vector = None
 
     def _build_room_orbit(self):
@@ -183,8 +184,10 @@ class CinematicWaypointGenerator(Node):
         try:
             p = msg.point
             self.target_world = (float(p.x), float(p.y), float(p.z))
+            self.last_target_world = self.target_world
         except Exception:
             self.target_world = None
+            self.last_target_world = None
 
     def detection_callback(self, msg: Float32MultiArray):
         now = self.get_clock().now()
@@ -432,6 +435,7 @@ class CinematicWaypointGenerator(Node):
 
         if target_world is None:
             target_world = (base_pos[0] + cos_yaw * obj_x_m - sin_yaw * obj_y_m, base_pos[1] + sin_yaw * obj_x_m + cos_yaw * obj_y_m, base_pos[2])
+        self.last_target_world = target_world
 
         thirds_offset_x_m = 0.0
         thirds_offset_y_m = 0.0
@@ -455,6 +459,8 @@ class CinematicWaypointGenerator(Node):
 
         reference_world = base_pos
 
+        base_z = max(self.min_altitude_m, min(self.max_altitude_m, base_pos[2]))
+
         for i in range(num_waypoints):
             nominal_angle = start_angle + (arc_span * i / (num_waypoints - 1))
             if angle_samples > 1:
@@ -477,8 +483,7 @@ class CinematicWaypointGenerator(Node):
             wp_y_m = obj_y_m + thirds_offset_y_m + r0 * math.sin(nominal_angle)
             world_dx = cos_yaw * wp_x_m - sin_yaw * wp_y_m
             world_dy = sin_yaw * wp_x_m + cos_yaw * wp_y_m
-            wp_z_m = self.orbit_altitude_m + 0.6 * math.sin(nominal_angle)
-            wp_z_m = max(self.min_altitude_m, min(self.max_altitude_m, wp_z_m))
+            wp_z_m = base_z
             best_candidate = self._clamp_waypoint_to_bounds((base_pos[0] + world_dx, base_pos[1] + world_dy, wp_z_m))
 
             best_cost = float("inf")
@@ -494,8 +499,7 @@ class CinematicWaypointGenerator(Node):
                     world_dx = cos_yaw * wp_x_m - sin_yaw * wp_y_m
                     world_dy = sin_yaw * wp_x_m + cos_yaw * wp_y_m
 
-                    wp_z_m = self.orbit_altitude_m + 0.6 * math.sin(angle)
-                    wp_z_m = max(self.min_altitude_m, min(self.max_altitude_m, wp_z_m))
+                    wp_z_m = base_z
                     candidate = self._clamp_waypoint_to_bounds((base_pos[0] + world_dx, base_pos[1] + world_dy, wp_z_m))
 
                     cost = self._estimate_waypoint_cost(candidate, target_world, reference_world)
@@ -608,7 +612,8 @@ class CinematicWaypointGenerator(Node):
             waypoints_to_send = self._insert_fake_object_orbit(waypoints_to_send)
 
         waypoints_to_send = self._deduplicate_waypoints(waypoints_to_send, min_separation=0.3)
-        waypoints_to_send = self._apply_descent_tail(waypoints_to_send)
+        if not self.use_dynamic_waypoints:
+            waypoints_to_send = self._apply_descent_tail(waypoints_to_send)
 
         self.active_waypoints = self._limit_consecutive_waypoint_jumps(waypoints_to_send)
         self.current_target_index = 0
@@ -708,6 +713,7 @@ class CinematicWaypointGenerator(Node):
         world_dx = cos_yaw * obj_x_m - sin_yaw * obj_y_m
         world_dy = sin_yaw * obj_x_m + cos_yaw * obj_y_m
         center_world = (base_pos[0] + world_dx, base_pos[1] + world_dy, base_pos[2])
+        self.last_target_world = center_world
         return center_world, obj_depth
 
     def _build_orbit_segment(self, center_world, radius, z, num_pts=16, reference_world=None):
@@ -766,6 +772,7 @@ class CinematicWaypointGenerator(Node):
         center_world, obj_depth = self._compute_object_world(detection)
         if center_world is None:
             return rel_waypoints
+        self.last_target_world = center_world
 
         # Anchor at the point on the nominal path closest to the detected object (world XY),
         # so the inserted orbit actually wraps the object rather than a fixed "max Y" heuristic.
@@ -815,7 +822,17 @@ class CinematicWaypointGenerator(Node):
         goal.pose.position.x = float(target_world[0])
         goal.pose.position.y = float(target_world[1])
         goal.pose.position.z = float(target_world[2])
-        goal.pose.orientation.w = 1.0
+        # Face the object of focus when known; otherwise keep current yaw.
+        look_at = self.last_target_world or self.target_world
+        yaw = self.current_yaw
+        if look_at is not None:
+            dx = float(look_at[0]) - float(target_world[0])
+            dy = float(look_at[1]) - float(target_world[1])
+            yaw = math.atan2(dy, dx)
+        qw = math.cos(0.5 * yaw)
+        qz = math.sin(0.5 * yaw)
+        goal.pose.orientation.w = qw
+        goal.pose.orientation.z = qz
         self.goal_pub.publish(goal)
 
         if idx == self.current_target_index:
@@ -930,8 +947,70 @@ class CinematicWaypointGenerator(Node):
         idx_max_y = max(range(len(waypoints)), key=lambda i: waypoints[i][1])
         anchor_wp = waypoints[idx_max_y]
         obj_world = self._compute_fake_object_position(anchor_wp)
-        orbit = self._build_fake_object_waypoints(obj_world, self.fake_object_radius_m, anchor_wp[2])
+        self.last_target_world = obj_world
+        prev_wp = waypoints[idx_max_y - 1] if idx_max_y - 1 >= 0 else None
+        next_wp = waypoints[idx_max_y + 1] if idx_max_y + 1 < len(waypoints) else None
+        orbit = self._build_framing_arc(
+            obj_world,
+            anchor_wp,
+            self.fake_object_radius_m,
+            prev_wp=prev_wp,
+            next_wp=next_wp,
+        )
         return waypoints[: idx_max_y + 1] + orbit + waypoints[idx_max_y + 1 :]
+
+    def _build_framing_arc(self, obj_world, anchor_wp, radius, prev_wp=None, next_wp=None):
+        """
+        Build the shortest circular arc between incoming and outgoing directions
+        around the object, with no fixed span. The arc bends toward the object
+        side and follows the minimal angle between the two headings.
+        """
+        cx, cy, _ = obj_world
+        ax, ay, az = anchor_wp
+        # Choose a radius that stays well inside the object->anchor line so we don’t bulge outward.
+        dist_oa = math.hypot(ax - cx, ay - cy)
+        desired_r = min(radius, 0.4 * dist_oa) if dist_oa > 1e-3 else radius
+        radius = max(self.min_orbit_radius_m, desired_r)
+        z = max(self.min_altitude_m, min(self.max_altitude_m, az))
+
+        # Incoming/outgoing headings to bias the turn direction.
+        def _dir_from(a, b):
+            return (a[0] - b[0], a[1] - b[1])
+
+        approach = _dir_from(anchor_wp, prev_wp) if prev_wp is not None else None
+        depart = _dir_from(next_wp, anchor_wp) if next_wp is not None else None
+
+        def _angle(v):
+            return math.atan2(v[1], v[0])
+
+        approach_ang = _angle(approach) if approach else None
+        depart_ang = _angle(depart) if depart else approach_ang
+
+        # Determine start/end angles around the object; default to anchor direction if missing.
+        start_angle = math.atan2(ay - cy, ax - cx)
+        end_angle = start_angle
+        if next_wp is not None:
+            end_angle = math.atan2(next_wp[1] - cy, next_wp[0] - cx)
+        # Pick shortest angular direction.
+        delta = (end_angle - start_angle + math.pi) % (2 * math.pi) - math.pi
+        # If we have approach vector, ensure we bend toward the object side of it.
+        if approach is not None:
+            obj_vec = (cx - ax, cy - ay)
+            cross = approach[0] * obj_vec[1] - approach[1] * obj_vec[0]
+            turn_sign = 1.0 if cross > 0.0 else -1.0
+            if delta * turn_sign < 0:
+                # Flip to go the other way around the circle.
+                delta = delta - math.copysign(2 * math.pi, delta)
+        num_pts = 7
+
+        arc_pts = []
+        for i in range(num_pts):
+            t = i / (num_pts - 1)
+            ang = start_angle + t * delta
+            x = cx + radius * math.cos(ang)
+            y = cy + radius * math.sin(ang)
+            arc_pts.append(self._clamp_waypoint_to_bounds((x, y, z)))
+        return arc_pts
 
 def main(args=None):
     rclpy.init(args=args)
