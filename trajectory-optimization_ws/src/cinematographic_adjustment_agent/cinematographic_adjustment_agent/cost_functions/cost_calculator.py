@@ -331,3 +331,91 @@ class CostCalculator:
         
         total_cost = depth_cost + framing_cost
         return total_cost
+
+    def estimate_full_cost_at_position(
+        self,
+        drone_x: float,
+        drone_y: float,
+        drone_z: float,
+        target_world_x: float,
+        target_world_y: float,
+        target_world_z: float,
+        reference_drone_x: Optional[float] = None,
+        reference_drone_y: Optional[float] = None,
+        reference_drone_z: Optional[float] = None,
+    ) -> Optional[float]:
+        """
+        Model-based cost estimate for candidate waypoint selection.
+
+        Unlike `calculate_cost()` (which scores the *current* observed image),
+        this estimates how the cost terms would change if the drone were to move
+        to (drone_x, drone_y, drone_z), using only geometric information.
+        """
+
+        dx = target_world_x - drone_x
+        dy = target_world_y - drone_y
+        dz = target_world_z - drone_z
+        distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if not math.isfinite(distance) or distance <= 1e-6:
+            return None
+
+        d_star = self.UserRequestedParams.DESIRED_FOCUS_DISTANCE_M
+        d_min = self.UserRequestedParams.FOCUS_DISTANCE_MIN_M
+
+        j_dist = (distance - d_star) ** 2
+        j_near = (d_min - distance) ** 2 if distance < d_min else 0.0
+
+        w_dist = float(self.node.get_parameter("w_dist").value)
+        w_near = float(self.node.get_parameter("w_near").value)
+        w_stab = float(self.node.get_parameter("w_stab").value)
+        j_stab = 0.0
+        if reference_drone_x is not None and reference_drone_y is not None and reference_drone_z is not None:
+            pdx = target_world_x - reference_drone_x
+            pdy = target_world_y - reference_drone_y
+            pdz = target_world_z - reference_drone_z
+            prev_distance = math.sqrt(pdx * pdx + pdy * pdy + pdz * pdz)
+            if math.isfinite(prev_distance) and prev_distance > 1e-6:
+                j_stab = (distance - prev_distance) ** 2
+
+        depth_cost = (w_dist * j_dist) + (w_near * j_near) + (w_stab * j_stab)
+
+        desired_forward = np.array([dx, dy, dz], dtype=float) / float(distance)
+
+        lighting_cost = 0.0
+        if self.light_vector is not None:
+            dot_val = float(np.clip(np.dot(desired_forward, self.light_vector), -1.0, 1.0))
+            angle = math.acos(dot_val)
+            w_light = float(self.node.get_parameter("w_light").value)
+            lighting_cost = w_light * float(angle)
+
+        smoothness_cost = 0.0
+        framing_cost = 0.0
+        if reference_drone_x is not None and reference_drone_y is not None and reference_drone_z is not None:
+            rdx = target_world_x - reference_drone_x
+            rdy = target_world_y - reference_drone_y
+            rdz = target_world_z - reference_drone_z
+            ref_norm = math.sqrt(rdx * rdx + rdy * rdy + rdz * rdz)
+            if math.isfinite(ref_norm) and ref_norm > 1e-6:
+                reference_forward = np.array([rdx, rdy, rdz], dtype=float) / float(ref_norm)
+                dot_val = float(np.clip(np.dot(reference_forward, desired_forward), -1.0, 1.0))
+                angle = math.acos(dot_val)
+
+                w_smooth = float(self.node.get_parameter("w_smooth").value)
+                smoothness_cost = w_smooth * float(angle)
+
+                # "Framing" proxy: penalize large changes in viewing direction required
+                # to keep the subject centered/stable (approx. pixel displacement).
+                try:
+                    fx = float(self.node.get_parameter("camera_fx").value)
+                except Exception:
+                    fx = None
+
+                if fx is not None and fx > 0.0:
+                    err_px = fx * math.tan(angle) if abs(angle) < (math.pi / 2.0 - 1e-3) else fx * 1e3
+                    deadband = float(self.node.get_parameter("deadband_px").value)
+                    delta_px = float(self.node.get_parameter("huber_delta_px").value)
+                    err_px = 0.0 if abs(err_px) < deadband else err_px
+                    w_framing = float(self.node.get_parameter("w_framing").value)
+                    framing_cost = w_framing * float(self.huber_function(err_px, delta_px))
+
+        return float(depth_cost + framing_cost + lighting_cost + smoothness_cost)

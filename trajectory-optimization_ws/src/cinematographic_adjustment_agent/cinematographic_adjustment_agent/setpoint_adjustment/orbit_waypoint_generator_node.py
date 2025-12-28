@@ -4,11 +4,11 @@ from typing import Optional, Tuple
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
-from geometry_msgs.msg import PoseStamped, PolygonStamped
+from geometry_msgs.msg import PointStamped, PoseStamped
 from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image
+from std_msgs.msg import Float32
 
-from ..cost_functions.cost_calculator import CostCalculator
 from .trajectory_planner import (
     generate_cost_optimized_orbit_waypoints,
     generate_orbit_waypoints_xy,
@@ -22,19 +22,17 @@ class OrbitWaypointGenerator(Node):
         self.bridge = CvBridge()
         self.camera_info = None
         self.current_pose = None
-        self.depth_image = None
         self.waypoints = []
         self.waypoint_index = 0
         self.publishing_active = False
 
-        self.cost_calculator = CostCalculator(self)
+        self.target_world: tuple[float, float, float] | None = None
+        self.focus_depth_m: float | None = None
 
         self.camera_info_sub = self.create_subscription(CameraInfo, "/camera/camera_info", self.camera_info_callback, 10)
         self.pose_sub = self.create_subscription(PoseStamped, "/vio/pose", self.pose_callback, 10)
-        self.depth_sub = self.create_subscription(Image, "/camera/depth/image_raw", self.depth_callback, 10)
-        self.bbox_sub = self.create_subscription(PolygonStamped, "/tracker/bounding_box", self.bbox_callback, 10)
-        self.center_sub = self.create_subscription(PolygonStamped, "/tracker/center_point", self.center_callback, 10)
-        self.dims_sub = self.create_subscription(PolygonStamped, "/tracker/dimensions", self.dims_callback, 10)
+        self.target_world_sub = self.create_subscription(PointStamped, "/cinematography/target_world", self.target_world_callback, 10)
+        self.focus_depth_sub = self.create_subscription(Float32, "/cinematography/focus_depth_m", self.focus_depth_callback, 10)
 
         try:
             from mavros_msgs.msg import PositionTarget
@@ -53,6 +51,8 @@ class OrbitWaypointGenerator(Node):
         self.declare_parameter("waypoint_rate", 10.0)
         self.declare_parameter("optimize_cost", True)
         self.declare_parameter("altitude", 1.5)
+        self.declare_parameter("desired_focus_distance_m", 1.5)
+        self.declare_parameter("min_focus_distance_m", 1.0)
 
         self.timer = self.create_timer(0.1, self.publish_waypoint)
 
@@ -61,37 +61,40 @@ class OrbitWaypointGenerator(Node):
 
     def pose_callback(self, msg: PoseStamped):
         self.current_pose = msg
-        if not self.publishing_active and self.camera_info is not None:
+        if not self.publishing_active and self.camera_info is not None and self.target_world is not None:
             self.generate_waypoints()
             self.publishing_active = True
 
-    def depth_callback(self, msg: Image):
+    def target_world_callback(self, msg: PointStamped):
         try:
-            self.depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="32FC1")
+            p = msg.point
+            self.target_world = (float(p.x), float(p.y), float(p.z))
         except Exception:
-            return
-        self.cost_calculator.update_depth_image(self.depth_image)
+            self.target_world = None
 
-    def bbox_callback(self, msg: PolygonStamped):
-        self.cost_calculator.update_bounding_box(msg)
-
-    def center_callback(self, msg: PolygonStamped):
-        self.cost_calculator.update_center_point(msg)
-
-    def dims_callback(self, msg: PolygonStamped):
-        self.cost_calculator.update_dimensions(msg)
+    def focus_depth_callback(self, msg: Float32):
+        try:
+            self.focus_depth_m = float(getattr(msg, "data", None))
+        except Exception:
+            self.focus_depth_m = None
 
     def evaluate_cost_at_position(self, x: float, y: float, z: float) -> Optional[float]:
-        if self.current_pose is None:
-            return None
-        if self.cost_calculator.center_point is None or len(self.cost_calculator.center_point.polygon.points) == 0:
+        if self.current_pose is None or self.target_world is None:
             return None
 
-        target = self.cost_calculator.center_point.polygon.points[0]
-        target_world_x = float(getattr(target, "x", 0.0))
-        target_world_y = float(getattr(target, "y", 0.0))
-        target_world_z = float(getattr(target, "z", z))
-        return self.cost_calculator.estimate_cost_at_position(x, y, z, target_world_x, target_world_y, target_world_z)
+        tx, ty, tz = self.target_world
+        dx = float(tx) - float(x)
+        dy = float(ty) - float(y)
+        dz = float(tz) - float(z)
+        dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if not math.isfinite(dist):
+            return None
+
+        d_star = float(self.get_parameter("desired_focus_distance_m").value)
+        d_min = float(self.get_parameter("min_focus_distance_m").value)
+        j_dist = (dist - d_star) ** 2
+        j_near = (d_min - dist) ** 2 if dist < d_min else 0.0
+        return float(j_dist + 10.0 * j_near)
 
     def generate_waypoints(self):
         center_x = float(self.get_parameter("center_x").value)
@@ -104,6 +107,8 @@ class OrbitWaypointGenerator(Node):
         altitude = float(self.get_parameter("altitude").value)
 
         center = (center_x, center_y)
+        if self.target_world is not None:
+            center = (float(self.target_world[0]), float(self.target_world[1]))
         if optimize:
             center, radius = optimize_orbit_center_and_radius(center, radius, altitude, self.evaluate_cost_at_position)
             self.waypoints = generate_cost_optimized_orbit_waypoints(
@@ -150,7 +155,12 @@ class OrbitWaypointGenerator(Node):
         msg.position.x = float(x)
         msg.position.y = float(y)
         msg.position.z = float(z)
-        msg.yaw = math.atan2(float(self.get_parameter("center_y").value) - float(y), float(self.get_parameter("center_x").value) - float(x))
+        cy = center_y
+        cx = center_x
+        if self.target_world is not None:
+            cx = float(self.target_world[0])
+            cy = float(self.target_world[1])
+        msg.yaw = math.atan2(float(cy) - float(y), float(cx) - float(x))
         self.setpoint_pub.publish(msg)
         self.waypoint_index += 1
 

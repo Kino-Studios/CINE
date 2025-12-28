@@ -311,7 +311,17 @@ class CinematographicPlannerNode(Node):
         tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
 
         def cost_function(x: float, y: float, z: float) -> Optional[float]:
-            return self.cost_calculator.estimate_cost_at_position(x, y, z, tx, ty, tz)
+            return self.cost_calculator.estimate_full_cost_at_position(
+                x,
+                y,
+                z,
+                tx,
+                ty,
+                tz,
+                reference_drone_x=float(self.drone_position[0]),
+                reference_drone_y=float(self.drone_position[1]),
+                reference_drone_z=float(self.drone_position[2]),
+            )
 
         self.phase_theta += 2.0 * math.pi * float(self.params.angular_velocity_rps) * dt
 
@@ -407,8 +417,16 @@ class CinematographicPlannerNode(Node):
             radius = self.params.orbit_radius_m
         
         def cost_function(x: float, y: float, z: float) -> Optional[float]:
-            return self.cost_calculator.estimate_cost_at_position(
-                x, y, z, tx, ty, tz
+            return self.cost_calculator.estimate_full_cost_at_position(
+                x,
+                y,
+                z,
+                tx,
+                ty,
+                tz,
+                reference_drone_x=float(self.drone_position[0]),
+                reference_drone_y=float(self.drone_position[1]),
+                reference_drone_z=float(self.drone_position[2]),
             )
         
         z = self.params.constant_altitude_m
@@ -473,8 +491,16 @@ class CinematographicPlannerNode(Node):
                 tx, ty, tz = target_world[0], target_world[1], target_world[2]
                 
                 def cost_function(x: float, y: float, z: float) -> Optional[float]:
-                    return self.cost_calculator.estimate_cost_at_position(
-                        x, y, z, tx, ty, tz
+                    return self.cost_calculator.estimate_full_cost_at_position(
+                        x,
+                        y,
+                        z,
+                        tx,
+                        ty,
+                        tz,
+                        reference_drone_x=float(self.drone_position[0]),
+                        reference_drone_y=float(self.drone_position[1]),
+                        reference_drone_z=float(self.drone_position[2]),
                     )
                 
                 try:

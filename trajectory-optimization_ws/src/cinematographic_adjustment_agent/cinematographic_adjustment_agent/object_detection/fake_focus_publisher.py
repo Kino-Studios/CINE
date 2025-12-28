@@ -1,0 +1,83 @@
+import math
+from typing import Optional, Tuple
+
+import rclpy
+from cinematography_msgs.msg import CinematographyCosts
+from geometry_msgs.msg import PointStamped
+from nav_msgs.msg import Odometry
+from rclpy.node import Node
+from std_msgs.msg import Float32
+
+
+class FakeFocusPublisher(Node):
+    def __init__(self):
+        super().__init__("fake_focus_publisher")
+
+        self.frame_id = str(self.declare_parameter("frame_id", "map").value)
+        self.publish_rate_hz = float(self.declare_parameter("publish_rate_hz", 10.0).value)
+
+        self.odom_topic = str(self.declare_parameter("odom_topic", "/odom").value)
+        self.use_odom = bool(self.declare_parameter("use_odom", True).value)
+
+        self.target_xyz = tuple(float(v) for v in self.declare_parameter("target_xyz", [2.0, 0.0, 1.5]).value)
+        self.target_offset_xyz = tuple(float(v) for v in self.declare_parameter("target_offset_xyz", [2.0, 0.0, 0.0]).value)
+
+        self.focus_depth_m = float(self.declare_parameter("focus_depth_m", 1.5).value)
+
+        self._last_odom: Optional[Odometry] = None
+        self._odom_sub = self.create_subscription(Odometry, self.odom_topic, self._odom_cb, 10)
+
+        self._focus_depth_pub = self.create_publisher(Float32, "/cinematography/focus_depth_m", 10)
+        self._target_world_pub = self.create_publisher(PointStamped, "/cinematography/target_world", 10)
+        self._costs_pub = self.create_publisher(CinematographyCosts, "/cinematography/cinematography_costs", 10)
+
+        period = 1.0 / max(1.0, self.publish_rate_hz)
+        self._timer = self.create_timer(period, self._tick)
+
+    def _odom_cb(self, msg: Odometry):
+        self._last_odom = msg
+
+    def _target_from_odom(self) -> Optional[Tuple[float, float, float]]:
+        if not self.use_odom or self._last_odom is None:
+            return None
+        p = self._last_odom.pose.pose.position
+        ox, oy, oz = self.target_offset_xyz
+        return (float(p.x) + ox, float(p.y) + oy, float(p.z) + oz)
+
+    def _tick(self):
+        now = self.get_clock().now().to_msg()
+
+        depth_msg = Float32()
+        depth_msg.data = float(self.focus_depth_m)
+        self._focus_depth_pub.publish(depth_msg)
+
+        target = self._target_from_odom() or self.target_xyz
+        target_msg = PointStamped()
+        target_msg.header.stamp = now
+        target_msg.header.frame_id = self.frame_id
+        target_msg.point.x = float(target[0])
+        target_msg.point.y = float(target[1])
+        target_msg.point.z = float(target[2])
+        self._target_world_pub.publish(target_msg)
+
+        costs = CinematographyCosts()
+        costs.header.stamp = now
+        costs.header.frame_id = self.frame_id
+        costs.light_cost = 0.0
+        costs.framing_cost = 0.0
+        costs.smoothness_cost = 0.0
+        costs.distance_cost = 0.0
+        costs.total_cost = 0.0
+        self._costs_pub.publish(costs)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = FakeFocusPublisher()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
