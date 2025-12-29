@@ -32,11 +32,11 @@ double last_yaw_, last_yaw_dot_;
 double time_forward_;
 
 double default_speed_scale_ = 0.6;
-double focus_speed_scale_ = 0.3;
+double focus_speed_scale_ = 0.2;
 double default_max_vel_ = 1.0;
 double default_max_acc_ = 2.0;
-double focus_max_vel_ = 0.4;
-double focus_max_acc_ = 0.8;
+double focus_max_vel_ = 0.2;
+double focus_max_acc_ = 0.5;
 double target_dist_m_ = 1.5;
 double target_dist_tol_m_ = 0.3;
 double target_dist_gate_m_ = 0.5;

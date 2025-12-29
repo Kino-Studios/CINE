@@ -5,13 +5,14 @@ from geometry_msgs.msg import PointStamped, PoseStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from std_msgs.msg import Float32, Float32MultiArray
+from visualization_msgs.msg import Marker, MarkerArray
 
 
 class CinematicWaypointGenerator(Node):
     def __init__(self):
         super().__init__("cinematic_waypoint_generator")
 
-        self.frame_id = str(self.declare_parameter("frame_id", "map").value)
+        self.frame_id = str(self.declare_parameter("frame_id", "world").value)
         self.output_topic = str(self.declare_parameter("output_topic", "/move_base_simple/goal").value)
         self.odom_topic = str(self.declare_parameter("odom_topic", "/drone_0_visual_slam/odom").value)
         self.detections_topic = str(self.declare_parameter("detections_topic", "/object_detections").value)
@@ -64,6 +65,16 @@ class CinematicWaypointGenerator(Node):
         self.bezier_blend_length_m = float(self.declare_parameter("bezier_blend_length_m", 0.75).value)
         self.bezier_transition_points = int(self.declare_parameter("bezier_transition_points", 6).value)
         self.bezier_min_speed_mps = float(self.declare_parameter("bezier_min_speed_mps", 0.05).value)
+        self.focus_distance_m = float(self.declare_parameter("focus_distance_m", -1.0).value)
+        self.focus_distance_tolerance_m = float(
+            self.declare_parameter("focus_distance_tolerance_m", 0.05).value
+        )
+        self.focus_altitude_m = float(self.declare_parameter("focus_altitude_m", -1.0).value)
+        self.anchor_start_index = int(self.declare_parameter("anchor_start_index", 4).value)
+        self.anchor_end_index = int(self.declare_parameter("anchor_end_index", 7).value)
+        self.anchor_index_window = int(self.declare_parameter("anchor_index_window", 1).value)
+        self.anchor_marker_scale_m = float(self.declare_parameter("anchor_marker_scale_m", 0.28).value)
+        self.target_marker_scale_m = float(self.declare_parameter("target_marker_scale_m", 0.32).value)
         self.waypoint_xy_scale = float(self.declare_parameter("waypoint_xy_scale", 1.1).value)
         self.waypoint_y_extra_scale = float(self.declare_parameter("waypoint_y_extra_scale", 1.05).value)
         self.waypoint_z_scale = float(self.declare_parameter("waypoint_z_scale", 1.1).value)
@@ -86,7 +97,7 @@ class CinematicWaypointGenerator(Node):
             (0.91, 2.025, 0.85),
             (0.99, 2.79, 1.05),
             (1.62, 3.24, 1.25),
-            (2.34, 3.35, 1.5),
+            (2.34, 3.375, 1.35),
             (3.05, 3.0, 1.4),
             (3.285, 2.43, 1.15),
             (3.0, 1.5, 0.8),
@@ -116,6 +127,18 @@ class CinematicWaypointGenerator(Node):
         self.anchor_end_idx: int | None = None
 
         self.fake_detection_pub = self.create_publisher(Float32MultiArray, "/object_detections", 10)
+        self.anchor_start_topic = str(
+            self.declare_parameter("anchor_start_topic", "/cinematography/anchor_start").value
+        )
+        self.anchor_end_topic = str(
+            self.declare_parameter("anchor_end_topic", "/cinematography/anchor_end").value
+        )
+        self.anchor_start_pub = self.create_publisher(PointStamped, self.anchor_start_topic, 10)
+        self.anchor_end_pub = self.create_publisher(PointStamped, self.anchor_end_topic, 10)
+        self.anchor_marker_pub = self.create_publisher(MarkerArray, "/cinematography/anchor_markers", 10)
+        self.target_marker_pub = self.create_publisher(Marker, "/cinematography/target_marker", 10)
+        self.anchor_timer = self.create_timer(1.0, self._publish_anchor_points)
+        self.target_marker_timer = self.create_timer(0.5, self._publish_target_marker)
 
         self.timer = self.create_timer(self.WAYPOINT_TIMER_PERIOD_S, self.check_and_send_waypoints)
         self.focus_depth_m: float | None = None
@@ -159,6 +182,8 @@ class CinematicWaypointGenerator(Node):
             )
             self.origin_offset = self.start_pos
             self.ready_time = self.get_clock().now()
+            if not self.anchors_set:
+                self._set_anchors(target_world=self.target_world, obj_depth=self.focus_depth_m)
 
         w = msg.pose.pose.orientation.w
         x = msg.pose.pose.orientation.x
@@ -185,6 +210,8 @@ class CinematicWaypointGenerator(Node):
             p = msg.point
             self.target_world = (float(p.x), float(p.y), float(p.z))
             self.last_target_world = self.target_world
+            if not self.anchors_set:
+                self._set_anchors(target_world=self.target_world, obj_depth=self.focus_depth_m)
         except Exception:
             self.target_world = None
             self.last_target_world = None
@@ -206,16 +233,18 @@ class CinematicWaypointGenerator(Node):
         self.use_dynamic_waypoints = True
         self.pending_detection_merge = True
         if not self.anchors_set:
-            self._set_anchors_on_first_detection()
+            self._set_anchors(target_world=self.target_world, obj_depth=self.detected_object["depth"])
         self._rebuild_active_with_detection()
 
-    def _set_anchors_on_first_detection(self):
+    def _set_anchors(self, target_world=None, obj_depth=None):
         if self.current_pos is None or self.origin_offset is None:
             return
 
         static_world = [self._rel_to_world(wp) for wp in self.static_waypoints]
         start_idx = 0
-        if self.active_waypoints is not None and 0 <= int(self.current_target_index) < len(self.active_waypoints):
+        if self.anchor_start_index >= 0:
+            start_idx = int(max(0, min(self.anchor_start_index, len(static_world) - 1)))
+        elif self.active_waypoints is not None and 0 <= int(self.current_target_index) < len(self.active_waypoints):
             start_idx = int(self.current_target_index)
         else:
             start_idx = min(
@@ -225,29 +254,38 @@ class CinematicWaypointGenerator(Node):
                 + (static_world[i][2] - self.current_pos[2]) ** 2,
             )
 
-        target_world = self.target_world
-        if target_world is None:
-            target_world, _ = self._compute_object_world(self.detected_object)
-        if target_world is None:
-            return
-
-        obj_depth = float(self.focus_depth_m) if self.focus_depth_m is not None else float(self.detected_object["depth"])
-        circle_radius = max(float(self.min_orbit_radius_m), obj_depth * 0.4)
-        radius_thresh = float(circle_radius) * 1.05
-
         end_idx = len(static_world) - 1
-        for i in range(start_idx + 1, len(static_world)):
-            dx = static_world[i][0] - float(target_world[0])
-            dy = static_world[i][1] - float(target_world[1])
-            dz = static_world[i][2] - float(target_world[2])
-            dist = math.sqrt(dx * dx + dy * dy + dz * dz)
-            if math.isfinite(dist) and dist > radius_thresh:
-                end_idx = i
-                break
+        if self.anchor_end_index >= 0:
+            end_idx = int(max(start_idx + 1, min(self.anchor_end_index, len(static_world) - 1)))
+
+        if target_world is None and self.detected_object is not None:
+            target_world, _ = self._compute_object_world(self.detected_object)
+
+        desired_distance = None
+        if target_world is not None:
+            desired_distance = self._resolve_focus_distance(obj_depth)
+            window = max(0, int(self.anchor_index_window))
+            if window > 0:
+                start_idx = self._select_anchor_near_index(
+                    static_world,
+                    start_idx,
+                    window,
+                    target_world,
+                    desired_distance,
+                )
+                end_idx = self._select_anchor_near_index(
+                    static_world,
+                    end_idx,
+                    window,
+                    target_world,
+                    desired_distance,
+                    min_index=start_idx + 1,
+                )
 
         self.anchor_start_idx = int(start_idx)
         self.anchor_end_idx = int(end_idx)
         self.anchors_set = True
+        self._publish_anchor_points()
 
     def _rebuild_active_with_detection(self):
         if self.start_pos is None or self.origin_offset is None:
@@ -385,12 +423,245 @@ class CinematicWaypointGenerator(Node):
             )
         return out
 
+    def _build_bezier_transition(self, p0, p3, prev_point=None, next_point=None):
+        if self.bezier_transition_points <= 0 or self.bezier_blend_length_m <= 0.0:
+            return []
+
+        dx = p3[0] - p0[0]
+        dy = p3[1] - p0[1]
+        dz = p3[2] - p0[2]
+        if (dx * dx + dy * dy + dz * dz) ** 0.5 < 1e-3:
+            return []
+
+        start_dir = (
+            (p0[0] - prev_point[0], p0[1] - prev_point[1], p0[2] - prev_point[2])
+            if prev_point is not None
+            else (dx, dy, dz)
+        )
+        end_dir = (
+            (next_point[0] - p3[0], next_point[1] - p3[1], next_point[2] - p3[2])
+            if next_point is not None
+            else (dx, dy, dz)
+        )
+
+        v0_dir, v0_mag = self._normalize3(start_dir)
+        if v0_mag < 1e-6:
+            v0_dir, _ = self._normalize3((dx, dy, dz))
+        v3_dir, v3_mag = self._normalize3(end_dir)
+        if v3_mag < 1e-6:
+            v3_dir, _ = self._normalize3((dx, dy, dz))
+
+        alpha = float(self.bezier_blend_length_m)
+        beta = float(self.bezier_blend_length_m)
+        p1 = (p0[0] + alpha * v0_dir[0], p0[1] + alpha * v0_dir[1], p0[2] + alpha * v0_dir[2])
+        p2 = (p3[0] - beta * v3_dir[0], p3[1] - beta * v3_dir[1], p3[2] - beta * v3_dir[2])
+        transition = self._sample_cubic_bezier(p0, p1, p2, p3, self.bezier_transition_points)
+        return [self._clamp_waypoint_to_bounds(wp) for wp in transition]
+
+    def _resolve_focus_distance(self, obj_depth):
+        desired = float(self.focus_distance_m)
+        if desired > 0.0:
+            return desired
+        if self.focus_depth_m is not None and self.focus_depth_m > 0.0:
+            return float(self.focus_depth_m)
+        if obj_depth is not None and float(obj_depth) > 0.0:
+            return float(obj_depth)
+        return float(self.min_orbit_radius_m)
+
+    def _select_anchor_near_index(
+        self,
+        static_world,
+        base_idx,
+        window,
+        target_world,
+        desired_distance,
+        min_index=0,
+    ):
+        if not static_world:
+            return base_idx
+        if target_world is None or desired_distance is None:
+            return base_idx
+
+        n = len(static_world)
+        base_idx = int(max(0, min(base_idx, n - 1)))
+        window = int(max(0, window))
+        start = max(min_index, base_idx - window)
+        end = min(n - 1, base_idx + window)
+
+        tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
+        desired = float(desired_distance)
+
+        best_idx = base_idx
+        best_err = float("inf")
+        for idx in range(start, end + 1):
+            if idx < min_index:
+                continue
+            wx, wy, wz = static_world[idx]
+            dx = float(wx) - tx
+            dy = float(wy) - ty
+            dz = float(wz) - tz
+            dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+            if not math.isfinite(dist):
+                continue
+            err = abs(dist - desired)
+            if err < best_err:
+                best_err = err
+                best_idx = idx
+
+        return best_idx
+
+    def _resolve_framing_altitude(self, base_pos):
+        if self.focus_altitude_m > 0.0 and math.isfinite(self.focus_altitude_m):
+            return float(self.focus_altitude_m)
+        if base_pos is None:
+            return float(self.orbit_altitude_m)
+        return float(base_pos[2])
+
+    def _enforce_focus_distance(self, candidate, target_world, desired_distance, altitude_m, tolerance_m):
+        if target_world is None:
+            return candidate
+
+        tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
+        x, y, _ = candidate
+        z = float(altitude_m)
+        dx = x - tx
+        dy = y - ty
+        dz = z - tz
+        dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if not math.isfinite(dist):
+            return candidate
+
+        desired = float(desired_distance)
+        min_dist = math.sqrt(self.min_orbit_radius_m * self.min_orbit_radius_m + dz * dz)
+        if desired < min_dist:
+            desired = min_dist
+
+        if abs(dist - desired) <= tolerance_m:
+            return (x, y, z)
+
+        xy_dist = math.hypot(dx, dy)
+        if xy_dist < 1e-6:
+            ref = self.current_pos or self.start_pos
+            if ref is not None:
+                dx = float(ref[0]) - tx
+                dy = float(ref[1]) - ty
+                xy_dist = math.hypot(dx, dy)
+        if xy_dist < 1e-6:
+            dx = math.cos(self.current_yaw)
+            dy = math.sin(self.current_yaw)
+            xy_dist = math.hypot(dx, dy)
+
+        desired_xy = math.sqrt(max(desired * desired - dz * dz, 0.0))
+        if desired_xy < self.min_orbit_radius_m:
+            desired_xy = float(self.min_orbit_radius_m)
+        scale = desired_xy / max(xy_dist, 1e-6)
+        return (tx + dx * scale, ty + dy * scale, z)
+
+    def _publish_anchor_points(self):
+        if not self.anchors_set or self.anchor_start_idx is None or self.anchor_end_idx is None:
+            return
+        static_world = [self._rel_to_world(wp) for wp in self.static_waypoints]
+        if not static_world:
+            return
+        start_idx = int(max(0, min(self.anchor_start_idx, len(static_world) - 1)))
+        end_idx = int(max(start_idx, min(self.anchor_end_idx, len(static_world) - 1)))
+        start_wp = static_world[start_idx]
+        end_wp = static_world[end_idx]
+        now = self.get_clock().now().to_msg()
+        start_msg = PointStamped()
+        start_msg.header.stamp = now
+        start_msg.header.frame_id = self.frame_id
+        start_msg.point.x = float(start_wp[0])
+        start_msg.point.y = float(start_wp[1])
+        start_msg.point.z = float(start_wp[2])
+        self.anchor_start_pub.publish(start_msg)
+        end_msg = PointStamped()
+        end_msg.header.stamp = now
+        end_msg.header.frame_id = self.frame_id
+        end_msg.point.x = float(end_wp[0])
+        end_msg.point.y = float(end_wp[1])
+        end_msg.point.z = float(end_wp[2])
+        self.anchor_end_pub.publish(end_msg)
+        self._publish_anchor_markers(start_wp, end_wp, now)
+
+    def _publish_anchor_markers(self, start_wp, end_wp, now_msg):
+        scale = max(0.01, float(self.anchor_marker_scale_m))
+        markers = MarkerArray()
+
+        start_marker = Marker()
+        start_marker.header.stamp = now_msg
+        start_marker.header.frame_id = self.frame_id
+        start_marker.ns = "cinematography_anchors"
+        start_marker.id = 0
+        start_marker.type = Marker.SPHERE
+        start_marker.action = Marker.ADD
+        start_marker.pose.orientation.w = 1.0
+        start_marker.pose.position.x = float(start_wp[0])
+        start_marker.pose.position.y = float(start_wp[1])
+        start_marker.pose.position.z = float(start_wp[2])
+        start_marker.scale.x = scale
+        start_marker.scale.y = scale
+        start_marker.scale.z = scale
+        start_marker.color.r = 1.0
+        start_marker.color.g = 0.2
+        start_marker.color.b = 0.2
+        start_marker.color.a = 0.9
+        markers.markers.append(start_marker)
+
+        end_marker = Marker()
+        end_marker.header.stamp = now_msg
+        end_marker.header.frame_id = self.frame_id
+        end_marker.ns = "cinematography_anchors"
+        end_marker.id = 1
+        end_marker.type = Marker.SPHERE
+        end_marker.action = Marker.ADD
+        end_marker.pose.orientation.w = 1.0
+        end_marker.pose.position.x = float(end_wp[0])
+        end_marker.pose.position.y = float(end_wp[1])
+        end_marker.pose.position.z = float(end_wp[2])
+        end_marker.scale.x = scale
+        end_marker.scale.y = scale
+        end_marker.scale.z = scale
+        end_marker.color.r = 0.2
+        end_marker.color.g = 0.2
+        end_marker.color.b = 1.0
+        end_marker.color.a = 0.9
+        markers.markers.append(end_marker)
+
+        self.anchor_marker_pub.publish(markers)
+
+    def _publish_target_marker(self):
+        target = self.target_world or self.last_target_world
+        if target is None:
+            return
+        now = self.get_clock().now().to_msg()
+        scale = max(0.01, float(self.target_marker_scale_m))
+        marker = Marker()
+        marker.header.stamp = now
+        marker.header.frame_id = self.frame_id
+        marker.ns = "cinematography_target"
+        marker.id = 0
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.pose.position.x = float(target[0])
+        marker.pose.position.y = float(target[1])
+        marker.pose.position.z = float(target[2])
+        marker.scale.x = scale
+        marker.scale.y = scale
+        marker.scale.z = scale
+        marker.color.r = 0.8
+        marker.color.g = 0.1
+        marker.color.b = 0.9
+        marker.color.a = 0.9
+        self.target_marker_pub.publish(marker)
+
     def generate_cinematographic_waypoints(self):
         if self.detected_object is None or self.start_pos is None:
             return
 
         if self.anchor_start_idx is None or self.anchor_end_idx is None:
-            self._set_anchors_on_first_detection()
+            self._set_anchors(target_world=self.target_world, obj_depth=self.detected_object["depth"])
         if self.anchor_start_idx is None or self.anchor_end_idx is None:
             return
 
@@ -459,7 +730,10 @@ class CinematicWaypointGenerator(Node):
 
         reference_world = base_pos
 
-        base_z = max(self.min_altitude_m, min(self.max_altitude_m, base_pos[2]))
+        base_z = self._resolve_framing_altitude(base_pos)
+        base_z = max(self.min_altitude_m, min(self.max_altitude_m, base_z))
+        focus_distance = self._resolve_focus_distance(obj_depth)
+        focus_tolerance = max(0.01, float(self.focus_distance_tolerance_m))
 
         for i in range(num_waypoints):
             nominal_angle = start_angle + (arc_span * i / (num_waypoints - 1))
@@ -484,7 +758,15 @@ class CinematicWaypointGenerator(Node):
             world_dx = cos_yaw * wp_x_m - sin_yaw * wp_y_m
             world_dy = sin_yaw * wp_x_m + cos_yaw * wp_y_m
             wp_z_m = base_z
-            best_candidate = self._clamp_waypoint_to_bounds((base_pos[0] + world_dx, base_pos[1] + world_dy, wp_z_m))
+            best_candidate = (base_pos[0] + world_dx, base_pos[1] + world_dy, wp_z_m)
+            best_candidate = self._enforce_focus_distance(
+                best_candidate,
+                target_world,
+                focus_distance,
+                base_z,
+                focus_tolerance,
+            )
+            best_candidate = self._clamp_waypoint_to_bounds(best_candidate)
 
             best_cost = float("inf")
             nominal_cost = self._estimate_waypoint_cost(best_candidate, target_world, reference_world)
@@ -500,7 +782,15 @@ class CinematicWaypointGenerator(Node):
                     world_dy = sin_yaw * wp_x_m + cos_yaw * wp_y_m
 
                     wp_z_m = base_z
-                    candidate = self._clamp_waypoint_to_bounds((base_pos[0] + world_dx, base_pos[1] + world_dy, wp_z_m))
+                    candidate = (base_pos[0] + world_dx, base_pos[1] + world_dy, wp_z_m)
+                    candidate = self._enforce_focus_distance(
+                        candidate,
+                        target_world,
+                        focus_distance,
+                        base_z,
+                        focus_tolerance,
+                    )
+                    candidate = self._clamp_waypoint_to_bounds(candidate)
 
                     cost = self._estimate_waypoint_cost(candidate, target_world, reference_world)
                     if cost is None or not math.isfinite(cost):
@@ -516,7 +806,34 @@ class CinematicWaypointGenerator(Node):
         start_idx = int(max(0, min(self.anchor_start_idx, len(static_world) - 1)))
         end_idx = int(max(start_idx + 1, min(self.anchor_end_idx, len(static_world) - 1)))
 
-        combined_world = static_world[: start_idx + 1] + cinematographic_waypoints + static_world[end_idx:]
+        transition_in = []
+        transition_out = []
+        if cinematographic_waypoints:
+            prev_static = static_world[start_idx - 1] if start_idx - 1 >= 0 else None
+            next_dynamic = cinematographic_waypoints[1] if len(cinematographic_waypoints) > 1 else None
+            transition_in = self._build_bezier_transition(
+                static_world[start_idx],
+                cinematographic_waypoints[0],
+                prev_point=prev_static,
+                next_point=next_dynamic,
+            )
+
+            prev_dynamic = cinematographic_waypoints[-2] if len(cinematographic_waypoints) > 1 else None
+            next_static = static_world[end_idx + 1] if end_idx + 1 < len(static_world) else None
+            transition_out = self._build_bezier_transition(
+                cinematographic_waypoints[-1],
+                static_world[end_idx],
+                prev_point=prev_dynamic,
+                next_point=next_static,
+            )
+
+        combined_world = (
+            static_world[: start_idx + 1]
+            + transition_in
+            + cinematographic_waypoints
+            + transition_out
+            + static_world[end_idx:]
+        )
 
         transition = []
         if (
@@ -781,7 +1098,10 @@ class CinematicWaypointGenerator(Node):
             key=lambda i: (wps_world[i][0] - center_world[0]) ** 2 + (wps_world[i][1] - center_world[1]) ** 2,
         )
         anchor_wp = wps_world[idx_anchor]
-        orbit_radius = max(self.min_orbit_radius_m, obj_depth * 0.4)
+        focus_distance = self._resolve_focus_distance(obj_depth)
+        dz = float(anchor_wp[2]) - float(center_world[2])
+        radius_xy = math.sqrt(max(focus_distance * focus_distance - dz * dz, 0.0))
+        orbit_radius = max(self.min_orbit_radius_m, radius_xy)
         orbit = self._build_orbit_segment(center_world, orbit_radius, anchor_wp[2], reference_world=anchor_wp)
 
         overlap_thresh = 0.35

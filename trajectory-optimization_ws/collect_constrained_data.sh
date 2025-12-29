@@ -51,6 +51,9 @@ fi
 # Defaults (can be overridden by env vars or by collect_constrained_data.env)
 USE_FAKE_FOCUS="${USE_FAKE_FOCUS:-1}"
 USE_FAKE_LIGHT="${USE_FAKE_LIGHT:-1}"
+TARGET_OFFSET_XYZ="${TARGET_OFFSET_XYZ:-[2.34,4.9,1.35]}"
+FOCUS_DEPTH_M="${FOCUS_DEPTH_M:-1.5}"
+FRAME_ID="${FRAME_ID:-world}"
 
 SIM_PID=""
 TAIL_PID=""
@@ -94,7 +97,10 @@ sleep 2
 if [ "${USE_FAKE_FOCUS}" = "1" ]; then
   ros2 run cinematographic_adjustment_agent fake_focus_publisher --ros-args \
     -p odom_topic:=${ODOM_TOPIC} \
-    -p frame_id:=map &
+    -p frame_id:=${FRAME_ID} \
+    -p target_offset_xyz:="${TARGET_OFFSET_XYZ}" \
+    -p target_xyz:="${TARGET_OFFSET_XYZ}" \
+    -p focus_depth_m:=${FOCUS_DEPTH_M} &
   FAKE_FOCUS_PID=$!
   sleep 2
 else
@@ -104,7 +110,7 @@ else
 
   ros2 run cinematographic_adjustment_agent cost_function_calculator --ros-args \
     -p odom_topic:=${ODOM_TOPIC} \
-    -p frame_id:=map &
+    -p frame_id:=${FRAME_ID} &
   COSTS_PID=$!
   sleep 2
 fi
@@ -125,7 +131,7 @@ sleep 2
 
 ros2 run cinematographic_adjustment_agent cinematic_waypoint_generator --ros-args \
   -p odom_topic:=${ODOM_TOPIC} \
-  -p frame_id:=map &
+  -p frame_id:=${FRAME_ID} &
 WAYPOINT_PID=$!
 
 trap 'echo ""; echo "stopping data collection."; for pid in "${LOGGER_PID:-}" "${WAYPOINT_PID:-}" "${FILTER_PID:-}" "${FAKE_FOCUS_PID:-}" "${FAKE_LIGHT_PID:-}" "${COSTS_PID:-}" "${DETECTOR_PID:-}" "${TAIL_PID:-}" "${SIM_PID:-}"; do if [ -n "${pid}" ]; then kill "${pid}" 2>/dev/null || true; fi; done; exit 0' INT TERM
