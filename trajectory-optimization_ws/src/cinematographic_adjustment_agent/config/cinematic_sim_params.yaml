@@ -1,0 +1,45 @@
+cinematic_waypoint_generator:
+  ros__parameters:
+    frame_id: map
+    output_topic: /move_base_simple/goal
+    odom_topic: /drone_0_visual_slam/odom
+    detections_topic: /object_detections
+    light_vector_topic: /cinematography/light_vector
+
+    # Enforce a stable, user-defined orbit radius for simulation.
+    min_orbit_radius_m: 0.5
+    cinematic_radius_floor_m: 0.5
+
+    # Keep sampling simple so the radius is honored.
+    enable_cost_optimization: false
+    candidate_angle_window_rad: 0.0
+    candidate_angle_samples: 1
+    candidate_radius_samples: 1
+    candidate_radius_scale_range: [1.0, 1.0]
+
+    # Waypoint scaling off for clarity.
+    waypoint_xy_scale: 1.0
+    waypoint_y_extra_scale: 1.0
+    waypoint_z_scale: 1.0
+
+    # Altitude/bounds tuned for the sim world.
+    min_altitude_m: 0.2
+    max_altitude_m: 3.0
+    virtual_ceiling_m: 3.0
+    world_bounds_min: [-20.0, -20.0, 0.0]
+    world_bounds_max: [20.0, 20.0, 3.0]
+
+    # Fake detection so the dynamic arc is always generated.
+    simulate_fake_object: true
+    fake_object_world_offset: [0.3, 0.6, 0.0]
+    fake_object_side_offset_m: 0.6
+    fake_object_radius_m: 0.5
+    fake_object_outward_offset_m: 1.0
+
+    # Keep the Bezier blend modest to reduce overshoot on the first segment.
+    bezier_blend_length_m: 0.5
+    bezier_transition_points: 4
+
+    # Other QoL toggles.
+    use_dynamic_waypoints_on_detection: true
+    enable_z_clamp: false

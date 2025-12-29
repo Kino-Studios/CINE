@@ -7,7 +7,7 @@ from rclpy.node import Node
 from traj_utils.msg import Bspline
 
 class BsplineRecorder(Node):
-    def __init__(self, output_file='reference_trajectory.json', mode: str = 'baseline'):
+    def __init__(self, output_file='reference_trajectory.json', mode: str = 'cinematic'):
         super().__init__('bspline_recorder')
         self.output_file = output_file
         self.trajectory_received = False

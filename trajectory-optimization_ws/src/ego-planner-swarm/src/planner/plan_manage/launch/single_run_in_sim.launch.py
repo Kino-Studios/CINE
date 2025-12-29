@@ -44,7 +44,17 @@ def generate_launch_description():
     use_dynamic_cmd = DeclareLaunchArgument('use_dynamic', default_value=use_dynamic, description='Use Drone Simulation Considering Dynamics or Not')
     
     use_cinematic_bspline = LaunchConfiguration('use_cinematic_bspline', default=True)
+    use_cinematic_intent = LaunchConfiguration('use_cinematic_intent', default='true')
     use_cinematic_bspline_cmd = DeclareLaunchArgument('use_cinematic_bspline', default_value='true', description='Use cinematographic B-spline filter')
+    use_cinematic_intent_cmd = DeclareLaunchArgument('use_cinematic_intent', default_value=use_cinematic_intent, description='Enable cinematographic intent node')
+    use_fake_light = LaunchConfiguration('use_fake_light', default='true')
+    fake_light_use_target_world = LaunchConfiguration('fake_light_use_target_world', default='true')
+    use_fake_light_cmd = DeclareLaunchArgument('use_fake_light', default_value=use_fake_light, description='Enable fake light vector publisher')
+    fake_light_use_target_world_cmd = DeclareLaunchArgument(
+        'fake_light_use_target_world',
+        default_value=fake_light_use_target_world,
+        description='Use /cinematography/target_world as the fake light source'
+    )
 
     use_distinctive_trajs = LaunchConfiguration('use_distinctive_trajs', default='false')
     use_distinctive_trajs_cmd = DeclareLaunchArgument(
@@ -52,6 +62,38 @@ def generate_launch_description():
         default_value=use_distinctive_trajs,
         description='Enable multi-trajectory search'
     )
+
+    default_max_vel = LaunchConfiguration('default_max_vel', default=1.0)
+    default_max_acc = LaunchConfiguration('default_max_acc', default=2.0)
+    focus_max_vel = LaunchConfiguration('focus_max_vel', default=0.4)
+    focus_max_acc = LaunchConfiguration('focus_max_acc', default=0.8)
+    default_speed_scale = LaunchConfiguration('default_speed_scale', default=0.6)
+    focus_speed_scale = LaunchConfiguration('focus_speed_scale', default=0.3)
+    target_distance_m = LaunchConfiguration('target_distance_m', default=1.5)
+    target_distance_tol_m = LaunchConfiguration('target_distance_tol_m', default=0.15)
+    target_distance_gate_m = LaunchConfiguration('target_distance_gate_m', default=0.5)
+    yawdot_max = LaunchConfiguration('yawdot_max', default=3.5)
+    light_avoid_gain = LaunchConfiguration('light_avoid_gain', default=2.0)
+    use_target_yaw = LaunchConfiguration('use_target_yaw', default='true')
+    use_light_avoid_yaw = LaunchConfiguration('use_light_avoid_yaw', default='true')
+    debug_light_yaw = LaunchConfiguration('debug_light_yaw', default='true')
+    debug_light_period_s = LaunchConfiguration('debug_light_period_s', default=0.5)
+
+    default_max_vel_cmd = DeclareLaunchArgument('default_max_vel', default_value=default_max_vel, description='Baseline max velocity')
+    default_max_acc_cmd = DeclareLaunchArgument('default_max_acc', default_value=default_max_acc, description='Baseline max acceleration')
+    focus_max_vel_cmd = DeclareLaunchArgument('focus_max_vel', default_value=focus_max_vel, description='Framing max velocity')
+    focus_max_acc_cmd = DeclareLaunchArgument('focus_max_acc', default_value=focus_max_acc, description='Framing max acceleration')
+    default_speed_scale_cmd = DeclareLaunchArgument('default_speed_scale', default_value=default_speed_scale, description='Baseline speed scale')
+    focus_speed_scale_cmd = DeclareLaunchArgument('focus_speed_scale', default_value=focus_speed_scale, description='Framing speed scale')
+    target_distance_m_cmd = DeclareLaunchArgument('target_distance_m', default_value=target_distance_m, description='Target framing distance')
+    target_distance_tol_m_cmd = DeclareLaunchArgument('target_distance_tol_m', default_value=target_distance_tol_m, description='Target framing distance tolerance')
+    target_distance_gate_m_cmd = DeclareLaunchArgument('target_distance_gate_m', default_value=target_distance_gate_m, description='Framing distance gate')
+    yawdot_max_cmd = DeclareLaunchArgument('yawdot_max', default_value=yawdot_max, description='Max yaw rate in rad/s')
+    light_avoid_gain_cmd = DeclareLaunchArgument('light_avoid_gain', default_value=light_avoid_gain, description='Light avoidance yaw blend')
+    use_target_yaw_cmd = DeclareLaunchArgument('use_target_yaw', default_value=use_target_yaw, description='Use target-facing yaw during framing')
+    use_light_avoid_yaw_cmd = DeclareLaunchArgument('use_light_avoid_yaw', default_value=use_light_avoid_yaw, description='Enable light avoidance yaw during framing')
+    debug_light_yaw_cmd = DeclareLaunchArgument('debug_light_yaw', default_value=debug_light_yaw, description='Log light/yaw debug info')
+    debug_light_period_s_cmd = DeclareLaunchArgument('debug_light_period_s', default_value=debug_light_period_s, description='Light yaw debug period (s)')
 
     # map
     map_generator_node = Node(
@@ -126,8 +168,8 @@ def generate_launch_description():
             'cy': str(243.44969177246094),
             'fx': str(387.229248046875),
             'fy': str(387.229248046875),
-            'max_vel': str(2.5),
-            'max_acc': str(7.0),
+            'max_vel': default_max_vel,
+            'max_acc': default_max_acc,
             'planning_horizon': str(7.5),
             'use_distinctive_trajs': use_distinctive_trajs,
             'flight_type': str(1),
@@ -167,7 +209,22 @@ def generate_launch_description():
         ],
         parameters=[
             {'traj_server/time_forward': 1.0},
-            {'traj_server/use_cinematic_bspline': use_cinematic_bspline}
+            {'traj_server/use_cinematic_bspline': use_cinematic_bspline},
+            {'traj_server/default_speed_scale': default_speed_scale},
+            {'traj_server/focus_speed_scale': focus_speed_scale},
+            {'traj_server/default_max_vel': default_max_vel},
+            {'traj_server/default_max_acc': default_max_acc},
+            {'traj_server/focus_max_vel': focus_max_vel},
+            {'traj_server/focus_max_acc': focus_max_acc},
+            {'traj_server/target_distance_m': target_distance_m},
+            {'traj_server/target_distance_tol_m': target_distance_tol_m},
+            {'traj_server/target_distance_gate_m': target_distance_gate_m},
+            {'traj_server/yawdot_max': yawdot_max},
+            {'traj_server/light_avoid_gain': light_avoid_gain},
+            {'traj_server/use_target_yaw': use_target_yaw},
+            {'traj_server/use_light_avoid_yaw': use_light_avoid_yaw},
+            {'traj_server/debug_light_yaw': debug_light_yaw},
+            {'traj_server/debug_light_period_s': debug_light_period_s},
         ]
     )
 
@@ -176,7 +233,7 @@ def generate_launch_description():
         executable="cinematographic_adjustment_node",
         name="cinematic_intent_node",
         output="screen",
-        condition=IfCondition(use_cinematic_bspline),
+        condition=IfCondition(use_cinematic_intent),
         parameters=[
             {'waypoints_topic': '/move_base_simple/goal'},
             {'odom_topic': PythonExpression(["'/drone_' + str(", drone_id, ") + '_", odom_topic, "'"])},
@@ -223,6 +280,23 @@ def generate_launch_description():
             {'height': 480},
         ],
     )
+
+    fake_light_node = Node(
+        package="cinematographic_adjustment_agent",
+        executable="fake_light_publisher",
+        name="fake_light_publisher",
+        output="screen",
+        condition=IfCondition(use_fake_light),
+        parameters=[
+            {'frame_id': 'world'},
+            {'use_odom': True},
+            {'odom_topic': PythonExpression(["'/drone_' + str(", drone_id, ") + '_", odom_topic, "'"])},
+            {'use_target_world_as_source': fake_light_use_target_world},
+            {'light_source_relative_to_start': True},
+            {'light_source_offset_xyz': [0.31, -1.625, 0.85]},
+            {'publish_costs': True},
+        ],
+    )
     
     # Include simulator 
     simulator_include = IncludeLaunchDescription(PythonLaunchDescriptionSource(
@@ -254,7 +328,25 @@ def generate_launch_description():
     ld.add_action(use_dynamic_cmd)
     ld.add_action(use_mockamap_cmd)
     ld.add_action(use_cinematic_bspline_cmd)
+    ld.add_action(use_cinematic_intent_cmd)
+    ld.add_action(use_fake_light_cmd)
+    ld.add_action(fake_light_use_target_world_cmd)
     ld.add_action(use_distinctive_trajs_cmd)
+    ld.add_action(default_max_vel_cmd)
+    ld.add_action(default_max_acc_cmd)
+    ld.add_action(focus_max_vel_cmd)
+    ld.add_action(focus_max_acc_cmd)
+    ld.add_action(default_speed_scale_cmd)
+    ld.add_action(focus_speed_scale_cmd)
+    ld.add_action(target_distance_m_cmd)
+    ld.add_action(target_distance_tol_m_cmd)
+    ld.add_action(target_distance_gate_m_cmd)
+    ld.add_action(yawdot_max_cmd)
+    ld.add_action(light_avoid_gain_cmd)
+    ld.add_action(use_target_yaw_cmd)
+    ld.add_action(use_light_avoid_yaw_cmd)
+    ld.add_action(debug_light_yaw_cmd)
+    ld.add_action(debug_light_period_s_cmd)
 
     # 添加 Map Generator 节点
     ld.add_action(map_generator_node)
@@ -262,6 +354,7 @@ def generate_launch_description():
     ld.add_action(advanced_param_include)
     ld.add_action(traj_server_node)
     ld.add_action(simulated_object_detector_node)
+    ld.add_action(fake_light_node)
     ld.add_action(cinematic_intent_node)
     ld.add_action(cinematic_bspline_filter_node)
     ld.add_action(simulator_include)

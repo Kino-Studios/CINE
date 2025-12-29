@@ -3,12 +3,14 @@ import math
 import numpy as np
 import rclpy
 from cinematography_msgs.msg import CinematographyCosts
-from geometry_msgs.msg import PolygonStamped, Vector3Stamped
+from geometry_msgs.msg import PointStamped, PolygonStamped, Vector3Stamped
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from traj_utils.msg import Bspline
 
 from ..config.planner_params import CinematographyParams
+from ..config.constants import UserRequestedParams
 from ..config.constraints import CinematicConstraints
 from .bspline_utils import msg_to_arrays, arrays_to_msg
 
@@ -27,12 +29,18 @@ class CinematicBsplineFilter(Node):
         self.declare_parameter("cinematic_offset_m", self.params.cinematic_offset_m)
         self.declare_parameter("cinematic_smooth_alpha", self.params.cinematic_smooth_alpha)
         self.declare_parameter("min_altitude_m", self.params.min_altitude_m)
+        self.declare_parameter("focus_radius_m", -1.0)
+        self.declare_parameter("focus_radius_tolerance_m", 0.05)
+        self.declare_parameter("focus_altitude_m", float("nan"))
 
         self.params.bspline_in_topic = str(self.get_parameter("bspline_in_topic").value)
         self.params.bspline_out_topic = str(self.get_parameter("bspline_out_topic").value)
         self.params.cinematic_offset_m = float(self.get_parameter("cinematic_offset_m").value)
         self.params.cinematic_smooth_alpha = float(self.get_parameter("cinematic_smooth_alpha").value)
         self.params.min_altitude_m = float(self.get_parameter("min_altitude_m").value)
+        self.focus_radius_m = float(self.get_parameter("focus_radius_m").value)
+        self.focus_radius_tolerance_m = float(self.get_parameter("focus_radius_tolerance_m").value)
+        self.focus_altitude_m = float(self.get_parameter("focus_altitude_m").value)
 
         self.sub = self.create_subscription(
             Bspline,
@@ -68,6 +76,13 @@ class CinematicBsplineFilter(Node):
             self.bbox_callback,
             10,
         )
+        self.target_world = None
+        self.target_sub = self.create_subscription(
+            PointStamped,
+            "/cinematography/target_world",
+            self.target_world_callback,
+            10,
+        )
 
         self.pub = self.create_publisher(
             Bspline,
@@ -91,6 +106,9 @@ class CinematicBsplineFilter(Node):
 
     def bbox_callback(self, msg: PolygonStamped):
         self.has_focus = len(msg.polygon.points) > 0
+
+    def target_world_callback(self, msg: PointStamped):
+        self.target_world = np.array([msg.point.x, msg.point.y, msg.point.z], dtype=float)
     
     def detections_callback(self, msg: Float32MultiArray):
         if len(msg.data) < 1:
@@ -118,10 +136,8 @@ class CinematicBsplineFilter(Node):
         light_cost = self.latest_costs.get("light_cost", 0.0)
         total_cost = self.latest_costs.get("total_cost", 0.0)
 
+        # Light should only affect yaw; disable any position offsets driven by light.
         offset = np.zeros(3, dtype=float)
-        if self.light_vector is not None:
-            light_scale = 1.0 + 0.1 * light_cost + 0.05 * total_cost
-            offset += -self.light_vector * self.params.cinematic_offset_m * light_scale
 
         depth_scale = np.tanh(depth_cost)
         pos_pts[:, 2] += -0.05 * depth_scale
@@ -151,17 +167,85 @@ class CinematicBsplineFilter(Node):
             pos_pts = smoothed
 
         dt = self._estimate_dt(knots)
-        max_vel = self.constraints.FOCUS_MAX_VELOCITY_MPS if self.has_focus else self.constraints.DEFAULT_MAX_VELOCITY_MPS
-        max_acc = self.constraints.FOCUS_MAX_ACCEL_MPS2 if self.has_focus else self.constraints.DEFAULT_MAX_ACCEL_MPS2
-        knots = self._time_scale_knots_for_limits(pos_pts, knots, dt, max_vel, max_acc)
+        focus_mask = self._compute_focus_mask(pos_pts)
+        focus_ratio = float(np.mean(focus_mask)) if focus_mask is not None and focus_mask.size > 0 else 0.0
+        use_focus_limits = focus_ratio >= 0.15
+        max_vel = self.constraints.FOCUS_MAX_VELOCITY_MPS if use_focus_limits else self.constraints.DEFAULT_MAX_VELOCITY_MPS
+        max_acc = self.constraints.FOCUS_MAX_ACCEL_MPS2 if use_focus_limits else self.constraints.DEFAULT_MAX_ACCEL_MPS2
+        knots = self._time_scale_knots_for_limits(pos_pts, knots, dt, max_vel, max_acc, focus_mask=focus_mask)
         dt = self._estimate_dt(knots)
-        pos_pts = self._enforce_velocity_acc_limits(pos_pts, dt, max_vel, max_acc)
+        pos_pts = self._enforce_velocity_acc_limits(pos_pts, dt, max_vel, max_acc, focus_mask=focus_mask)
 
         pos_pts = self.apply_mlp_adjustment(pos_pts)
+        pos_pts = self._enforce_focus_radius(pos_pts, focus_mask=focus_mask)
+        pos_pts = self._enforce_focus_altitude(pos_pts, focus_mask=focus_mask)
         return arrays_to_msg(msg, pos_pts, knots=knots)
 
     def apply_mlp_adjustment(self, pos_pts: np.ndarray) -> np.ndarray:
         return pos_pts
+
+    def _compute_focus_mask(self, pos_pts: np.ndarray) -> np.ndarray | None:
+        if self.target_world is None or pos_pts is None:
+            return None
+
+        tol = max(0.01, float(self.focus_radius_tolerance_m))
+        dists = np.linalg.norm(pos_pts - self.target_world, axis=1)
+        desired = float(self.focus_radius_m)
+        if desired <= 0.0:
+            if dists.size == 0:
+                return None
+            k = max(3, int(math.ceil(0.2 * dists.size)))
+            desired = float(np.median(np.partition(dists, k - 1)[:k]))
+
+        return np.abs(dists - desired) <= tol
+
+    def _enforce_focus_radius(self, pos_pts: np.ndarray, focus_mask: np.ndarray | None = None) -> np.ndarray:
+        if self.target_world is None or pos_pts is None:
+            return pos_pts
+
+        tol = max(0.01, float(self.focus_radius_tolerance_m))
+        deltas = pos_pts - self.target_world
+        dists = np.linalg.norm(deltas, axis=1)
+        desired = float(self.focus_radius_m)
+        if desired <= 0.0:
+            desired = float(UserRequestedParams.DESIRED_FOCUS_DISTANCE_M)
+        if desired <= 0.0:
+            if dists.size == 0:
+                return pos_pts
+            k = max(3, int(math.ceil(0.2 * dists.size)))
+            desired = float(np.median(np.partition(dists, k - 1)[:k]))
+
+        out = pos_pts.copy()
+        if focus_mask is None:
+            focus_mask = np.abs(dists - desired) <= tol
+        for i, (vec, dist, use_focus) in enumerate(zip(deltas, dists, focus_mask)):
+            if not use_focus:
+                continue
+            if not np.isfinite(dist) or dist < 1e-6:
+                continue
+            if abs(dist - desired) <= tol * 2.0:
+                scale = desired / dist
+                out[i] = self.target_world + vec * scale
+                out[i, 2] = max(out[i, 2], self.params.min_altitude_m)
+        return out
+
+    def _enforce_focus_altitude(self, pos_pts: np.ndarray, focus_mask: np.ndarray | None = None) -> np.ndarray:
+        if pos_pts is None:
+            return pos_pts
+        if focus_mask is None or focus_mask.size == 0:
+            return pos_pts
+
+        if math.isfinite(self.focus_altitude_m):
+            target_z = float(self.focus_altitude_m)
+        else:
+            z_vals = pos_pts[focus_mask, 2]
+            if z_vals.size == 0:
+                return pos_pts
+            target_z = float(np.median(z_vals))
+
+        out = pos_pts.copy()
+        out[focus_mask, 2] = max(target_z, self.params.min_altitude_m)
+        return out
 
     def _estimate_dt(self, knots: np.ndarray) -> float:
         if knots is None or len(knots) < 2:
@@ -182,6 +266,7 @@ class CinematicBsplineFilter(Node):
         dt_est: float,
         max_vel: float,
         max_acc: float,
+        focus_mask: np.ndarray | None = None,
     ) -> np.ndarray:
         if knots is None or len(knots) < 2 or pos_pts is None or len(pos_pts) < 2:
             return knots
@@ -193,6 +278,14 @@ class CinematicBsplineFilter(Node):
         peak_speed = float(np.max(speeds)) if speeds.size > 0 else 0.0
 
         scale_v = (peak_speed / max_vel) if (max_vel > 0 and peak_speed > max_vel) else 1.0
+        if focus_mask is not None and focus_mask.size == pos_pts.shape[0]:
+            segment_focus = focus_mask[1:] & focus_mask[:-1]
+            if segment_focus.any():
+                focus_speeds = speeds[segment_focus]
+                focus_peak = float(np.max(focus_speeds)) if focus_speeds.size > 0 else 0.0
+                focus_max = self.constraints.FOCUS_MAX_VELOCITY_MPS
+                if focus_max > 0 and focus_peak > focus_max:
+                    scale_v = max(scale_v, focus_peak / focus_max)
 
         if len(pos_pts) >= 3:
             acc = (pos_pts[2:] - 2 * pos_pts[1:-1] + pos_pts[:-2]) / (dt_est * dt_est)
@@ -214,28 +307,38 @@ class CinematicBsplineFilter(Node):
         scaled[1:] = knots[0] + np.cumsum(diffs)
         return scaled
 
-    def _enforce_velocity_acc_limits(self, pos_pts: np.ndarray, dt: float, max_vel: float, max_acc: float) -> np.ndarray:
+    def _enforce_velocity_acc_limits(
+        self,
+        pos_pts: np.ndarray,
+        dt: float,
+        max_vel: float,
+        max_acc: float,
+        focus_mask: np.ndarray | None = None,
+    ) -> np.ndarray:
         pts = pos_pts.copy()
 
         if pts.shape[0] < 2:
             return pts
+        if focus_mask is None or focus_mask.size != pts.shape[0]:
+            focus_mask = np.zeros(pts.shape[0], dtype=bool)
 
         for i in range(1, pts.shape[0]):
             delta = pts[i] - pts[i - 1]
             vel = delta / dt
             speed = np.linalg.norm(vel)
+            seg_max_vel = self.constraints.FOCUS_MAX_VELOCITY_MPS if (focus_mask[i] and focus_mask[i - 1]) else max_vel
 
-            if speed > max_vel and speed > 0:
-                scale = max_vel / speed
+            if speed > seg_max_vel and speed > 0:
+                scale = seg_max_vel / speed
                 pts[i] = pts[i - 1] + delta * scale
 
         if pts.shape[0] >= 3:
             for i in range(1, pts.shape[0] - 1):
                 acc = (pts[i + 1] - 2 * pts[i] + pts[i - 1]) / (math.pow(dt, 2))
                 acc_mag = np.linalg.norm(acc)
-
-                if acc_mag > max_acc and acc_mag > 0:
-                    blend = max_acc / acc_mag
+                seg_max_acc = self.constraints.FOCUS_MAX_ACCEL_MPS2 if (focus_mask[i] and focus_mask[i - 1] and focus_mask[i + 1]) else max_acc
+                if acc_mag > seg_max_acc and acc_mag > 0:
+                    blend = seg_max_acc / acc_mag
                     midpoint = 0.5 * (pts[i - 1] + pts[i + 1])
                     pts[i] = blend * pts[i] + (1.0 - blend) * midpoint
 
@@ -246,8 +349,9 @@ def main(args=None):
     node = CinematicBsplineFilter()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
