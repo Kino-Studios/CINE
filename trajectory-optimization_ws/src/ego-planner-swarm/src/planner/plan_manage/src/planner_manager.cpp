@@ -52,7 +52,7 @@ namespace ego_planner
     static int count = 0;
     printf("\033[47;30m\n[drone %d replan %d]==============================================\033[0m\n", pp_.drone_id, count++);
 
-    if ((start_pt - local_target_pt).norm() < 0.2)
+  if ((start_pt - local_target_pt).norm() < 0.1)
     {
       cout << "Close to goal" << endl;
       continous_failures_count_++;

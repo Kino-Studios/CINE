@@ -1,13 +1,11 @@
 import math
 
 import rclpy
-from geometry_msgs.msg import PointStamped, PoseStamped, Vector3Stamped
+from geometry_msgs.msg import Point, PointStamped, PoseStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
-from std_msgs.msg import Float32, Float32MultiArray
+from std_msgs.msg import Bool, Float32, Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
-
-from ..cost_functions.cost_calculator import CostCalculator
 
 from ..cost_functions.cost_calculator import CostCalculator
 
@@ -41,7 +39,8 @@ class CinematicWaypointGenerator(Node):
         self.ready_time = None
         self.STARTUP_DELAY = 0.5
         self.WAYPOINT_TIMER_PERIOD_S = 0.05 # planner must be rapidly fed to prevent stalling
-        self.WAYPOINT_LOOKAHEAD = 3
+        self.WAYPOINT_LOOKAHEAD = int(self.declare_parameter("waypoint_lookahead", 3).value)
+        self.dynamic_waypoint_lookahead = int(self.declare_parameter("dynamic_waypoint_lookahead", 1).value)
 
         self.velocity_settled = False
         self.VELOCITY_THRESHOLD = 0.2
@@ -50,9 +49,10 @@ class CinematicWaypointGenerator(Node):
 
         self.object_detection_time = None
         self.DETECTION_DEBOUNCE = 2.0
-        self.DISTANCE_THRESHOLD_M = 0.8
+        self.DISTANCE_THRESHOLD_M = float(self.declare_parameter("distance_threshold_m", 0.35).value)
         self.PROGRESS_EPS_M = 0.05
-        self.PROGRESS_TIMEOUT_S = 2.0
+        self.PROGRESS_TIMEOUT_S = float(self.declare_parameter("progress_timeout_s", 4.0).value)
+        self.min_goal_distance_m = float(self.declare_parameter("min_goal_distance_m", 0.35).value)
 
         self.image_width = int(self.declare_parameter("image_width", 640).value)
         self.image_height = int(self.declare_parameter("image_height", 480).value)
@@ -65,7 +65,7 @@ class CinematicWaypointGenerator(Node):
         self.max_altitude_m = float(self.declare_parameter("max_altitude_m", 3.0).value)
         self.min_orbit_radius_m = float(self.declare_parameter("min_orbit_radius_m", 0.6).value)
         self.max_waypoint_jump_m = float(self.declare_parameter("max_waypoint_jump_m", 3.0).value)
-        self.bezier_blend_length_m = float(self.declare_parameter("bezier_blend_length_m", 0.75).value)
+        self.bezier_blend_length_m = float(self.declare_parameter("bezier_blend_length_m", 0.1).value)
         self.bezier_transition_points = int(self.declare_parameter("bezier_transition_points", 6).value)
         self.bezier_min_speed_mps = float(self.declare_parameter("bezier_min_speed_mps", 0.05).value)
         self.focus_distance_m = float(self.declare_parameter("focus_distance_m", 1.0).value)
@@ -133,6 +133,10 @@ class CinematicWaypointGenerator(Node):
         self.anchor_start_world = None
         self.anchor_end_world = None
         self.anchor_source = "none"
+        self.anchor_focus_distance = None
+        self.framing_active = False
+        self.framing_start_idx = None
+        self.framing_end_idx = None
 
         self.fake_detection_pub = self.create_publisher(Float32MultiArray, "/object_detections", 10)
         self.anchor_start_topic = str(
@@ -145,6 +149,33 @@ class CinematicWaypointGenerator(Node):
         self.anchor_end_pub = self.create_publisher(PointStamped, self.anchor_end_topic, 10)
         self.anchor_marker_pub = self.create_publisher(MarkerArray, "/cinematography/anchor_markers", 10)
         self.target_marker_pub = self.create_publisher(Marker, "/cinematography/target_marker", 10)
+        self.framing_active_pub = self.create_publisher(Bool, "/cinematography/framing_active", 10)
+        self.debug_arc = bool(self.declare_parameter("debug_arc", True).value)
+        self.debug_arc_log_period_s = float(self.declare_parameter("debug_arc_log_period_s", 0.5).value)
+        self.debug_arc_marker_scale = float(self.declare_parameter("debug_arc_marker_scale", 0.04).value)
+        self.arc_marker_pub = self.create_publisher(Marker, "/cinematography/arc_marker", 10)
+        self.last_arc_log_time = None
+        self.enable_debug_viz = bool(self.declare_parameter("enable_debug_viz", True).value)
+        self.viz_static_path = bool(self.declare_parameter("viz_static_path", True).value)
+        self.viz_dynamic_path = bool(self.declare_parameter("viz_dynamic_path", True).value)
+        self.viz_active_path = bool(self.declare_parameter("viz_active_path", True).value)
+        self.viz_transitions = bool(self.declare_parameter("viz_transitions", True).value)
+        self.viz_arc_only = bool(self.declare_parameter("viz_arc_only", True).value)
+        self.viz_target_sphere = bool(self.declare_parameter("viz_target_sphere", True).value)
+        self.viz_waypoint_numbers = bool(self.declare_parameter("viz_waypoint_numbers", False).value)
+        self.debug_markers_pub = self.create_publisher(MarkerArray, "/cinematography/debug_markers", 10)
+        self.debug_viz_timer = self.create_timer(0.2, self._publish_debug_visualization)
+        self.viz_data = {
+            "static_world": None,
+            "arc_start": None,
+            "arc_end": None,
+            "cinematographic_waypoints": None,
+            "transition_in": None,
+            "transition_out": None,
+            "combined_world": None,
+            "start_idx": None,
+            "end_idx": None,
+        }
         self.anchor_timer = self.create_timer(1.0, self._publish_anchor_points)
         self.target_marker_timer = self.create_timer(0.5, self._publish_target_marker)
 
@@ -153,7 +184,6 @@ class CinematicWaypointGenerator(Node):
         self.target_world: tuple[float, float, float] | None = None
         self.last_target_world: tuple[float, float, float] | None = None
         self.light_vector = None
-        self.cost_calculator = CostCalculator(self)
         self.cost_calculator = CostCalculator(self)
 
     def _build_room_orbit(self):
@@ -256,19 +286,25 @@ class CinematicWaypointGenerator(Node):
         if self.current_pos is None or self.origin_offset is None:
             return
 
-        static_world = [self._rel_to_world(wp) for wp in self.static_waypoints]
+        static_world = [self._rel_to_world(wp) for wp in self._scaled_static_waypoints()]
         if target_world is None and self.detected_object is not None:
             target_world, _ = self._compute_object_world(self.detected_object)
 
         if target_world is not None:
-            desired_distance = self._resolve_focus_distance(obj_depth)
+            desired_distance = self._resolve_focus_distance(obj_depth, use_anchor=False)
             start_idx, end_idx = self._select_anchor_pair(
                 static_world,
                 target_world,
                 desired_distance,
             )
-            self.anchor_start_world = None
-            self.anchor_end_world = None
+            dist_start = math.dist(static_world[start_idx], target_world)
+            dist_end = math.dist(static_world[end_idx], target_world)
+            if math.isfinite(dist_start) and math.isfinite(dist_end):
+                self.anchor_focus_distance = max(dist_start, dist_end)
+            else:
+                self.anchor_focus_distance = None
+            self.anchor_start_world = static_world[start_idx]
+            self.anchor_end_world = static_world[end_idx]
             self.anchor_source = "static_pair"
         else:
             start_idx = 0
@@ -282,9 +318,10 @@ class CinematicWaypointGenerator(Node):
                     + (static_world[i][2] - self.current_pos[2]) ** 2,
                 )
             end_idx = len(static_world) - 1
-            self.anchor_start_world = None
-            self.anchor_end_world = None
+            self.anchor_start_world = static_world[start_idx]
+            self.anchor_end_world = static_world[end_idx]
             self.anchor_source = "fallback"
+            self.anchor_focus_distance = None
 
         self.anchor_start_idx = int(start_idx)
         self.anchor_end_idx = int(end_idx)
@@ -328,6 +365,7 @@ class CinematicWaypointGenerator(Node):
             reference_drone_x=float(reference_world[0]),
             reference_drone_y=float(reference_world[1]),
             reference_drone_z=float(reference_world[2]),
+            desired_focus_distance_m=self.anchor_focus_distance,
         )
 
     def _parse_detection(self, msg: Float32MultiArray):
@@ -440,7 +478,10 @@ class CinematicWaypointGenerator(Node):
         transition = self._sample_cubic_bezier(p0, p1, p2, p3, self.bezier_transition_points)
         return [self._clamp_waypoint_to_bounds(wp) for wp in transition]
 
-    def _resolve_focus_distance(self, obj_depth):
+    def _resolve_focus_distance(self, obj_depth, use_anchor=True):
+        if use_anchor and self.anchor_focus_distance is not None and self.anchor_focus_distance > 0.0:
+            return float(self.anchor_focus_distance)
+
         desired = float(self.focus_distance_m)
         if desired > 0.0:
             return desired
@@ -591,10 +632,17 @@ class CinematicWaypointGenerator(Node):
             length += math.sqrt(dx * dx + dy * dy + dz * dz)
         return float(length)
 
-    def _resolve_framing_altitude_from_anchors(self, start_wp, end_wp):
+    def _resolve_framing_altitude_from_anchors(self, start_wp, end_wp, target_world=None, desired_distance=None):
         if self.focus_altitude_m > 0.0 and math.isfinite(self.focus_altitude_m):
             return float(self.focus_altitude_m)
         z = 0.5 * (float(start_wp[2]) + float(end_wp[2]))
+        if target_world is not None and desired_distance is not None:
+            tz = float(target_world[2])
+            desired = float(desired_distance)
+            if desired > 0.0:
+                dz = z - tz
+                if abs(dz) > desired:
+                    z = tz + math.copysign(desired, dz)
         return float(z)
 
     def _build_anchor_arc(
@@ -605,6 +653,8 @@ class CinematicWaypointGenerator(Node):
         desired_distance,
         altitude_m,
         path_length_m,
+        prev_wp=None,
+        next_wp=None,
     ):
         if target_world is None:
             return []
@@ -623,9 +673,22 @@ class CinematicWaypointGenerator(Node):
 
         spacing = max(0.15, float(self.arc_waypoint_spacing_m))
 
+        def _project_to_distance_xy(x, y):
+            dx = x - tx
+            dy = y - ty
+            xy_dist = math.hypot(dx, dy)
+            if xy_dist < 1e-6:
+                dx = math.cos(start_angle)
+                dy = math.sin(start_angle)
+                xy_dist = 1.0
+            scale = radius_xy / xy_dist if radius_xy > 1e-6 else 0.0
+            x = tx + dx * scale
+            y = ty + dy * scale
+            return (x, y, z)
+
         def _build_arc_for_delta(delta):
             total_len = abs(delta) * radius_xy
-            num_total = max(6, int(math.ceil(total_len / spacing)) + 1)
+            num_total = max(7, int(math.ceil(total_len / spacing)) + 1)
             if num_total <= 2:
                 return []
             arc_pts = []
@@ -634,15 +697,13 @@ class CinematicWaypointGenerator(Node):
                 ang = start_angle + t * delta
                 x = tx + radius_xy * math.cos(ang)
                 y = ty + radius_xy * math.sin(ang)
-                candidate = (x, y, z)
-                candidate = self._enforce_focus_distance(
-                    candidate,
-                    target_world,
-                    desired,
-                    z,
-                    float(self.focus_distance_tolerance_m),
-                )
-                arc_pts.append(self._clamp_waypoint_to_bounds(candidate))
+                candidate = _project_to_distance_xy(x, y)
+                candidate = self._clamp_waypoint_to_bounds(candidate)
+                dist = math.dist(candidate, (tx, ty, tz))
+                if math.isfinite(dist) and abs(dist - desired) > 1e-3:
+                    candidate = _project_to_distance_xy(candidate[0], candidate[1])
+                    candidate = self._clamp_waypoint_to_bounds(candidate)
+                arc_pts.append(candidate)
             return arc_pts
 
         arc_short = _build_arc_for_delta(delta_short)
@@ -652,6 +713,102 @@ class CinematicWaypointGenerator(Node):
             return arc_long
         if not arc_long:
             return arc_short
+
+        def _normalize2(vx, vy):
+            n = math.hypot(vx, vy)
+            if n <= 1e-6:
+                return None
+            return (vx / n, vy / n)
+
+        start_tangent = None
+        end_tangent = None
+        if prev_wp is not None:
+            start_tangent = _normalize2(float(start_wp[0]) - float(prev_wp[0]), float(start_wp[1]) - float(prev_wp[1]))
+        else:
+            start_tangent = _normalize2(float(end_wp[0]) - float(start_wp[0]), float(end_wp[1]) - float(start_wp[1]))
+        if next_wp is not None:
+            end_tangent = _normalize2(float(next_wp[0]) - float(end_wp[0]), float(next_wp[1]) - float(end_wp[1]))
+        else:
+            end_tangent = _normalize2(float(end_wp[0]) - float(start_wp[0]), float(end_wp[1]) - float(start_wp[1]))
+
+        def _score_delta(delta):
+            if start_tangent is None and end_tangent is None:
+                return None
+            sign = 1.0 if delta >= 0.0 else -1.0
+            tx_s = -math.sin(start_angle)
+            ty_s = math.cos(start_angle)
+            tx_e = -math.sin(end_angle)
+            ty_e = math.cos(end_angle)
+            if sign < 0.0:
+                tx_s, ty_s = -tx_s, -ty_s
+                tx_e, ty_e = -tx_e, -ty_e
+            score = 0.0
+            count = 0
+            if start_tangent is not None:
+                score += tx_s * start_tangent[0] + ty_s * start_tangent[1]
+                count += 1
+            if end_tangent is not None:
+                score += tx_e * end_tangent[0] + ty_e * end_tangent[1]
+                count += 1
+            if count == 0:
+                return None
+            return score / count
+
+        def _progress_score(arc_pts):
+            if not arc_pts or len(arc_pts) < 2:
+                return None
+            dx = float(end_wp[0]) - float(start_wp[0])
+            dy = float(end_wp[1]) - float(start_wp[1])
+            n = math.hypot(dx, dy)
+            if n <= 1e-6:
+                return None
+            ux = dx / n
+            uy = dy / n
+            forward = 0.0
+            backward = 0.0
+            for i in range(1, len(arc_pts)):
+                step_dx = float(arc_pts[i][0]) - float(arc_pts[i - 1][0])
+                step_dy = float(arc_pts[i][1]) - float(arc_pts[i - 1][1])
+                proj = step_dx * ux + step_dy * uy
+                if proj >= 0.0:
+                    forward += proj
+                else:
+                    backward += -proj
+            mid = arc_pts[len(arc_pts) // 2]
+            mid_proj = (float(mid[0]) - float(start_wp[0])) * ux + (float(mid[1]) - float(start_wp[1])) * uy
+            return forward - 2.0 * backward + 0.25 * mid_proj
+
+        progress_short = _progress_score(arc_short)
+        progress_long = _progress_score(arc_long)
+        if progress_short is not None and progress_long is not None and abs(progress_short - progress_long) > 1e-3:
+            return arc_short if progress_short >= progress_long else arc_long
+
+        score_short = _score_delta(delta_short)
+        score_long = _score_delta(delta_long)
+        if score_short is not None and score_long is not None and abs(score_short - score_long) > 1e-3:
+            return arc_short if score_short >= score_long else arc_long
+
+        ax, ay = float(start_wp[0]), float(start_wp[1])
+        bx, by = float(end_wp[0]), float(end_wp[1])
+        cx, cy = float(target_world[0]), float(target_world[1])
+        chord_dx = bx - ax
+        chord_dy = by - ay
+        center_sign = chord_dx * (cy - ay) - chord_dy * (cx - ax)
+
+        def _arc_mid_sign(arc_pts):
+            if not arc_pts:
+                return 0.0
+            mid = arc_pts[len(arc_pts) // 2]
+            mx, my = float(mid[0]), float(mid[1])
+            return chord_dx * (my - ay) - chord_dy * (mx - ax)
+
+        if abs(center_sign) > 1e-6:
+            short_sign = _arc_mid_sign(arc_short)
+            long_sign = _arc_mid_sign(arc_long)
+            if short_sign * center_sign >= 0.0 and long_sign * center_sign < 0.0:
+                return arc_short
+            if long_sign * center_sign >= 0.0 and short_sign * center_sign < 0.0:
+                return arc_long
 
         if self.enable_cost_optimization:
             short_cost = self._score_arc_points(arc_short, target_world)
@@ -686,6 +843,7 @@ class CinematicWaypointGenerator(Node):
                 reference_drone_x=float(ref[0]),
                 reference_drone_y=float(ref[1]),
                 reference_drone_z=float(ref[2]),
+                desired_focus_distance_m=self.anchor_focus_distance,
             )
             if cost is None or not math.isfinite(cost):
                 return float("inf")
@@ -743,7 +901,7 @@ class CinematicWaypointGenerator(Node):
     def _publish_anchor_points(self):
         if not self.anchors_set or self.anchor_start_idx is None or self.anchor_end_idx is None:
             return
-        static_world = [self._rel_to_world(wp) for wp in self.static_waypoints]
+        static_world = [self._rel_to_world(wp) for wp in self._scaled_static_waypoints()]
         if not static_world:
             return
         start_idx = int(max(0, min(self.anchor_start_idx, len(static_world) - 1)))
@@ -839,6 +997,437 @@ class CinematicWaypointGenerator(Node):
         marker.color.a = 0.9
         self.target_marker_pub.publish(marker)
 
+    def _debug_arc(self, arc_pts, target_world, desired_distance):
+        if not self.debug_arc:
+            return
+
+        marker = Marker()
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.frame_id = self.frame_id
+        marker.ns = "cinematography_arc"
+        marker.id = 0
+        if not arc_pts:
+            marker.action = Marker.DELETE
+            self.arc_marker_pub.publish(marker)
+            return
+
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = max(0.01, float(self.debug_arc_marker_scale))
+        marker.color.r = 0.1
+        marker.color.g = 0.8
+        marker.color.b = 1.0
+        marker.color.a = 0.9
+        for wp in arc_pts:
+            p = Point()
+            p.x = float(wp[0])
+            p.y = float(wp[1])
+            p.z = float(wp[2])
+            marker.points.append(p)
+        self.arc_marker_pub.publish(marker)
+
+        if target_world is None:
+            return
+        now = self.get_clock().now()
+        if self.last_arc_log_time is not None:
+            elapsed = (now - self.last_arc_log_time).nanoseconds / 1e9
+            if elapsed < self.debug_arc_log_period_s:
+                return
+        self.last_arc_log_time = now
+
+        desired = float(desired_distance)
+        errors = []
+        for wp in arc_pts:
+            dist = math.dist(wp, target_world)
+            if math.isfinite(dist):
+                errors.append(abs(dist - desired))
+        if not errors:
+            return
+        max_err = max(errors)
+        mean_err = sum(errors) / len(errors)
+        self.get_logger().info(
+            f"Arc debug: points={len(arc_pts)} desired={desired:.3f} "
+            f"max_err={max_err:.3f} mean_err={mean_err:.3f}"
+        )
+
+    def _publish_debug_visualization(self):
+        if not self.enable_debug_viz:
+            return
+
+        markers = MarkerArray()
+        clear_marker = Marker()
+        clear_marker.header.frame_id = self.frame_id
+        clear_marker.action = Marker.DELETEALL
+        markers.markers.append(clear_marker)
+
+        now = self.get_clock().now().to_msg()
+
+        if self.viz_static_path and self.viz_data["static_world"] is not None:
+            markers.markers.extend(
+                self._create_path_markers(
+                    self.viz_data["static_world"],
+                    "static_path",
+                    (0.5, 0.5, 0.5, 0.4),
+                    0.02,
+                    now,
+                    0,
+                )
+            )
+
+        if self.viz_arc_only and self.viz_data["cinematographic_waypoints"] is not None:
+            arc_pts = self.viz_data["cinematographic_waypoints"]
+            markers.markers.extend(
+                self._create_path_markers(
+                    arc_pts,
+                    "arc_path",
+                    (0.0, 1.0, 0.0, 1.0),
+                    0.06,
+                    now,
+                    100,
+                )
+            )
+            for i, wp in enumerate(arc_pts):
+                markers.markers.append(
+                    self._create_waypoint_sphere(
+                        wp,
+                        200 + i,
+                        "arc_waypoints",
+                        (0.0, 1.0, 0.0, 0.8),
+                        0.08,
+                        now,
+                    )
+                )
+
+        if self.viz_transitions:
+            transition_in = self.viz_data["transition_in"] or []
+            if transition_in:
+                markers.markers.extend(
+                    self._create_path_markers(
+                        transition_in,
+                        "transition_in",
+                        (1.0, 1.0, 0.0, 0.8),
+                        0.04,
+                        now,
+                        300,
+                    )
+                )
+            transition_out = self.viz_data["transition_out"] or []
+            if transition_out:
+                markers.markers.extend(
+                    self._create_path_markers(
+                        transition_out,
+                        "transition_out",
+                        (1.0, 0.5, 0.0, 0.8),
+                        0.04,
+                        now,
+                        400,
+                    )
+                )
+
+        if self.viz_data["arc_start"] is not None:
+            markers.markers.append(
+                self._create_waypoint_sphere(
+                    self.viz_data["arc_start"],
+                    500,
+                    "arc_anchors",
+                    (1.0, 0.0, 0.0, 1.0),
+                    0.12,
+                    now,
+                )
+            )
+            markers.markers.append(
+                self._create_text_marker(
+                    self.viz_data["arc_start"],
+                    "ARC START",
+                    501,
+                    "arc_labels",
+                    (1.0, 1.0, 1.0, 1.0),
+                    0.15,
+                    now,
+                )
+            )
+
+        if self.viz_data["arc_end"] is not None:
+            markers.markers.append(
+                self._create_waypoint_sphere(
+                    self.viz_data["arc_end"],
+                    510,
+                    "arc_anchors",
+                    (0.0, 0.0, 1.0, 1.0),
+                    0.12,
+                    now,
+                )
+            )
+            markers.markers.append(
+                self._create_text_marker(
+                    self.viz_data["arc_end"],
+                    "ARC END",
+                    511,
+                    "arc_labels",
+                    (1.0, 1.0, 1.0, 1.0),
+                    0.15,
+                    now,
+                )
+            )
+
+        if self.viz_dynamic_path and self.viz_data["combined_world"] is not None:
+            markers.markers.extend(
+                self._create_path_markers(
+                    self.viz_data["combined_world"],
+                    "combined_path",
+                    (0.0, 0.8, 1.0, 0.6),
+                    0.03,
+                    now,
+                    600,
+                )
+            )
+
+        if self.viz_active_path and self.active_waypoints is not None:
+            origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
+            active_world = [
+                (wp[0] + origin[0], wp[1] + origin[1], wp[2] + origin[2])
+                for wp in self.active_waypoints
+            ]
+            markers.markers.extend(
+                self._create_path_markers(
+                    active_world,
+                    "active_path",
+                    (1.0, 0.0, 1.0, 1.0),
+                    0.05,
+                    now,
+                    700,
+                )
+            )
+            if 0 <= self.current_target_index < len(active_world):
+                current_wp = active_world[self.current_target_index]
+                markers.markers.append(
+                    self._create_waypoint_sphere(
+                        current_wp,
+                        800,
+                        "active_targets",
+                        (1.0, 0.0, 1.0, 1.0),
+                        0.15,
+                        now,
+                    )
+                )
+                markers.markers.append(
+                    self._create_text_marker(
+                        current_wp,
+                        f"CURRENT #{self.current_target_index}",
+                        801,
+                        "active_labels",
+                        (1.0, 1.0, 0.0, 1.0),
+                        0.2,
+                        now,
+                    )
+                )
+
+        if self.viz_target_sphere and self.last_target_world is not None:
+            focus_dist = self._resolve_focus_distance(None)
+            if focus_dist > 0.0:
+                markers.markers.append(
+                    self._create_sphere_wireframe(
+                        self.last_target_world,
+                        focus_dist,
+                        900,
+                        "target_sphere",
+                        (1.0, 0.0, 1.0, 0.3),
+                        now,
+                    )
+                )
+
+        if (
+            self.viz_arc_only
+            and self.viz_data["cinematographic_waypoints"] is not None
+            and self.last_target_world is not None
+        ):
+            markers.markers.extend(
+                self._create_distance_error_markers(
+                    self.viz_data["cinematographic_waypoints"],
+                    self.last_target_world,
+                    self._resolve_focus_distance(None),
+                    now,
+                )
+            )
+
+        if self.viz_waypoint_numbers and self.active_waypoints is not None:
+            origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
+            active_world = [
+                (wp[0] + origin[0], wp[1] + origin[1], wp[2] + origin[2])
+                for wp in self.active_waypoints
+            ]
+            for i, wp in enumerate(active_world):
+                markers.markers.append(
+                    self._create_text_marker(
+                        wp,
+                        str(i),
+                        1000 + i,
+                        "wp_numbers",
+                        (1.0, 1.0, 1.0, 0.8),
+                        0.1,
+                        now,
+                        offset_z=0.05,
+                    )
+                )
+
+        self.debug_markers_pub.publish(markers)
+
+    def _create_path_markers(self, waypoints, namespace, color, line_width, stamp, marker_id):
+        markers = []
+
+        line_marker = Marker()
+        line_marker.header.stamp = stamp
+        line_marker.header.frame_id = self.frame_id
+        line_marker.ns = namespace
+        line_marker.id = int(marker_id)
+        line_marker.type = Marker.LINE_STRIP
+        line_marker.action = Marker.ADD
+        line_marker.scale.x = float(line_width)
+        line_marker.color.r = float(color[0])
+        line_marker.color.g = float(color[1])
+        line_marker.color.b = float(color[2])
+        line_marker.color.a = float(color[3])
+        line_marker.pose.orientation.w = 1.0
+
+        for wp in waypoints:
+            p = Point()
+            p.x = float(wp[0])
+            p.y = float(wp[1])
+            p.z = float(wp[2])
+            line_marker.points.append(p)
+
+        markers.append(line_marker)
+        return markers
+
+    def _create_waypoint_sphere(self, position, marker_id, namespace, color, scale, stamp):
+        marker = Marker()
+        marker.header.stamp = stamp
+        marker.header.frame_id = self.frame_id
+        marker.ns = namespace
+        marker.id = int(marker_id)
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        marker.pose.position.x = float(position[0])
+        marker.pose.position.y = float(position[1])
+        marker.pose.position.z = float(position[2])
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = float(scale)
+        marker.scale.y = float(scale)
+        marker.scale.z = float(scale)
+        marker.color.r = float(color[0])
+        marker.color.g = float(color[1])
+        marker.color.b = float(color[2])
+        marker.color.a = float(color[3])
+        return marker
+
+    def _create_text_marker(self, position, text, marker_id, namespace, color, scale, stamp, offset_z=0.2):
+        marker = Marker()
+        marker.header.stamp = stamp
+        marker.header.frame_id = self.frame_id
+        marker.ns = namespace
+        marker.id = int(marker_id)
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.action = Marker.ADD
+        marker.pose.position.x = float(position[0])
+        marker.pose.position.y = float(position[1])
+        marker.pose.position.z = float(position[2]) + float(offset_z)
+        marker.pose.orientation.w = 1.0
+        marker.scale.z = float(scale)
+        marker.color.r = float(color[0])
+        marker.color.g = float(color[1])
+        marker.color.b = float(color[2])
+        marker.color.a = float(color[3])
+        marker.text = text
+        return marker
+
+    def _create_sphere_wireframe(self, center, radius, marker_id, namespace, color, stamp, num_segments=32):
+        marker = Marker()
+        marker.header.stamp = stamp
+        marker.header.frame_id = self.frame_id
+        marker.ns = namespace
+        marker.id = int(marker_id)
+        marker.type = Marker.LINE_LIST
+        marker.action = Marker.ADD
+        marker.scale.x = 0.02
+        marker.color.r = float(color[0])
+        marker.color.g = float(color[1])
+        marker.color.b = float(color[2])
+        marker.color.a = float(color[3])
+        marker.pose.orientation.w = 1.0
+
+        cx, cy, cz = float(center[0]), float(center[1]), float(center[2])
+        r = float(radius)
+
+        for plane in ("xy", "xz", "yz"):
+            for i in range(num_segments):
+                angle1 = 2.0 * math.pi * i / num_segments
+                angle2 = 2.0 * math.pi * (i + 1) / num_segments
+                if plane == "xy":
+                    p1 = Point(x=cx + r * math.cos(angle1), y=cy + r * math.sin(angle1), z=cz)
+                    p2 = Point(x=cx + r * math.cos(angle2), y=cy + r * math.sin(angle2), z=cz)
+                elif plane == "xz":
+                    p1 = Point(x=cx + r * math.cos(angle1), y=cy, z=cz + r * math.sin(angle1))
+                    p2 = Point(x=cx + r * math.cos(angle2), y=cy, z=cz + r * math.sin(angle2))
+                else:
+                    p1 = Point(x=cx, y=cy + r * math.cos(angle1), z=cz + r * math.sin(angle1))
+                    p2 = Point(x=cx, y=cy + r * math.cos(angle2), z=cz + r * math.sin(angle2))
+                marker.points.append(p1)
+                marker.points.append(p2)
+
+        return marker
+
+    def _create_distance_error_markers(self, waypoints, target, desired_distance, stamp):
+        markers = []
+        if not waypoints or target is None:
+            return markers
+
+        tx, ty, tz = float(target[0]), float(target[1]), float(target[2])
+        desired = float(desired_distance)
+        for i, wp in enumerate(waypoints):
+            dist = math.dist(wp, target)
+            error = abs(dist - desired)
+            if error < 0.05:
+                color = (0.0, 1.0, 0.0, 0.8)
+            elif error < 0.1:
+                color = (1.0, 1.0, 0.0, 0.8)
+            else:
+                color = (1.0, 0.0, 0.0, 0.8)
+
+            line = Marker()
+            line.header.stamp = stamp
+            line.header.frame_id = self.frame_id
+            line.ns = "distance_errors"
+            line.id = 1100 + i
+            line.type = Marker.LINE_LIST
+            line.action = Marker.ADD
+            line.scale.x = 0.01
+            line.color.r = float(color[0])
+            line.color.g = float(color[1])
+            line.color.b = float(color[2])
+            line.color.a = 0.3
+            line.pose.orientation.w = 1.0
+            p1 = Point(x=float(wp[0]), y=float(wp[1]), z=float(wp[2]))
+            p2 = Point(x=tx, y=ty, z=tz)
+            line.points.append(p1)
+            line.points.append(p2)
+            markers.append(line)
+
+            if error > 0.05:
+                markers.append(
+                    self._create_text_marker(
+                        wp,
+                        f"Δ{error:.3f}m",
+                        1200 + i,
+                        "error_text",
+                        color,
+                        0.08,
+                        stamp,
+                        offset_z=-0.1,
+                    )
+                )
+
+        return markers
+
     def generate_cinematographic_waypoints(self):
         if self.detected_object is None or self.start_pos is None:
             return
@@ -878,6 +1467,25 @@ class CinematicWaypointGenerator(Node):
             target_world, _ = self._compute_object_world(self.detected_object)
 
         if target_world is None:
+            center_x = float(self.detected_object["center_x"])
+            center_y = float(self.detected_object["center_y"])
+            norm_x = self.detected_object.get("norm_x", None)
+            norm_y = self.detected_object.get("norm_y", None)
+
+            if norm_x is not None and norm_y is not None:
+                u = float(norm_x) * float(self.image_width)
+                v = float(norm_y) * float(self.image_height)
+            else:
+                u = center_x
+                v = center_y
+
+            if self.fx > 0 and self.fy > 0:
+                obj_x_m = (u - self.cx) / self.fx * obj_depth
+                obj_y_m = (v - self.cy) / self.fy * obj_depth
+            else:
+                obj_x_m = 0.0
+                obj_y_m = 0.0
+
             cos_yaw = math.cos(self.current_yaw)
             sin_yaw = math.sin(self.current_yaw)
             target_world = (
@@ -887,55 +1495,114 @@ class CinematicWaypointGenerator(Node):
             )
         self.last_target_world = target_world
 
-        static_world = [self._rel_to_world(wp) for wp in self.static_waypoints]
+        static_world = [self._rel_to_world(wp) for wp in self._scaled_static_waypoints()]
         start_idx = int(max(0, min(self.anchor_start_idx, len(static_world) - 2)))
         end_idx = int(max(start_idx + 1, min(self.anchor_end_idx, len(static_world) - 1)))
+        self.viz_data["static_world"] = static_world
+        self.viz_data["start_idx"] = start_idx
+        self.viz_data["end_idx"] = end_idx
 
         start_wp = static_world[start_idx]
         end_wp = static_world[end_idx]
 
-        base_z = self._resolve_framing_altitude_from_anchors(start_wp, end_wp)
-        base_z = max(self.min_altitude_m, min(self.max_altitude_m, base_z))
         focus_distance = self._resolve_focus_distance(obj_depth)
-        path_length = self._path_length_between(static_world, start_idx, end_idx)
-
-        cinematographic_waypoints = self._build_anchor_arc(
+        base_z = self._resolve_framing_altitude_from_anchors(
             start_wp,
             end_wp,
+            target_world=target_world,
+            desired_distance=focus_distance,
+        )
+        base_z = max(self.min_altitude_m, min(self.max_altitude_m, base_z))
+        path_length = self._path_length_between(static_world, start_idx, end_idx)
+
+        tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
+        dz = base_z - tz
+        desired = max(float(focus_distance), float(self.min_orbit_radius_m))
+        radius_xy = math.sqrt(max(desired * desired - dz * dz, 0.0))
+        radius_xy = max(self.min_orbit_radius_m, radius_xy)
+
+        def _project_to_circle(wp):
+            dx = float(wp[0]) - tx
+            dy = float(wp[1]) - ty
+            xy_dist = math.hypot(dx, dy)
+            if xy_dist < 1e-6:
+                dx = 1.0
+                dy = 0.0
+                xy_dist = 1.0
+            scale = radius_xy / xy_dist if radius_xy > 1e-6 else 0.0
+            candidate = (tx + dx * scale, ty + dy * scale, base_z)
+            candidate = self._clamp_waypoint_to_bounds(candidate)
+            dist = math.dist(candidate, (tx, ty, tz))
+            if math.isfinite(dist) and abs(dist - desired) > 1e-3:
+                dx = float(candidate[0]) - tx
+                dy = float(candidate[1]) - ty
+                xy_dist = math.hypot(dx, dy)
+                if xy_dist > 1e-6:
+                    scale = radius_xy / xy_dist if radius_xy > 1e-6 else 0.0
+                    candidate = (tx + dx * scale, ty + dy * scale, base_z)
+                    candidate = self._clamp_waypoint_to_bounds(candidate)
+            return candidate
+
+        arc_start = _project_to_circle(start_wp)
+        arc_end = _project_to_circle(end_wp)
+        self.viz_data["arc_start"] = arc_start
+        self.viz_data["arc_end"] = arc_end
+
+        prev_static = static_world[start_idx - 1] if start_idx - 1 >= 0 else None
+        next_static = static_world[end_idx + 1] if end_idx + 1 < len(static_world) else None
+
+        cinematographic_waypoints = self._build_anchor_arc(
+            arc_start,
+            arc_end,
             target_world,
             focus_distance,
             base_z,
             path_length,
+            prev_wp=prev_static,
+            next_wp=next_static,
         )
+        if cinematographic_waypoints:
+            self.anchor_start_world = arc_start
+            self.anchor_end_world = arc_end
+        self.viz_data["cinematographic_waypoints"] = cinematographic_waypoints
+        self._debug_arc(cinematographic_waypoints, target_world, desired)
 
         transition_in = []
         transition_out = []
         if cinematographic_waypoints:
-            prev_static = static_world[start_idx - 1] if start_idx - 1 >= 0 else None
-            next_dynamic = cinematographic_waypoints[1] if len(cinematographic_waypoints) > 1 else None
-            transition_in = self._build_bezier_transition(
-                static_world[start_idx],
-                cinematographic_waypoints[0],
-                prev_point=prev_static,
-                next_point=next_dynamic,
-            )
+            if prev_static is not None:
+                prev_prev = static_world[start_idx - 2] if start_idx - 2 >= 0 else None
+                next_dynamic = cinematographic_waypoints[1] if len(cinematographic_waypoints) > 1 else None
+                transition_in = self._build_bezier_transition(
+                    prev_static,
+                    cinematographic_waypoints[0],
+                    prev_point=prev_prev,
+                    next_point=next_dynamic,
+                )
 
-            prev_dynamic = cinematographic_waypoints[-2] if len(cinematographic_waypoints) > 1 else None
-            next_static = static_world[end_idx + 1] if end_idx + 1 < len(static_world) else None
-            transition_out = self._build_bezier_transition(
-                cinematographic_waypoints[-1],
-                static_world[end_idx],
-                prev_point=prev_dynamic,
-                next_point=next_static,
-            )
+            if next_static is not None:
+                next_next = static_world[end_idx + 2] if end_idx + 2 < len(static_world) else None
+                prev_dynamic = cinematographic_waypoints[-2] if len(cinematographic_waypoints) > 1 else None
+                transition_out = self._build_bezier_transition(
+                    cinematographic_waypoints[-1],
+                    next_static,
+                    prev_point=prev_dynamic,
+                    next_point=next_next,
+                )
 
-        combined_world = (
-            static_world[: start_idx + 1]
-            + transition_in
-            + cinematographic_waypoints
-            + transition_out
-            + static_world[end_idx:]
-        )
+        if not cinematographic_waypoints:
+            combined_world = static_world
+        else:
+            combined_world = (
+                static_world[:start_idx]
+                + transition_in
+                + cinematographic_waypoints
+                + transition_out
+                + static_world[end_idx + 1 :]
+            )
+        self.viz_data["transition_in"] = transition_in
+        self.viz_data["transition_out"] = transition_out
+        self.viz_data["combined_world"] = combined_world
 
         transition = []
         if (
@@ -1013,16 +1680,36 @@ class CinematicWaypointGenerator(Node):
                     self._initialize_waypoint_sequence()
                 self._step_waypoint_sequence()
 
+    def _should_scale_static_waypoints(self):
+        return (
+            (not self.use_dynamic_waypoints)
+            and not (self.pending_detection_merge and self.detected_object is not None)
+            and not self.simulate_fake_object
+        )
+
+    def _scaled_static_waypoints(self):
+        waypoints = list(self.static_waypoints)
+        if self._should_scale_static_waypoints() and (
+            self.waypoint_xy_scale != 1.0 or self.waypoint_y_extra_scale != 1.0
+        ):
+            sx = self.waypoint_xy_scale
+            sy = self.waypoint_xy_scale * self.waypoint_y_extra_scale
+            waypoints = [(wp[0] * sx, wp[1] * sy, wp[2]) for wp in waypoints]
+        return waypoints
+
     def _initialize_waypoint_sequence(self):
+        if self.use_dynamic_waypoints and self.dynamic_waypoints is None:
+            if self.detected_object is not None or self.target_world is not None or self.last_target_world is not None:
+                self.get_logger().info("Generating dynamic waypoints for active path")
+                self.generate_cinematographic_waypoints()
+            if self.dynamic_waypoints is None:
+                self.get_logger().warn("Dynamic waypoints unavailable; falling back to static path")
+                self.use_dynamic_waypoints = False
+
         if self.use_dynamic_waypoints and self.dynamic_waypoints is not None:
             waypoints_to_send = self.dynamic_waypoints
         else:
-            waypoints_to_send = list(self.static_waypoints)
-
-        if self.waypoint_xy_scale != 1.0 or self.waypoint_y_extra_scale != 1.0:
-            sx = self.waypoint_xy_scale
-            sy = self.waypoint_xy_scale * self.waypoint_y_extra_scale
-            waypoints_to_send = [(wp[0] * sx, wp[1] * sy, wp[2]) for wp in waypoints_to_send]
+            waypoints_to_send = self._scaled_static_waypoints()
 
         if self.pending_detection_merge and self.detected_object is not None:
             waypoints_to_send = self._merge_framing_with_static(waypoints_to_send, self.detected_object)
@@ -1040,6 +1727,19 @@ class CinematicWaypointGenerator(Node):
         self.last_progress_time = None
         self.last_progress_dist = None
         self.waypoints_sent = False
+        self._update_framing_indices()
+        self._publish_framing_active(self._is_framing_idx(self.current_target_index))
+        if self.current_pos is not None and self.active_waypoints:
+            skipped = 0
+            while self.current_target_index < len(self.active_waypoints):
+                target_world = self._rel_to_world(self.active_waypoints[self.current_target_index])
+                if self._distance_to(target_world) > self._current_distance_threshold():
+                    break
+                self.current_target_index += 1
+                skipped += 1
+            if skipped > 0:
+                self.last_published_index = self.current_target_index - 1
+                self.get_logger().info(f"Skipped {skipped} near waypoints at init; starting at {self.current_target_index}")
         self._prefill_waypoint_queue()
 
     def _limit_consecutive_waypoint_jumps(self, waypoints):
@@ -1237,6 +1937,63 @@ class CinematicWaypointGenerator(Node):
         dz = self.current_pos[2] - target_world[2]
         return (dx * dx + dy * dy + dz * dz) ** 0.5
 
+    def _closest_waypoint_index(self, target_world):
+        if self.active_waypoints is None:
+            return None
+        best_idx = None
+        best_dist_sq = float("inf")
+        tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
+        for i, wp_rel in enumerate(self.active_waypoints):
+            wp_world = self._rel_to_world(wp_rel)
+            dx = float(wp_world[0]) - tx
+            dy = float(wp_world[1]) - ty
+            dz = float(wp_world[2]) - tz
+            dist_sq = dx * dx + dy * dy + dz * dz
+            if dist_sq < best_dist_sq:
+                best_dist_sq = dist_sq
+                best_idx = i
+        return best_idx
+
+    def _update_framing_indices(self):
+        self.framing_start_idx = None
+        self.framing_end_idx = None
+        if self.active_waypoints is None:
+            return
+        if not self.anchors_set:
+            return
+        if self.anchor_start_world is None or self.anchor_end_world is None:
+            return
+        start_idx = self._closest_waypoint_index(self.anchor_start_world)
+        end_idx = self._closest_waypoint_index(self.anchor_end_world)
+        if start_idx is None or end_idx is None:
+            return
+        if end_idx < start_idx:
+            start_idx, end_idx = end_idx, start_idx
+        self.framing_start_idx = start_idx
+        self.framing_end_idx = end_idx
+
+    def _is_framing_idx(self, idx):
+        if self.framing_start_idx is None or self.framing_end_idx is None:
+            return False
+        return self.framing_start_idx <= idx <= self.framing_end_idx
+
+    def _current_distance_threshold(self):
+        base = float(self.DISTANCE_THRESHOLD_M)
+        min_goal = float(self.min_goal_distance_m)
+        if self._is_framing_idx(self.current_target_index):
+            spacing = float(self.arc_waypoint_spacing_m) if self.arc_waypoint_spacing_m > 0.0 else base
+            return max(min_goal, min(base, 0.9 * spacing))
+        return max(base, min_goal)
+
+    def _publish_framing_active(self, active):
+        active = bool(active)
+        if self.framing_active == active:
+            return
+        msg = Bool()
+        msg.data = active
+        self.framing_active_pub.publish(msg)
+        self.framing_active = active
+
     def _publish_waypoint(self, target_world, idx: int):
         goal = PoseStamped()
         goal.header.stamp = self.get_clock().now().to_msg()
@@ -1244,13 +2001,14 @@ class CinematicWaypointGenerator(Node):
         goal.pose.position.x = float(target_world[0])
         goal.pose.position.y = float(target_world[1])
         goal.pose.position.z = float(target_world[2])
-        # Face the object of focus when known; otherwise keep current yaw.
-        look_at = self.last_target_world or self.target_world
+        # Face the object only while framing between anchors; otherwise keep current yaw.
         yaw = self.current_yaw
-        if look_at is not None:
-            dx = float(look_at[0]) - float(target_world[0])
-            dy = float(look_at[1]) - float(target_world[1])
-            yaw = math.atan2(dy, dx)
+        if self._is_framing_idx(idx):
+            look_at = self.last_target_world or self.target_world
+            if look_at is not None:
+                dx = float(look_at[0]) - float(target_world[0])
+                dy = float(look_at[1]) - float(target_world[1])
+                yaw = math.atan2(dy, dx)
         qw = math.cos(0.5 * yaw)
         qz = math.sin(0.5 * yaw)
         goal.pose.orientation.w = qw
@@ -1265,10 +2023,14 @@ class CinematicWaypointGenerator(Node):
     def _prefill_waypoint_queue(self):
         if self.active_waypoints is None or self.current_pos is None:
             return
+        lookahead = self.WAYPOINT_LOOKAHEAD
+        if self.use_dynamic_waypoints and self.dynamic_waypoints is not None:
+            lookahead = self.dynamic_waypoint_lookahead
+        lookahead = max(1, int(lookahead))
 
         while (
             self.last_published_index < len(self.active_waypoints) - 1
-            and (self.last_published_index - self.current_target_index + 1) < self.WAYPOINT_LOOKAHEAD
+            and (self.last_published_index - self.current_target_index + 1) < lookahead
         ):
             next_idx = self.last_published_index + 1
             target_world = self._rel_to_world(self.active_waypoints[next_idx])
@@ -1277,13 +2039,16 @@ class CinematicWaypointGenerator(Node):
 
     def _step_waypoint_sequence(self):
         if self.active_waypoints is None or self.current_pos is None:
+            self._publish_framing_active(False)
             return
 
         if self.current_target_index >= len(self.active_waypoints):
             self.waypoints_sent = True
+            self._publish_framing_active(False)
             return
 
         self._prefill_waypoint_queue()
+        self._publish_framing_active(self._is_framing_idx(self.current_target_index))
 
         target_world = self._rel_to_world(self.active_waypoints[self.current_target_index])
 
@@ -1313,7 +2078,7 @@ class CinematicWaypointGenerator(Node):
                 self._prefill_waypoint_queue()
                 return
 
-        if dist <= self.DISTANCE_THRESHOLD_M:
+        if dist <= self._current_distance_threshold():
             self.current_target_index += 1
             self.last_progress_time = None
             self.last_progress_dist = None

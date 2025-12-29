@@ -3,10 +3,15 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "traj_utils/msg/bspline.hpp"
 #include "quadrotor_msgs/msg/position_command.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/empty.hpp"
+#include "std_msgs/msg/float32.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include <algorithm>
 #include <cmath>
+#include <iostream>
+#include <utility>
+#include <vector>
 #include <rclcpp/rclcpp.hpp>
 
 rclcpp::Publisher<quadrotor_msgs::msg::PositionCommand>::SharedPtr pos_cmd_pub;
@@ -22,7 +27,7 @@ double vel_gain[3] = {0, 0, 0};
 using ego_planner::UniformBspline;
 
 bool receive_traj_ = false;
-vector<UniformBspline> traj_;
+std::vector<UniformBspline> traj_;
 double traj_duration_;
 rclcpp::Time start_time_;
 int traj_id_;
@@ -31,18 +36,27 @@ int traj_id_;
 double last_yaw_, last_yaw_dot_;
 double time_forward_;
 
-double default_speed_scale_ = 0.6;
-double focus_speed_scale_ = 0.2;
-double default_max_vel_ = 1.0;
-double default_max_acc_ = 2.0;
-double focus_max_vel_ = 0.2;
-double focus_max_acc_ = 0.5;
-double target_dist_m_ = 1.5;
-double target_dist_tol_m_ = 0.3;
-double target_dist_gate_m_ = 0.5;
+double default_speed_scale_ = 0.8;
+double focus_speed_scale_ = 0.4;
+double default_max_vel_ = 1.2;
+double default_max_acc_ = 1.6;
+double focus_max_vel_ = 0.9;
+double focus_max_acc_ = 1.4;
+double target_dist_m_ = 1.0;
+double target_dist_tol_m_ = 0.05;
+double target_dist_gate_m_ = 1.0;
 double yawdot_max_ = 2.5;
+double yawdot_max_framing_ = 1.2;
+double yaw_lpf_alpha_ = 0.5;
+double yaw_lpf_alpha_framing_ = 0.8;
 bool use_target_yaw_ = true;
 bool use_cinematic_ = true;
+bool framing_active_ = false;
+double vel_damping_ = 0.15;
+double acc_damping_ = 0.05;
+
+Eigen::Vector3d last_vel_(Eigen::Vector3d::Zero());
+Eigen::Vector3d last_acc_(Eigen::Vector3d::Zero());
 
 void targetWorldCallback(const geometry_msgs::msg::PointStamped::ConstPtr msg)
 {
@@ -51,6 +65,24 @@ void targetWorldCallback(const geometry_msgs::msg::PointStamped::ConstPtr msg)
   target_world_(2) = msg->point.z;
   target_stamp_ = msg->header.stamp;
   has_target_ = true;
+}
+
+void targetDistanceCallback(const std_msgs::msg::Float32::ConstPtr msg)
+{
+  if (!msg)
+    return;
+  double dist = static_cast<double>(msg->data);
+  if (std::isfinite(dist) && dist > 0.0)
+  {
+    target_dist_m_ = dist;
+  }
+}
+
+void framingActiveCallback(const std_msgs::msg::Bool::ConstPtr msg)
+{
+  if (!msg)
+    return;
+  framing_active_ = msg->data;
 }
 
 void handleBsplineMsg(traj_utils::msg::Bspline::ConstPtr msg)
@@ -95,6 +127,8 @@ void handleBsplineMsg(traj_utils::msg::Bspline::ConstPtr msg)
   traj_duration_ = traj_[0].getTimeSum();
 
   receive_traj_ = true;
+  last_vel_.setZero();
+  last_acc_.setZero();
 }
 
 void bsplineCallback(traj_utils::msg::Bspline::ConstPtr msg)
@@ -188,7 +222,10 @@ std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, rclc
   }
 
   if (fabs(yaw - last_yaw_) <= max_yaw_change)
-    yaw = 0.5 * last_yaw_ + 0.5 * yaw; // nieve LPF
+  {
+    double alpha = std::clamp(yaw_lpf_alpha_, 0.0, 1.0);
+    yaw = alpha * last_yaw_ + (1.0 - alpha) * yaw;
+  }
   yawdot = 0.5 * last_yaw_dot_ + 0.5 * yawdot;
   last_yaw_ = yaw;
   last_yaw_dot_ = yawdot;
@@ -216,7 +253,7 @@ void cmdCallback()
   static rclcpp::Time time_last = clock.now();
   double speed_scale = default_speed_scale_;
   bool focus_active = false;
-  if (has_target_)
+  if (has_target_ && framing_active_)
   {
     double t_probe = std::min(traj_duration_, t_cur * default_speed_scale_);
     Eigen::Vector3d pos_probe = traj_[0].evaluateDeBoorT(t_probe);
@@ -260,13 +297,15 @@ void cmdCallback()
     if (use_target_yaw_ && focus_active)
     {
       double yaw_target = atan2(target_world_(1) - pos(1), target_world_(0) - pos(0));
-      double max_change = yawdot_max_ * (time_now - time_last).seconds();
+      double max_change = yawdot_max_framing_ * (time_now - time_last).seconds();
       double delta = yaw_target - last_yaw_;
       if (delta > PI) delta -= 2 * PI;
       if (delta < -PI) delta += 2 * PI;
       if (fabs(delta) > max_change)
         delta = (delta > 0 ? 1.0 : -1.0) * max_change;
       double yaw = last_yaw_ + delta;
+      double alpha = std::clamp(yaw_lpf_alpha_framing_, 0.0, 1.0);
+      yaw = alpha * last_yaw_ + (1.0 - alpha) * yaw;
       double yawdot = (time_now - time_last).seconds() > 1e-3 ? delta / (time_now - time_last).seconds() : 0.0;
       yaw_yawdot.first = yaw;
       yaw_yawdot.second = yawdot;
@@ -279,7 +318,7 @@ void cmdCallback()
     }
     /*** calculate yaw ***/
 
-    double tf = min(traj_duration_, t_query + 2.0);
+    double tf = std::min(traj_duration_, t_query + 2.0);
     pos_f = traj_[0].evaluateDeBoorT(tf);
   }
   else if (t_query >= traj_duration_)
@@ -296,12 +335,17 @@ void cmdCallback()
   }
   else
   {
-    cout << "[Traj server]: invalid time." << endl;
+    std::cout << "[Traj server]: invalid time." << std::endl;
   }
   time_last = time_now;
 
   double max_vel = focus_active ? focus_max_vel_ : default_max_vel_;
   double max_acc = focus_active ? focus_max_acc_ : default_max_acc_;
+
+  double vel_damp = std::clamp(vel_damping_, 0.0, 1.0);
+  double acc_damp = std::clamp(acc_damping_, 0.0, 1.0);
+  vel = vel * (1.0 - vel_damp) + last_vel_ * vel_damp;
+  acc = acc * (1.0 - acc_damp) + last_acc_ * acc_damp;
 
   double vel_norm = vel.norm();
   if (vel_norm > max_vel && vel_norm > 1e-6)
@@ -313,6 +357,9 @@ void cmdCallback()
   {
     acc = acc / acc_norm * max_acc;
   }
+
+  last_vel_ = vel;
+  last_acc_ = acc;
 
   cmd.header.stamp = time_now;
   cmd.header.frame_id = "world";
@@ -344,8 +391,7 @@ int main(int argc, char **argv)
   rclcpp::init(argc, argv);
   auto node = rclcpp::Node::make_shared("traj_server");
 
-  // Parameter to select which trajectory to use
-  node->declare_parameter("traj_server/use_cinematic_bspline", false);
+  node->declare_parameter("traj_server/use_cinematic_bspline", true);
   use_cinematic_ = node->get_parameter("traj_server/use_cinematic_bspline").as_bool();
   node->declare_parameter("traj_server/default_speed_scale", default_speed_scale_);
   node->declare_parameter("traj_server/focus_speed_scale", focus_speed_scale_);
@@ -357,7 +403,12 @@ int main(int argc, char **argv)
   node->declare_parameter("traj_server/target_distance_tol_m", target_dist_tol_m_);
   node->declare_parameter("traj_server/target_distance_gate_m", target_dist_gate_m_);
   node->declare_parameter("traj_server/yawdot_max", yawdot_max_);
+  node->declare_parameter("traj_server/yawdot_max_framing", yawdot_max_framing_);
+  node->declare_parameter("traj_server/yaw_lpf_alpha", yaw_lpf_alpha_);
+  node->declare_parameter("traj_server/yaw_lpf_alpha_framing", yaw_lpf_alpha_framing_);
   node->declare_parameter("traj_server/use_target_yaw", use_target_yaw_);
+  node->declare_parameter("traj_server/vel_damping", vel_damping_);
+  node->declare_parameter("traj_server/acc_damping", acc_damping_);
 
   default_speed_scale_ = node->get_parameter("traj_server/default_speed_scale").as_double();
   focus_speed_scale_ = node->get_parameter("traj_server/focus_speed_scale").as_double();
@@ -369,7 +420,12 @@ int main(int argc, char **argv)
   target_dist_tol_m_ = node->get_parameter("traj_server/target_distance_tol_m").as_double();
   target_dist_gate_m_ = node->get_parameter("traj_server/target_distance_gate_m").as_double();
   yawdot_max_ = node->get_parameter("traj_server/yawdot_max").as_double();
+  yawdot_max_framing_ = node->get_parameter("traj_server/yawdot_max_framing").as_double();
+  yaw_lpf_alpha_ = node->get_parameter("traj_server/yaw_lpf_alpha").as_double();
+  yaw_lpf_alpha_framing_ = node->get_parameter("traj_server/yaw_lpf_alpha_framing").as_double();
   use_target_yaw_ = node->get_parameter("traj_server/use_target_yaw").as_bool();
+  vel_damping_ = node->get_parameter("traj_server/vel_damping").as_double();
+  acc_damping_ = node->get_parameter("traj_server/acc_damping").as_double();
 
   // Store subscription to keep it alive - CRITICAL: must not go out of scope!
   rclcpp::Subscription<traj_utils::msg::Bspline>::SharedPtr bspline_subscription;
@@ -398,6 +454,18 @@ int main(int argc, char **argv)
       10,
       targetWorldCallback);
   (void)target_sub;
+
+  auto target_dist_sub = node->create_subscription<std_msgs::msg::Float32>(
+      "/cinematography/target_distance_m",
+      10,
+      targetDistanceCallback);
+  (void)target_dist_sub;
+
+  auto framing_sub = node->create_subscription<std_msgs::msg::Bool>(
+      "/cinematography/framing_active",
+      10,
+      framingActiveCallback);
+  (void)framing_sub;
 
   auto cmd_timer = node->create_wall_timer(
       std::chrono::milliseconds(10),
