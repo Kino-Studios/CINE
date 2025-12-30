@@ -67,8 +67,10 @@ class CinematicWaypointGenerator(Node):
         self.orbit_altitude_m = float(self.declare_parameter("orbit_altitude_m", 1.5).value)
         self.min_altitude_m = float(self.declare_parameter("min_altitude_m", 0.2).value)
         self.max_altitude_m = float(self.declare_parameter("max_altitude_m", 3.0).value)
-        self.min_orbit_radius_m = float(self.declare_parameter("min_orbit_radius_m", 0.6).value)
+        self.min_orbit_radius_m = float(self.declare_parameter("min_orbit_radius_m", 0.2).value)
+        self.waypoint_radius_m = float(self.declare_parameter("waypoint_radius_m", 0.1).value)
         self.max_waypoint_jump_m = float(self.declare_parameter("max_waypoint_jump_m", 3.0).value)
+        self.min_waypoint_separation_m = float(self.declare_parameter("min_waypoint_separation_m", 0.5).value)
         self.bezier_blend_length_m = float(self.declare_parameter("bezier_blend_length_m", 0.1).value)
         self.bezier_transition_points = int(self.declare_parameter("bezier_transition_points", 6).value)
         self.bezier_min_speed_mps = float(self.declare_parameter("bezier_min_speed_mps", 0.05).value)
@@ -981,7 +983,7 @@ class CinematicWaypointGenerator(Node):
                         200 + i,
                         "arc_waypoints",
                         (0.0, 1.0, 0.0, 0.8),
-                        0.08,
+                        self._waypoint_diameter(),
                         now,
                     )
                 )
@@ -1094,7 +1096,7 @@ class CinematicWaypointGenerator(Node):
                         800,
                         "active_targets",
                         (1.0, 0.0, 1.0, 1.0),
-                        0.15,
+                        self._waypoint_diameter(),
                         now,
                     )
                 )
@@ -1159,6 +1161,10 @@ class CinematicWaypointGenerator(Node):
                 )
 
         self.debug_markers_pub.publish(markers)
+
+    def _waypoint_diameter(self):
+        """Convert the configured waypoint radius into the diameter expected by Marker scales."""
+        return max(0.001, 2.0 * float(self.waypoint_radius_m))
 
     def _create_path_markers(self, waypoints, namespace, color, line_width, stamp, marker_id):
         markers = []
@@ -1652,7 +1658,7 @@ class CinematicWaypointGenerator(Node):
         elif self.simulate_fake_object and (not self.use_dynamic_waypoints):
             waypoints_to_send = self._insert_fake_object_orbit(waypoints_to_send)
 
-        waypoints_to_send = self._deduplicate_waypoints(waypoints_to_send, min_separation=0.3)
+        waypoints_to_send = self._deduplicate_waypoints(waypoints_to_send, min_separation=self.min_waypoint_separation_m)
         if not self.use_dynamic_waypoints:
             waypoints_to_send = self._apply_descent_tail(waypoints_to_send)
 

@@ -3816,6 +3816,30 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /cinematography/anchor_markers
       Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        active_labels: true
+        active_path: true
+        active_targets: true
+        arc_anchors: true
+        arc_labels: true
+        arc_path: true
+        arc_waypoints: true
+        combined_path: true
+        distance_errors: true
+        static_path: true
+        target_sphere: true
+        transition_in: true
+        transition_out: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /cinematography/debug_markers
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255
@@ -3862,7 +3886,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 3.7786905765533447
+      Distance: 5.357248306274414
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -3877,10 +3901,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.2547961473464966
+      Pitch: 1.219796061515808
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.527122497558594
+      Yaw: 4.697122573852539
     Saved: ~
 Window Geometry:
   Displays:
