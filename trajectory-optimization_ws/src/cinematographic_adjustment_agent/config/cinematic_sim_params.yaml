@@ -40,8 +40,12 @@ cinematic_waypoint_generator:
     bezier_blend_length_m: 0.5
     bezier_transition_points: 4
 
+    arc_waypoint_spacing_m: 1.0
+
     # Require closer proximity before switching to the next waypoint.
-    distance_threshold_m: 0.35
+    distance_threshold_m: 0.5
+    min_goal_distance_m: 0.5
+    enable_progress_skip: false
     progress_timeout_s: 4.0
 
     # Other QoL toggles.

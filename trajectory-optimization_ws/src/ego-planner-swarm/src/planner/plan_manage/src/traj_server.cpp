@@ -359,8 +359,8 @@ void cmdCallback()
   double max_vel = focus_active ? focus_max_vel_ : default_max_vel_;
   double max_acc = focus_active ? focus_max_acc_ : default_max_acc_;
 
-  double vel_damp = focus_active ? 0.02 : 0.05;
-  double acc_damp = focus_active ? 0.01 : 0.02;
+  double vel_damp = std::clamp(vel_damping_, 0.0, 1.0);
+  double acc_damp = std::clamp(acc_damping_, 0.0, 1.0);
   vel = vel * (1.0 - vel_damp) + last_vel_ * vel_damp;
   acc = acc * (1.0 - acc_damp) + last_acc_ * acc_damp;
 

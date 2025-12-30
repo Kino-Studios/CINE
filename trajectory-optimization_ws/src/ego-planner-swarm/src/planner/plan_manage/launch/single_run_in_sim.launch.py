@@ -9,6 +9,9 @@ from ament_index_python.packages import get_package_share_directory
 from launch.substitutions import PythonExpression
 from launch.conditions import IfCondition, UnlessCondition
 
+from cinematographic_adjustment_agent.config.constants import CinematicConstraints
+from cinematographic_adjustment_agent.config.planner_params import CinematographyParams
+
 def generate_launch_description():
     # 定义参数的 LaunchConfiguration
     obj_num = LaunchConfiguration('obj_num', default=10)
@@ -63,15 +66,19 @@ def generate_launch_description():
         description='Enable multi-trajectory search'
     )
 
-    default_max_vel = LaunchConfiguration('default_max_vel', default=2.5)
-    default_max_acc = LaunchConfiguration('default_max_acc', default=3.0)
-    focus_max_vel = LaunchConfiguration('focus_max_vel', default=1.2)
-    focus_max_acc = LaunchConfiguration('focus_max_acc', default=2.0)
-    default_speed_scale = LaunchConfiguration('default_speed_scale', default=1.2)
-    focus_speed_scale = LaunchConfiguration('focus_speed_scale', default=0.6)
-    target_distance_m = LaunchConfiguration('target_distance_m', default=1.0)
-    target_distance_tol_m = LaunchConfiguration('target_distance_tol_m', default=0.15)
-    target_distance_gate_m = LaunchConfiguration('target_distance_gate_m', default=1.0)
+    params = CinematographyParams.from_env()
+    constraints = CinematicConstraints()
+    default_max_vel = LaunchConfiguration('default_max_vel', default=constraints.DEFAULT_MAX_VELOCITY_MPS)
+    default_max_acc = LaunchConfiguration('default_max_acc', default=constraints.DEFAULT_MAX_ACCEL_MPS2)
+    focus_max_vel = LaunchConfiguration('focus_max_vel', default=constraints.FOCUS_MAX_VELOCITY_MPS)
+    focus_max_acc = LaunchConfiguration('focus_max_acc', default=constraints.FOCUS_MAX_ACCEL_MPS2)
+    vel_damping = LaunchConfiguration('vel_damping', default=0.0)
+    acc_damping = LaunchConfiguration('acc_damping', default=0.0)
+    default_speed_scale = LaunchConfiguration('default_speed_scale', default=1.0)
+    focus_speed_scale = LaunchConfiguration('focus_speed_scale', default=0.9)
+    target_distance_m = LaunchConfiguration('target_distance_m', default=params.target_focus_distance_m)
+    target_distance_tol_m = LaunchConfiguration('target_distance_tol_m', default=max(0.2, params.target_focus_distance_m * 0.2))
+    target_distance_gate_m = LaunchConfiguration('target_distance_gate_m', default=max(0.35, params.target_focus_distance_m * 0.25))
     yawdot_max = LaunchConfiguration('yawdot_max', default=3.5)
     light_avoid_gain = LaunchConfiguration('light_avoid_gain', default=2.0)
     use_target_yaw = LaunchConfiguration('use_target_yaw', default='true')
@@ -83,6 +90,8 @@ def generate_launch_description():
     default_max_acc_cmd = DeclareLaunchArgument('default_max_acc', default_value=default_max_acc, description='Baseline max acceleration')
     focus_max_vel_cmd = DeclareLaunchArgument('focus_max_vel', default_value=focus_max_vel, description='Framing max velocity')
     focus_max_acc_cmd = DeclareLaunchArgument('focus_max_acc', default_value=focus_max_acc, description='Framing max acceleration')
+    vel_damping_cmd = DeclareLaunchArgument('vel_damping', default_value=vel_damping, description='Velocity damping blend')
+    acc_damping_cmd = DeclareLaunchArgument('acc_damping', default_value=acc_damping, description='Acceleration damping blend')
     default_speed_scale_cmd = DeclareLaunchArgument('default_speed_scale', default_value=default_speed_scale, description='Baseline speed scale')
     focus_speed_scale_cmd = DeclareLaunchArgument('focus_speed_scale', default_value=focus_speed_scale, description='Framing speed scale')
     target_distance_m_cmd = DeclareLaunchArgument('target_distance_m', default_value=target_distance_m, description='Target framing distance')
@@ -225,6 +234,8 @@ def generate_launch_description():
             {'traj_server/use_light_avoid_yaw': use_light_avoid_yaw},
             {'traj_server/debug_light_yaw': debug_light_yaw},
             {'traj_server/debug_light_period_s': debug_light_period_s},
+            {'traj_server/vel_damping': vel_damping},
+            {'traj_server/acc_damping': acc_damping},
         ]
     )
 
@@ -338,6 +349,8 @@ def generate_launch_description():
     ld.add_action(focus_max_acc_cmd)
     ld.add_action(default_speed_scale_cmd)
     ld.add_action(focus_speed_scale_cmd)
+    ld.add_action(vel_damping_cmd)
+    ld.add_action(acc_damping_cmd)
     ld.add_action(target_distance_m_cmd)
     ld.add_action(target_distance_tol_m_cmd)
     ld.add_action(target_distance_gate_m_cmd)
