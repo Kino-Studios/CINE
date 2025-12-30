@@ -1,9 +1,3 @@
-from dataclasses import dataclass
+from .constants import CinematicConstraints
 
-@dataclass
-class CinematicConstraints:
-    FOCUS_MAX_VELOCITY_MPS: float = 0.05
-    FOCUS_MAX_ACCEL_MPS2: float = 0.2
-    DEFAULT_MAX_VELOCITY_MPS: float = 2.0
-    DEFAULT_MAX_ACCEL_MPS2: float = 3.0
-    MIN_DT: float = 0.05
+__all__ = ["CinematicConstraints"]

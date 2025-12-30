@@ -52,11 +52,20 @@ namespace ego_planner
     static int count = 0;
     printf("\033[47;30m\n[drone %d replan %d]==============================================\033[0m\n", pp_.drone_id, count++);
 
-  if ((start_pt - local_target_pt).norm() < 0.1)
+  constexpr double kMinGoalDist = 0.1;
+  double goal_dist = (start_pt - local_target_pt).norm();
+  if (goal_dist < kMinGoalDist)
     {
-      cout << "Close to goal" << endl;
-      continous_failures_count_++;
-      return false;
+      Eigen::Vector3d dir = local_target_pt - start_pt;
+      if (dir.norm() < 1e-3)
+      {
+        dir = start_vel;
+      }
+      if (dir.norm() < 1e-3)
+      {
+        dir = Eigen::Vector3d(1.0, 0.0, 0.0);
+      }
+      local_target_pt = start_pt + dir.normalized() * kMinGoalDist;
     }
 
     bspline_optimizer_->setLocalTargetPt(local_target_pt);
@@ -284,7 +293,18 @@ namespace ego_planner
     {
       visualization_->displayOptimalList(ctrl_pts, 0);
       continous_failures_count_++;
-      return false;
+      // Fallback to the initial, feasible B-spline to avoid stalling on optimizer failures.
+      UniformBspline fallback(ctrl_pts, 3, ts);
+      fallback.setPhysicalLimits(pp_.max_vel_, pp_.max_acc_, pp_.feasibility_tolerance_);
+      double ratio = 1.0;
+      if (!fallback.checkFeasibility(ratio, false) && ratio > 1.0)
+      {
+        fallback.lengthenTime(ratio);
+      }
+      updateTrajInfo(fallback, rclcpp::Clock().now());
+      RCLCPP_WARN(rclcpp::get_logger("ego_planner"),
+                  "Optimizer failed; using fallback B-spline to keep moving.");
+      return true;
     }
 
     t_start = rclcpp::Clock().now();

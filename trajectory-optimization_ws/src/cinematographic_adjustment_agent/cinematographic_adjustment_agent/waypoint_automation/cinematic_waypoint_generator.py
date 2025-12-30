@@ -39,8 +39,8 @@ class CinematicWaypointGenerator(Node):
         self.ready_time = None
         self.STARTUP_DELAY = 0.5
         self.WAYPOINT_TIMER_PERIOD_S = 0.05 # planner must be rapidly fed to prevent stalling
-        self.WAYPOINT_LOOKAHEAD = int(self.declare_parameter("waypoint_lookahead", 3).value)
-        self.dynamic_waypoint_lookahead = int(self.declare_parameter("dynamic_waypoint_lookahead", 1).value)
+        self.WAYPOINT_LOOKAHEAD = int(self.declare_parameter("waypoint_lookahead", 2).value)
+        self.dynamic_waypoint_lookahead = int(self.declare_parameter("dynamic_waypoint_lookahead", 3).value)
 
         self.velocity_settled = False
         self.VELOCITY_THRESHOLD = 0.2
@@ -53,9 +53,12 @@ class CinematicWaypointGenerator(Node):
         self.PROGRESS_EPS_M = 0.05
         self.PROGRESS_TIMEOUT_S = float(self.declare_parameter("progress_timeout_s", 4.0).value)
         self.min_goal_distance_m = float(self.declare_parameter("min_goal_distance_m", 0.35).value)
+        self.min_first_waypoint_distance_m = float(
+            self.declare_parameter("min_first_waypoint_distance_m", 0.6).value
+        )
 
-        self.image_width = int(self.declare_parameter("image_width", 640).value)
-        self.image_height = int(self.declare_parameter("image_height", 480).value)
+        self.image_width = int(self.declare_parameter("image_width", 1152).value)
+        self.image_height = int(self.declare_parameter("image_height", 648).value)
         self.fx = float(self.declare_parameter("camera_fx", 387.229248046875).value)
         self.fy = float(self.declare_parameter("camera_fy", 387.229248046875).value)
         self.cx = float(self.declare_parameter("camera_cx", 320.5).value)
@@ -77,7 +80,7 @@ class CinematicWaypointGenerator(Node):
         self.anchor_end_index = int(self.declare_parameter("anchor_end_index", -1).value)
         self.anchor_index_window = int(self.declare_parameter("anchor_index_window", 2).value)
         self.anchor_min_gap = int(self.declare_parameter("anchor_min_gap", 2).value)
-        self.arc_waypoint_spacing_m = float(self.declare_parameter("arc_waypoint_spacing_m", 0.35).value)
+        self.arc_waypoint_spacing_m = float(self.declare_parameter("arc_waypoint_spacing_m", 0.7).value)
         self.anchor_marker_scale_m = float(self.declare_parameter("anchor_marker_scale_m", 0.28).value)
         self.target_marker_scale_m = float(self.declare_parameter("target_marker_scale_m", 0.32).value)
         self.waypoint_xy_scale = float(self.declare_parameter("waypoint_xy_scale", 1.1).value)
@@ -1662,15 +1665,23 @@ class CinematicWaypointGenerator(Node):
         self._publish_framing_active(self._is_framing_idx(self.current_target_index))
         if self.current_pos is not None and self.active_waypoints:
             skipped = 0
+            min_start_threshold = max(self._current_distance_threshold(), float(self.min_first_waypoint_distance_m))
             while self.current_target_index < len(self.active_waypoints):
                 target_world = self._rel_to_world(self.active_waypoints[self.current_target_index])
-                if self._distance_to(target_world) > self._current_distance_threshold():
+                dist = self._distance_to(target_world)
+                threshold = min_start_threshold
+                if self.current_target_index == 0:
+                    threshold = min(threshold, max(dist * 0.9, self.PROGRESS_EPS_M))
+                if dist > threshold:
                     break
                 self.current_target_index += 1
                 skipped += 1
             if skipped > 0:
                 self.last_published_index = self.current_target_index - 1
-                self.get_logger().info(f"Skipped {skipped} near waypoints at init; starting at {self.current_target_index}")
+                self.get_logger().info(
+                    f"Skipped {skipped} near waypoints at init; starting at "
+                    f"{self.current_target_index} (min_start_threshold={min_start_threshold:.2f})"
+                )
         self._prefill_waypoint_queue()
 
     def _limit_consecutive_waypoint_jumps(self, waypoints):
@@ -1916,6 +1927,14 @@ class CinematicWaypointGenerator(Node):
             return max(min_goal, min(base, 0.9 * spacing))
         return max(base, min_goal)
 
+    def _current_target_reached(self):
+        if self.active_waypoints is None or self.current_pos is None:
+            return False
+        if self.current_target_index >= len(self.active_waypoints):
+            return True
+        target_world = self._rel_to_world(self.active_waypoints[self.current_target_index])
+        return self._distance_to(target_world) <= self._current_distance_threshold()
+
     def _publish_framing_active(self, active):
         active = bool(active)
         if self.framing_active == active:
@@ -1963,6 +1982,8 @@ class CinematicWaypointGenerator(Node):
             self.last_published_index < len(self.active_waypoints) - 1
             and (self.last_published_index - self.current_target_index + 1) < lookahead
         ):
+            if self.last_published_index >= self.current_target_index and not self._current_target_reached():
+                break
             next_idx = self.last_published_index + 1
             target_world = self._rel_to_world(self.active_waypoints[next_idx])
             self._publish_waypoint(target_world, next_idx)
@@ -2007,6 +2028,22 @@ class CinematicWaypointGenerator(Node):
                 self.last_progress_dist = None
                 self.stuck_attempts = 0
                 self._prefill_waypoint_queue()
+                return
+
+        if self.current_target_index <= 1:
+            min_reach = max(self._current_distance_threshold(), float(self.min_first_waypoint_distance_m))
+            if dist <= min_reach:
+                self.get_logger().info(
+                    f"Skipping close waypoint {self.current_target_index} at {dist:.2f}m "
+                    f"(min_reach={min_reach:.2f})"
+                )
+                self.current_target_index += 1
+                self.last_progress_time = None
+                self.last_progress_dist = None
+                self.stuck_attempts = 0
+                self._prefill_waypoint_queue()
+                if self.current_target_index >= len(self.active_waypoints):
+                    self.waypoints_sent = True
                 return
 
         if dist <= self._current_distance_threshold():

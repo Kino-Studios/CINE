@@ -10,8 +10,7 @@ from std_msgs.msg import Float32MultiArray
 from traj_utils.msg import Bspline
 
 from ..config.planner_params import CinematographyParams
-from ..config.constants import UserRequestedParams
-from ..config.constraints import CinematicConstraints
+from ..config.constants import UserRequestedParams, CinematicConstraints
 from .bspline_utils import msg_to_arrays, arrays_to_msg
 
 

@@ -26,6 +26,10 @@ double vel_gain[3] = {0, 0, 0};
 
 using ego_planner::UniformBspline;
 
+static double last_speed_log_time_sec = -1.0;
+
+static const rclcpp::Logger traj_logger = rclcpp::get_logger("traj_server");
+
 bool receive_traj_ = false;
 std::vector<UniformBspline> traj_;
 double traj_duration_;
@@ -36,11 +40,11 @@ int traj_id_;
 double last_yaw_, last_yaw_dot_;
 double time_forward_;
 
-double default_speed_scale_ = 0.8;
-double focus_speed_scale_ = 0.4;
-double default_max_vel_ = 1.2;
-double default_max_acc_ = 1.6;
-double focus_max_vel_ = 0.9;
+double default_speed_scale_ = 1.2;
+double focus_speed_scale_ = 0.8;
+double default_max_vel_ = 2.5;
+double default_max_acc_ = 2.5;
+double focus_max_vel_ = 1.0;
 double focus_max_acc_ = 1.4;
 double target_dist_m_ = 1.0;
 double target_dist_tol_m_ = 0.05;
@@ -52,8 +56,8 @@ double yaw_lpf_alpha_framing_ = 0.8;
 bool use_target_yaw_ = true;
 bool use_cinematic_ = true;
 bool framing_active_ = false;
-double vel_damping_ = 0.15;
-double acc_damping_ = 0.05;
+double vel_damping_ = 0.00;
+double acc_damping_ = 0.00;
 
 Eigen::Vector3d last_vel_(Eigen::Vector3d::Zero());
 Eigen::Vector3d last_acc_(Eigen::Vector3d::Zero());
@@ -251,30 +255,30 @@ void cmdCallback()
   std::pair<double, double> yaw_yawdot(0, 0);
 
   static rclcpp::Time time_last = clock.now();
-  double speed_scale = default_speed_scale_;
   bool focus_active = false;
   if (has_target_ && framing_active_)
   {
-    double t_probe = std::min(traj_duration_, t_cur * default_speed_scale_);
-    Eigen::Vector3d pos_probe = traj_[0].evaluateDeBoorT(t_probe);
-    double dist = (pos_probe - target_world_).norm();
+    Eigen::Vector3d pos_current = traj_[0].evaluateDeBoorT(std::min(traj_duration_, t_cur));
+    double dist = (pos_current - target_world_).norm();
     double gate = std::max(target_dist_gate_m_, target_dist_tol_m_);
     focus_active = fabs(dist - target_dist_m_) <= gate;
   }
-  if (focus_active)
-  {
-    speed_scale = focus_speed_scale_;
-  }
 
-  double t_query = t_cur * speed_scale;
-  if (t_query < 0.0)
-    t_query = 0.0;
+  double t_query = std::max(0.0, std::min(traj_duration_, t_cur));
+  double raw_speed = 0.0;
+  double pre_focus_speed = 0.0;
+  double post_focus_speed = 0.0;
+  bool valid_plan = false;
 
   constexpr double PI = 3.141592653589793;
+  double speed_scale = focus_active ? focus_speed_scale_ : default_speed_scale_;
   if (t_query < traj_duration_ && t_cur >= 0.0)
   {
     pos = traj_[0].evaluateDeBoorT(t_query);
-    vel = traj_[1].evaluateDeBoorT(t_query) * speed_scale;
+    Eigen::Vector3d raw_vel = traj_[1].evaluateDeBoorT(t_query);
+    raw_speed = raw_vel.norm();
+    vel = raw_vel * speed_scale;
+    pre_focus_speed = vel.norm();
     acc = traj_[2].evaluateDeBoorT(t_query) * speed_scale * speed_scale;
 
     if (focus_active && has_target_)
@@ -284,14 +288,18 @@ void cmdCallback()
       if (r_norm > 1e-3)
       {
         Eigen::Vector3d r_hat = r / r_norm;
-        pos = target_world_ + r_hat * target_dist_m_;
         double v_rad = vel.dot(r_hat);
-        vel = vel - v_rad * r_hat;
-        double v_sq = vel.squaredNorm();
+        double dist_error = r_norm - target_dist_m_;
+        if (fabs(dist_error) > target_dist_tol_m_)
+        {
+          double damp_factor = 0.5;
+          vel = vel - (1.0 - damp_factor) * v_rad * r_hat;
+        }
         acc = acc - acc.dot(r_hat) * r_hat;
-        acc = acc - (v_sq / std::max(target_dist_m_, 1e-3)) * r_hat;
       }
     }
+    post_focus_speed = vel.norm();
+
 
     /*** calculate yaw ***/
     if (use_target_yaw_ && focus_active)
@@ -320,6 +328,7 @@ void cmdCallback()
 
     double tf = std::min(traj_duration_, t_query + 2.0);
     pos_f = traj_[0].evaluateDeBoorT(tf);
+    valid_plan = true;
   }
   else if (t_query >= traj_duration_)
   {
@@ -335,15 +344,23 @@ void cmdCallback()
   }
   else
   {
-    std::cout << "[Traj server]: invalid time." << std::endl;
+    double start_sec = start_time_.seconds();
+    double now_sec = time_now.seconds();
+    RCLCPP_WARN(
+        traj_logger,
+        "[Traj server]: invalid time (t_cur=%.3f, start=%.3f, now=%.3f, duration=%.3f); waiting for ROS time to catch up",
+        t_cur,
+        start_sec,
+        now_sec,
+        traj_duration_);
   }
   time_last = time_now;
 
   double max_vel = focus_active ? focus_max_vel_ : default_max_vel_;
   double max_acc = focus_active ? focus_max_acc_ : default_max_acc_;
 
-  double vel_damp = std::clamp(vel_damping_, 0.0, 1.0);
-  double acc_damp = std::clamp(acc_damping_, 0.0, 1.0);
+  double vel_damp = focus_active ? 0.02 : 0.05;
+  double acc_damp = focus_active ? 0.01 : 0.02;
   vel = vel * (1.0 - vel_damp) + last_vel_ * vel_damp;
   acc = acc * (1.0 - acc_damp) + last_acc_ * acc_damp;
 
@@ -356,6 +373,26 @@ void cmdCallback()
   if (acc_norm > max_acc && acc_norm > 1e-6)
   {
     acc = acc / acc_norm * max_acc;
+  }
+  double filtered_speed = vel.norm();
+
+  if (valid_plan)
+  {
+    double now_sec = time_now.seconds();
+    if (last_speed_log_time_sec < 0 || now_sec - last_speed_log_time_sec >= 1.0)
+    {
+      last_speed_log_time_sec = now_sec;
+      RCLCPP_INFO(
+          traj_logger,
+          "[Traj server]: speed raw=%.3f pre_focus=%.3f post_focus=%.3f filtered=%.3f focus=%s speed_scale=%.2f max_vel=%.2f",
+          raw_speed,
+          pre_focus_speed,
+          post_focus_speed,
+          filtered_speed,
+          focus_active ? "true" : "false",
+          speed_scale,
+          max_vel);
+    }
   }
 
   last_vel_ = vel;

@@ -63,12 +63,12 @@ def generate_launch_description():
         description='Enable multi-trajectory search'
     )
 
-    default_max_vel = LaunchConfiguration('default_max_vel', default=1.0)
-    default_max_acc = LaunchConfiguration('default_max_acc', default=2.0)
-    focus_max_vel = LaunchConfiguration('focus_max_vel', default=0.05)
-    focus_max_acc = LaunchConfiguration('focus_max_acc', default=0.2)
-    default_speed_scale = LaunchConfiguration('default_speed_scale', default=0.6)
-    focus_speed_scale = LaunchConfiguration('focus_speed_scale', default=0.05)
+    default_max_vel = LaunchConfiguration('default_max_vel', default=2.5)
+    default_max_acc = LaunchConfiguration('default_max_acc', default=3.0)
+    focus_max_vel = LaunchConfiguration('focus_max_vel', default=1.2)
+    focus_max_acc = LaunchConfiguration('focus_max_acc', default=2.0)
+    default_speed_scale = LaunchConfiguration('default_speed_scale', default=1.2)
+    focus_speed_scale = LaunchConfiguration('focus_speed_scale', default=0.6)
     target_distance_m = LaunchConfiguration('target_distance_m', default=1.0)
     target_distance_tol_m = LaunchConfiguration('target_distance_tol_m', default=0.15)
     target_distance_gate_m = LaunchConfiguration('target_distance_gate_m', default=1.0)

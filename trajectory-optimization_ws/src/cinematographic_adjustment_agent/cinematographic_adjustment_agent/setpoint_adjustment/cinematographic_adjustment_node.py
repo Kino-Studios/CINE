@@ -21,7 +21,7 @@ from .trajectory_planner import (
     clamp_depth_to_preference,
 )
 from ..setpoint_sender.waypoint_sender import WaypointPublisher
-from ..config.constraints import CinematicConstraints
+from ..config.constants import CinematicConstraints
 
 class CinematographicPlannerNode(Node):
     def __init__(self):
