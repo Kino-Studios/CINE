@@ -139,6 +139,8 @@ class CinematicWaypointGenerator(Node):
         self.framing_end_idx = None
 
         self.fake_detection_pub = self.create_publisher(Float32MultiArray, "/object_detections", 10)
+        if self.simulate_fake_object:
+            self.create_timer(0.5, self.publish_simulated_detection)
         self.anchor_start_topic = str(
             self.declare_parameter("anchor_start_topic", "/cinematography/anchor_start").value
         )
@@ -365,7 +367,6 @@ class CinematicWaypointGenerator(Node):
             reference_drone_x=float(reference_world[0]),
             reference_drone_y=float(reference_world[1]),
             reference_drone_z=float(reference_world[2]),
-            desired_focus_distance_m=self.anchor_focus_distance,
         )
 
     def _parse_detection(self, msg: Float32MultiArray):
@@ -659,169 +660,53 @@ class CinematicWaypointGenerator(Node):
         if target_world is None:
             return []
         tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
-        z = float(altitude_m)
-        dz = z - tz
         desired = max(float(desired_distance), float(self.min_orbit_radius_m))
-        radius_xy = math.sqrt(max(desired * desired - dz * dz, 0.0))
-        radius_xy = max(self.min_orbit_radius_m, radius_xy)
 
-        start_angle = math.atan2(float(start_wp[1]) - ty, float(start_wp[0]) - tx)
-        end_angle = math.atan2(float(end_wp[1]) - ty, float(end_wp[0]) - tx)
+        v0 = (float(start_wp[0]) - tx, float(start_wp[1]) - ty, float(start_wp[2]) - tz)
+        v1 = (float(end_wp[0]) - tx, float(end_wp[1]) - ty, float(end_wp[2]) - tz)
+        v0_len = math.sqrt(v0[0] * v0[0] + v0[1] * v0[1] + v0[2] * v0[2])
+        v1_len = math.sqrt(v1[0] * v1[0] + v1[1] * v1[1] + v1[2] * v1[2])
+        if v0_len < 1e-6 or v1_len < 1e-6:
+            return []
 
-        delta_short = (end_angle - start_angle + math.pi) % (2.0 * math.pi) - math.pi
-        delta_long = delta_short - math.copysign(2.0 * math.pi, delta_short)
+        v0n = (v0[0] / v0_len, v0[1] / v0_len, v0[2] / v0_len)
+        v1n = (v1[0] / v1_len, v1[1] / v1_len, v1[2] / v1_len)
 
+        dot = max(-1.0, min(1.0, v0n[0] * v1n[0] + v0n[1] * v1n[1] + v0n[2] * v1n[2]))
+        theta = math.acos(dot)
         spacing = max(0.15, float(self.arc_waypoint_spacing_m))
+        total_len = max(1e-6, theta * desired)
+        num_total = max(7, int(math.ceil(total_len / spacing)) + 1)
 
-        def _project_to_distance_xy(x, y):
-            dx = x - tx
-            dy = y - ty
-            xy_dist = math.hypot(dx, dy)
-            if xy_dist < 1e-6:
-                dx = math.cos(start_angle)
-                dy = math.sin(start_angle)
-                xy_dist = 1.0
-            scale = radius_xy / xy_dist if radius_xy > 1e-6 else 0.0
-            x = tx + dx * scale
-            y = ty + dy * scale
-            return (x, y, z)
-
-        def _build_arc_for_delta(delta):
-            total_len = abs(delta) * radius_xy
-            num_total = max(7, int(math.ceil(total_len / spacing)) + 1)
-            if num_total <= 2:
-                return []
-            arc_pts = []
-            for i in range(0, num_total):
-                t = i / (num_total - 1)
-                ang = start_angle + t * delta
-                x = tx + radius_xy * math.cos(ang)
-                y = ty + radius_xy * math.sin(ang)
-                candidate = _project_to_distance_xy(x, y)
-                candidate = self._clamp_waypoint_to_bounds(candidate)
-                dist = math.dist(candidate, (tx, ty, tz))
-                if math.isfinite(dist) and abs(dist - desired) > 1e-3:
-                    candidate = _project_to_distance_xy(candidate[0], candidate[1])
-                    candidate = self._clamp_waypoint_to_bounds(candidate)
-                arc_pts.append(candidate)
-            return arc_pts
-
-        arc_short = _build_arc_for_delta(delta_short)
-        arc_long = _build_arc_for_delta(delta_long)
-
-        if not arc_short:
-            return arc_long
-        if not arc_long:
-            return arc_short
-
-        def _normalize2(vx, vy):
-            n = math.hypot(vx, vy)
+        def _project_to_sphere(candidate):
+            dx = float(candidate[0]) - tx
+            dy = float(candidate[1]) - ty
+            dz = float(candidate[2]) - tz
+            n = math.sqrt(dx * dx + dy * dy + dz * dz)
             if n <= 1e-6:
-                return None
-            return (vx / n, vy / n)
+                return candidate
+            scale = desired / n
+            return (tx + dx * scale, ty + dy * scale, tz + dz * scale)
 
-        start_tangent = None
-        end_tangent = None
-        if prev_wp is not None:
-            start_tangent = _normalize2(float(start_wp[0]) - float(prev_wp[0]), float(start_wp[1]) - float(prev_wp[1]))
-        else:
-            start_tangent = _normalize2(float(end_wp[0]) - float(start_wp[0]), float(end_wp[1]) - float(start_wp[1]))
-        if next_wp is not None:
-            end_tangent = _normalize2(float(next_wp[0]) - float(end_wp[0]), float(next_wp[1]) - float(end_wp[1]))
-        else:
-            end_tangent = _normalize2(float(end_wp[0]) - float(start_wp[0]), float(end_wp[1]) - float(start_wp[1]))
+        if theta < 1e-6:
+            candidate = _project_to_sphere((tx + v0n[0] * desired, ty + v0n[1] * desired, tz + v0n[2] * desired))
+            return [self._clamp_waypoint_to_bounds(candidate)]
 
-        def _score_delta(delta):
-            if start_tangent is None and end_tangent is None:
-                return None
-            sign = 1.0 if delta >= 0.0 else -1.0
-            tx_s = -math.sin(start_angle)
-            ty_s = math.cos(start_angle)
-            tx_e = -math.sin(end_angle)
-            ty_e = math.cos(end_angle)
-            if sign < 0.0:
-                tx_s, ty_s = -tx_s, -ty_s
-                tx_e, ty_e = -tx_e, -ty_e
-            score = 0.0
-            count = 0
-            if start_tangent is not None:
-                score += tx_s * start_tangent[0] + ty_s * start_tangent[1]
-                count += 1
-            if end_tangent is not None:
-                score += tx_e * end_tangent[0] + ty_e * end_tangent[1]
-                count += 1
-            if count == 0:
-                return None
-            return score / count
-
-        def _progress_score(arc_pts):
-            if not arc_pts or len(arc_pts) < 2:
-                return None
-            dx = float(end_wp[0]) - float(start_wp[0])
-            dy = float(end_wp[1]) - float(start_wp[1])
-            n = math.hypot(dx, dy)
-            if n <= 1e-6:
-                return None
-            ux = dx / n
-            uy = dy / n
-            forward = 0.0
-            backward = 0.0
-            for i in range(1, len(arc_pts)):
-                step_dx = float(arc_pts[i][0]) - float(arc_pts[i - 1][0])
-                step_dy = float(arc_pts[i][1]) - float(arc_pts[i - 1][1])
-                proj = step_dx * ux + step_dy * uy
-                if proj >= 0.0:
-                    forward += proj
-                else:
-                    backward += -proj
-            mid = arc_pts[len(arc_pts) // 2]
-            mid_proj = (float(mid[0]) - float(start_wp[0])) * ux + (float(mid[1]) - float(start_wp[1])) * uy
-            return forward - 2.0 * backward + 0.25 * mid_proj
-
-        progress_short = _progress_score(arc_short)
-        progress_long = _progress_score(arc_long)
-        if progress_short is not None and progress_long is not None and abs(progress_short - progress_long) > 1e-3:
-            return arc_short if progress_short >= progress_long else arc_long
-
-        score_short = _score_delta(delta_short)
-        score_long = _score_delta(delta_long)
-        if score_short is not None and score_long is not None and abs(score_short - score_long) > 1e-3:
-            return arc_short if score_short >= score_long else arc_long
-
-        ax, ay = float(start_wp[0]), float(start_wp[1])
-        bx, by = float(end_wp[0]), float(end_wp[1])
-        cx, cy = float(target_world[0]), float(target_world[1])
-        chord_dx = bx - ax
-        chord_dy = by - ay
-        center_sign = chord_dx * (cy - ay) - chord_dy * (cx - ax)
-
-        def _arc_mid_sign(arc_pts):
-            if not arc_pts:
-                return 0.0
-            mid = arc_pts[len(arc_pts) // 2]
-            mx, my = float(mid[0]), float(mid[1])
-            return chord_dx * (my - ay) - chord_dy * (mx - ax)
-
-        if abs(center_sign) > 1e-6:
-            short_sign = _arc_mid_sign(arc_short)
-            long_sign = _arc_mid_sign(arc_long)
-            if short_sign * center_sign >= 0.0 and long_sign * center_sign < 0.0:
-                return arc_short
-            if long_sign * center_sign >= 0.0 and short_sign * center_sign < 0.0:
-                return arc_long
-
-        if self.enable_cost_optimization:
-            short_cost = self._score_arc_points(arc_short, target_world)
-            long_cost = self._score_arc_points(arc_long, target_world)
-            if short_cost <= long_cost:
-                return arc_short
-            return arc_long
-
-        arc_short_len = abs(delta_short) * radius_xy
-        arc_long_len = abs(delta_long) * radius_xy
-        if abs(arc_short_len - path_length_m) <= abs(arc_long_len - path_length_m):
-            return arc_short
-        return arc_long
+        sin_theta = math.sin(theta)
+        arc_pts = []
+        for i in range(num_total):
+            t = i / (num_total - 1)
+            s0 = math.sin((1.0 - t) * theta) / sin_theta
+            s1 = math.sin(t * theta) / sin_theta
+            vx = s0 * v0n[0] + s1 * v1n[0]
+            vy = s0 * v0n[1] + s1 * v1n[1]
+            vz = s0 * v0n[2] + s1 * v1n[2]
+            candidate = (tx + vx * desired, ty + vy * desired, tz + vz * desired)
+            candidate = self._clamp_waypoint_to_bounds(candidate)
+            candidate = _project_to_sphere(candidate)
+            candidate = self._clamp_waypoint_to_bounds(candidate)
+            arc_pts.append(candidate)
+        return arc_pts
 
     def _score_arc_points(self, arc_pts, target_world):
         if target_world is None or self.cost_calculator is None:
@@ -843,7 +728,6 @@ class CinematicWaypointGenerator(Node):
                 reference_drone_x=float(ref[0]),
                 reference_drone_y=float(ref[1]),
                 reference_drone_z=float(ref[2]),
-                desired_focus_distance_m=self.anchor_focus_distance,
             )
             if cost is None or not math.isfinite(cost):
                 return float("inf")
@@ -1429,8 +1313,31 @@ class CinematicWaypointGenerator(Node):
         return markers
 
     def generate_cinematographic_waypoints(self):
-        if self.detected_object is None or self.start_pos is None:
+        if self.start_pos is None:
             return
+        if self.detected_object is None:
+            target_world = self.target_world or self.last_target_world
+            if target_world is None and self.simulate_fake_object:
+                base_pos = self.current_pos if self.current_pos is not None else self.start_pos
+                if base_pos is not None:
+                    offset = self.fake_object_world_offset
+                    target_world = (
+                        float(base_pos[0]) + float(offset[0]),
+                        float(base_pos[1]) + float(offset[1]),
+                        float(base_pos[2]) + float(offset[2]),
+                    )
+                    self.target_world = target_world
+                    self.last_target_world = target_world
+            if target_world is None:
+                return
+            depth = float(self.focus_depth_m) if self.focus_depth_m is not None else float(self.focus_distance_m)
+            self.detected_object = {
+                "center_x": float(self.cx),
+                "center_y": float(self.cy),
+                "depth": depth,
+                "norm_x": 0.5,
+                "norm_y": 0.5,
+            }
 
         if self.anchor_start_idx is None or self.anchor_end_idx is None:
             self._set_anchors(target_world=self.target_world, obj_depth=self.detected_object["depth"])
@@ -1505,7 +1412,11 @@ class CinematicWaypointGenerator(Node):
         start_wp = static_world[start_idx]
         end_wp = static_world[end_idx]
 
-        focus_distance = self._resolve_focus_distance(obj_depth)
+        anchor_dist_start = math.dist(start_wp, target_world)
+        anchor_dist_end = math.dist(end_wp, target_world)
+        anchor_distance = max(anchor_dist_start, anchor_dist_end)
+        self.anchor_focus_distance = float(anchor_distance)
+        focus_distance = max(float(anchor_distance), float(self.min_orbit_radius_m))
         base_z = self._resolve_framing_altitude_from_anchors(
             start_wp,
             end_wp,
@@ -1517,7 +1428,7 @@ class CinematicWaypointGenerator(Node):
 
         tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
         dz = base_z - tz
-        desired = max(float(focus_distance), float(self.min_orbit_radius_m))
+        desired = focus_distance
         radius_xy = math.sqrt(max(desired * desired - dz * dz, 0.0))
         radius_xy = max(self.min_orbit_radius_m, radius_xy)
 
@@ -1668,6 +1579,26 @@ class CinematicWaypointGenerator(Node):
         fake_detection = Float32MultiArray()
         fake_detection.data = [1.0, 320.0, 240.0, 1.5, 5000.0, 0.05, 0.9, 0.5, 0.5]
         self.fake_detection_pub.publish(fake_detection)
+        if not self.simulate_fake_object:
+            return
+        if not self.simulated_detection_active and self.detected_object is not None:
+            return
+        parsed = self._parse_detection(fake_detection)
+        if parsed is None:
+            return
+        now = self.get_clock().now()
+        if self.object_detection_time is not None:
+            elapsed = (now - self.object_detection_time).nanoseconds / 1e9
+            if elapsed < self.DETECTION_DEBOUNCE:
+                return
+        self.detected_object = parsed
+        self.object_detection_time = now
+        self.simulated_detection_active = True
+        self.use_dynamic_waypoints = True
+        self.pending_detection_merge = True
+        self._set_anchors(target_world=self.target_world, obj_depth=self.detected_object["depth"])
+        if self.dynamic_waypoints is None or not self.use_dynamic_waypoints:
+            self._rebuild_active_with_detection()
 
     def check_and_send_waypoints(self):
         if self.start_pos is not None and self.waypoints_sent:
@@ -1711,10 +1642,10 @@ class CinematicWaypointGenerator(Node):
         else:
             waypoints_to_send = self._scaled_static_waypoints()
 
-        if self.pending_detection_merge and self.detected_object is not None:
+        if (not self.use_dynamic_waypoints) and self.pending_detection_merge and self.detected_object is not None:
             waypoints_to_send = self._merge_framing_with_static(waypoints_to_send, self.detected_object)
             self.pending_detection_merge = False
-        elif self.simulate_fake_object:
+        elif self.simulate_fake_object and (not self.use_dynamic_waypoints):
             waypoints_to_send = self._insert_fake_object_orbit(waypoints_to_send)
 
         waypoints_to_send = self._deduplicate_waypoints(waypoints_to_send, min_separation=0.3)
