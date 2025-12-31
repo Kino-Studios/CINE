@@ -18,7 +18,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'focus_max_velocity_mps': 0.7,
-            'default_max_velocity_mps': 1.45,
+            'default_max_velocity_mps': 1.55,
             'odom_topic': odom_topic,
             'baseline_bspline_topic': baseline_topic,
             'cinematic_bspline_topic': cinematic_topic,

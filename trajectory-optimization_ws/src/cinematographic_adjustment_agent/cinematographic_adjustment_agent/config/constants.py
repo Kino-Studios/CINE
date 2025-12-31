@@ -5,8 +5,8 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPo
 class CinematicConstraints:
     FOCUS_MAX_VELOCITY_MPS: float = 0.7
     FOCUS_MAX_ACCEL_MPS2: float = 2.5
-    DEFAULT_MAX_VELOCITY_MPS: float = 1.65
-    DEFAULT_MAX_ACCEL_MPS2: float = 4.7
+    DEFAULT_MAX_VELOCITY_MPS: float = 1.55
+    DEFAULT_MAX_ACCEL_MPS2: float = 3.7
     DEFAULT_SPEED_SCALE: float = 0.8
     FOCUS_SPEED_SCALE: float = 0.7
     TARGET_DISTANCE_M: float = 1.0

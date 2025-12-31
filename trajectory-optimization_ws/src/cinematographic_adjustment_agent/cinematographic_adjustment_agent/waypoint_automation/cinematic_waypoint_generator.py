@@ -72,7 +72,7 @@ class CinematicWaypointGenerator(Node):
         self.min_altitude_m = float(self.declare_parameter("min_altitude_m", 0.2).value)
         self.max_altitude_m = float(self.declare_parameter("max_altitude_m", 3.0).value)
         self.min_orbit_radius_m = float(self.declare_parameter("min_orbit_radius_m", 0.2).value)
-        self.waypoint_radius_m = float(self.declare_parameter("waypoint_radius_m", 0.13).value)
+        self.waypoint_radius_m = float(self.declare_parameter("waypoint_radius_m", 0.19).value)
         self.max_waypoint_jump_m = float(self.declare_parameter("max_waypoint_jump_m", 3.0).value)
         self.min_waypoint_separation_m = float(self.declare_parameter("min_waypoint_separation_m", 0.5).value)
         self.bezier_blend_length_m = float(self.declare_parameter("bezier_blend_length_m", 0.1).value)
@@ -1720,6 +1720,7 @@ class CinematicWaypointGenerator(Node):
         self.waypoints_sent = False
         self._update_framing_indices()
         self._publish_framing_active(self._is_framing_idx(self.current_target_index))
+
         if self.current_pos is not None and self.active_waypoints:
             skipped = 0
             min_start_threshold = max(self._current_distance_threshold(), float(self.min_first_waypoint_distance_m))
@@ -2032,10 +2033,12 @@ class CinematicWaypointGenerator(Node):
         goal.pose.position.x = float(target_world[0])
         goal.pose.position.y = float(target_world[1])
         goal.pose.position.z = float(target_world[2])
-        # Face the object only while framing between anchors; otherwise keep current yaw.
+        
         yaw = self.current_yaw
+
         if self._is_framing_idx(idx):
             look_at = self.last_target_world or self.target_world
+
             if look_at is not None:
                 dx = float(look_at[0]) - float(target_world[0])
                 dy = float(look_at[1]) - float(target_world[1])
@@ -2047,6 +2050,7 @@ class CinematicWaypointGenerator(Node):
                 if avoidance_yaw is not None and avoidance_weight > 0.0:
                     blend = min(1.0, float(self.light_avoidance_gain) * (avoidance_weight + 0.25))
                     yaw = self._blend_angles(yaw, avoidance_yaw, blend)
+
         qw = math.cos(0.5 * yaw)
         qz = math.sin(0.5 * yaw)
         goal.pose.orientation.w = qw

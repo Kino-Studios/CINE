@@ -30,11 +30,11 @@ static double light_avoid_gain_ = 2.5;
 static double light_avoid_blend_base_ = 0.05;
 static double light_avoid_max_blend_ = 0.25;
 static double light_influence_distance_m_ = 4.0;
-static double light_avoid_transition_s_ = 6.0;
+static double light_avoid_transition_s_ = 4.0;
 static double light_avoid_speed_threshold_ = 3.0;
 static bool use_light_avoid_yaw_ = true;
 static bool debug_light_yaw_ = false;
-static double debug_light_period_s_ = 0.5;
+static double debug_light_period_s_ = 0.2;
 static rclcpp::Time last_light_debug_time_(0L, RCL_ROS_TIME);
 static double light_disable_near_finish_s_ = 0.1;
 static double light_distance_blend_gain_ = 1.2;
@@ -51,7 +51,7 @@ struct LightAvoidanceState
 };
 
 static bool framing_active_ = false;
-static double light_avoid_cooldown_after_framing_s = 1.0;
+static double light_avoid_cooldown_after_framing_s = 0.7;
 static rclcpp::Time last_framing_toggle_time_(0L, RCL_ROS_TIME);
 
 static LightAvoidanceState computeLightAvoidanceState(
@@ -149,8 +149,8 @@ double last_s_dot_ = 1.0;
 
 double default_speed_scale_ = 0.8;
 double focus_speed_scale_ = 0.7;
-double default_max_vel_ = 1.65;
-double default_max_acc_ = 4.7;
+double default_max_vel_ = 1.55;
+double default_max_acc_ = 3.7;
 double focus_max_vel_ = 0.7;
 double focus_max_acc_ = 2.5;
 double target_dist_m_ = 1.0;
@@ -160,13 +160,13 @@ double yawdot_max_ = 1.25;
 double yawdot_max_framing_ = 0.6;
 double yaw_lpf_alpha_ = 0.85;
 double yaw_lpf_alpha_framing_ = 0.9;
-double yaw_tracking_smooth_alpha_ = 0.92;
+double yaw_tracking_smooth_alpha_ = 0.08;
 bool use_target_yaw_ = true;
 bool always_face_target_ = true;
 bool use_cinematic_ = true;
-double vel_damping_ = 0.12;
-double acc_damping_ = 0.03;
-double pitch_acc_smooth_alpha_ = 0.9;
+double vel_damping_ = 0.08;
+double acc_damping_ = 0.05;
+double pitch_acc_smooth_alpha_ = 0.78;
 
 Eigen::Vector3d last_vel_(Eigen::Vector3d::Zero());
 Eigen::Vector3d last_acc_(Eigen::Vector3d::Zero());

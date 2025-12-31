@@ -51,7 +51,7 @@ fi
 # Defaults (can be overridden by env vars or by collect_constrained_data.env)
 USE_FAKE_FOCUS="${USE_FAKE_FOCUS:-1}"
 USE_FAKE_LIGHT="${USE_FAKE_LIGHT:-1}"
-TARGET_OFFSET_XYZ="${TARGET_OFFSET_XYZ:-[2.34,4.9,1.35]}"
+TARGET_OFFSET_XYZ="${TARGET_OFFSET_XYZ:-[2.34,4.35,1.35]}"
 FOCUS_DEPTH_M="${FOCUS_DEPTH_M:-1.5}"
 FRAME_ID="${FRAME_ID:-world}"
 
