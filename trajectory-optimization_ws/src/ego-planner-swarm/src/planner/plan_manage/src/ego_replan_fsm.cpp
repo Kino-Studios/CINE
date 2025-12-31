@@ -29,6 +29,15 @@ namespace ego_planner
     // target_type_ = 1;
     node_->get_parameter("fsm/thresh_replan_time", replan_thresh_);
     node_->get_parameter("fsm/thresh_no_replan_meter", no_replan_thresh_);
+    if (no_replan_thresh_ >= 0.4)
+    {
+      RCLCPP_INFO(node_->get_logger(), "Waypoint switch radius %.2f adjusted to 0.3", no_replan_thresh_);
+      no_replan_thresh_ = 0.3;
+    }
+    else if (no_replan_thresh_ <= 0.0)
+    {
+      no_replan_thresh_ = 0.3;
+    }
     node_->get_parameter("fsm/planning_horizon", planning_horizen_);
     node_->get_parameter("fsm/planning_horizen_time", planning_horizen_time_);
     node_->get_parameter("fsm/emergency_time", emergency_time_);

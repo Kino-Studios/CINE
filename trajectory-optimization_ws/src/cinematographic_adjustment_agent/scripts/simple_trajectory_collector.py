@@ -2,20 +2,11 @@
 
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass
 from typing import List, Tuple
 from pathlib import Path
 from datetime import datetime
 
-
-@dataclass
-class CinematicConstraints:
-    FOCUS_MAX_VELOCITY_MPS: float = 1.0
-    FOCUS_MAX_ACCEL_MPS2: float = 1.5
-    DEFAULT_MAX_VELOCITY_MPS: float = 2.0
-    DEFAULT_MAX_ACCEL_MPS2: float = 3.0
-    MIN_DT: float = 0.05
-
+from cinematographic_adjustment_agent.config.constants import CinematicConstraints
 class BSplineTrajectory:
     
     def __init__(self, control_points: np.ndarray, degree: int = 3):

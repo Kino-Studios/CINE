@@ -129,6 +129,20 @@ class CostFunctionCalculatorNode(Node):
         msg.smoothness_cost = float(result.get("smoothness_cost", 0.0))
         msg.distance_cost = float(result.get("distance_cost", 0.0))
         msg.total_cost = float(result.get("total_cost", 0.0))
+        msg.yaw_setpoint = float(result.get("yaw_setpoint", 0.0))
+        msg.pitch_setpoint = float(result.get("pitch_setpoint", 0.0))
+        msg.roll_setpoint = float(result.get("roll_setpoint", 0.0))
+        msg.yaw_error = float(result.get("yaw_error", 0.0))
+        msg.pitch_error = float(result.get("pitch_error", 0.0))
+        msg.roll_error = float(result.get("roll_error", 0.0))
+        msg.actual_yaw = float(result.get("actual_yaw", 0.0))
+        msg.actual_pitch = float(result.get("actual_pitch", 0.0))
+        msg.actual_roll = float(result.get("actual_roll", 0.0))
+        self.get_logger().debug(
+            f"Attitude yaw(set={msg.yaw_setpoint:.2f}, act={msg.actual_yaw:.2f}), "
+            f"pitch(set={msg.pitch_setpoint:.2f}, act={msg.actual_pitch:.2f}), "
+            f"roll(set={msg.roll_setpoint:.2f}, act={msg.actual_roll:.2f})"
+        )
         self._pub.publish(msg)
 
     def _estimate_target_world_position(self, depth_m: float | None):

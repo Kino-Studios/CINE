@@ -9,9 +9,10 @@ from nav_msgs.msg import Odometry
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-from dataclasses import dataclass
 import signal
 import sys
+
+from ..config.constants import CinematicConstraints
 
 
 class UniformBspline:
@@ -97,14 +98,6 @@ class UniformBspline:
 
         return UniformBspline(derivative_control_points, self.p - 1, derivative_knots)
 
-
-@dataclass
-class CinematicConstraints:
-    FOCUS_MAX_VELOCITY_MPS: float = 1.0
-    FOCUS_MAX_ACCEL_MPS2: float = 1.5
-    DEFAULT_MAX_VELOCITY_MPS: float = 2.0
-    DEFAULT_MAX_ACCEL_MPS2: float = 3.0
-    MIN_DT: float = 0.05
 
 class TrajectoryDataLogger(Node):
 

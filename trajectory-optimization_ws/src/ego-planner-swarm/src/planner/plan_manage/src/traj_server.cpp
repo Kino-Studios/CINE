@@ -20,6 +20,9 @@ rclcpp::Publisher<quadrotor_msgs::msg::PositionCommand>::SharedPtr pos_cmd_pub;
 rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr focus_vector_pub;
 rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr light_vector_sub;
 
+[[maybe_unused]] constexpr double PI = 3.141592653589793;
+[[maybe_unused]] constexpr double MIN_RADIAL_SPEED_MPS = 0.1;
+
 static Eigen::Vector3d light_vector_(Eigen::Vector3d::Zero());
 static bool have_light_vector_ = false;
 static double light_distance_ = 0.0;
@@ -60,12 +63,16 @@ int traj_id_;
 double last_yaw_, last_yaw_dot_;
 double time_forward_;
 
-double default_speed_scale_ = 0.9;
+static rclcpp::Time time_last_(0L, RCL_ROS_TIME);
+double scaled_time_ = 0.0;
+double last_s_dot_ = 1.0;
+
+double default_speed_scale_ = 0.8;
 double focus_speed_scale_ = 0.7;
-double default_max_vel_ = 2.2;
-double default_max_acc_ = 4.0;
+double default_max_vel_ = 1.1;
+double default_max_acc_ = 4.8;
 double focus_max_vel_ = 0.8;
-double focus_max_acc_ = 3.0;
+double focus_max_acc_ = 3.1;
 double target_dist_m_ = 1.0;
 double target_dist_tol_m_ = 0.05;
 double target_dist_gate_m_ = 1.0;
@@ -77,7 +84,7 @@ bool use_target_yaw_ = true;
 bool always_face_target_ = true;
 bool use_cinematic_ = true;
 bool framing_active_ = false;
-double vel_damping_ = 0.03;
+double vel_damping_ = 0.08;
 double acc_damping_ = 0.05;
 
 Eigen::Vector3d last_vel_(Eigen::Vector3d::Zero());
@@ -164,6 +171,9 @@ void handleBsplineMsg(traj_utils::msg::Bspline::SharedPtr msg)
   traj_duration_ = traj_[0].getTimeSum();
 
   receive_traj_ = true;
+  scaled_time_ = 0.0;
+  last_s_dot_ = 1.0;
+  time_last_ = rclcpp::Clock(RCL_ROS_TIME).now();
   last_vel_.setZero();
   last_acc_.setZero();
 }
@@ -180,7 +190,6 @@ void cinematicBsplineCallback(traj_utils::msg::Bspline::SharedPtr msg)
 
 std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, rclcpp::Time &time_now, rclcpp::Time &time_last)
 {
-  constexpr double PI = 3.1415926;
   constexpr double YAW_DOT_MAX_PER_SEC = PI;
   // constexpr double YAW_DOT_DOT_MAX_PER_SEC = PI;
   std::pair<double, double> yaw_yawdot(0, 0);
@@ -407,36 +416,76 @@ void cmdCallback()
   Eigen::Vector3d pos(Eigen::Vector3d::Zero()), vel(Eigen::Vector3d::Zero()), acc(Eigen::Vector3d::Zero()), pos_f;
   std::pair<double, double> yaw_yawdot(0, 0);
 
-  static rclcpp::Time time_last = clock.now();
+  double dt = std::max(0.0, (time_now - time_last_).seconds());
   bool focus_active = false;
   if (has_target_ && framing_active_)
+
   {
-    Eigen::Vector3d pos_current = traj_[0].evaluateDeBoorT(std::min(traj_duration_, t_cur));
+    double focus_time = std::max(0.0, std::min(traj_duration_, scaled_time_));
+    Eigen::Vector3d pos_current = traj_[0].evaluateDeBoorT(focus_time);
     double dist = (pos_current - target_world_).norm();
     double gate = std::max(target_dist_gate_m_, target_dist_tol_m_);
     focus_active = fabs(dist - target_dist_m_) <= gate;
   }
 
   bool follow_target = has_target_ && framing_active_ && (always_face_target_ || (use_target_yaw_ && focus_active));
-  double dt = std::max(0.0, (time_now - time_last).seconds());
   bool have_position = false;
 
-  double t_query = std::max(0.0, std::min(traj_duration_, t_cur));
+  double t_query = 0.0;
   double raw_speed = 0.0;
   double pre_focus_speed = 0.0;
   double post_focus_speed = 0.0;
   bool valid_plan = false;
 
-  constexpr double PI = 3.141592653589793;
-  double speed_scale = focus_active ? focus_speed_scale_ : default_speed_scale_;
+  const double max_vel = focus_active ? focus_max_vel_ : default_max_vel_;
+  const double max_acc = focus_active ? focus_max_acc_ : default_max_acc_;
+
+  double s_dot = 0.0;
+  double s_dot_dot = 0.0;
+  if (traj_duration_ > 0.0 && t_cur >= 0.0 && dt > 0.0 && scaled_time_ < traj_duration_)
+  {
+    double remaining = std::max(0.0, traj_duration_ - scaled_time_);
+    double ds = std::min(dt, remaining);
+    double scale = dt > 0.0 ? ds / dt : 0.0;
+    if (max_vel > 0.0 && ds > 0.0 && traj_.size() > 1)
+    {
+      for (int iter = 0; iter < 3; ++iter)
+      {
+        double candidate_time = std::min(traj_duration_, scaled_time_ + ds);
+        Eigen::Vector3d vel_at_candidate = traj_[1].evaluateDeBoorT(candidate_time);
+        double speed = vel_at_candidate.norm();
+        double actual_speed = speed * scale;
+        if (speed < 1e-6 || actual_speed <= max_vel)
+        {
+          break;
+        }
+        double desired_scale = max_vel / speed;
+        desired_scale = std::min(desired_scale, 1.0);
+        ds = std::min(remaining, dt * desired_scale);
+        scale = dt > 0.0 ? ds / dt : 0.0;
+      }
+    }
+    double candidate_time = std::min(traj_duration_, scaled_time_ + ds);
+    s_dot = scale;
+    if (dt > 0.0)
+    {
+      s_dot_dot = (s_dot - last_s_dot_) / dt;
+    }
+    scaled_time_ = candidate_time;
+  }
+  last_s_dot_ = s_dot;
+
+  t_query = std::max(0.0, std::min(traj_duration_, scaled_time_));
+
   if (t_query < traj_duration_ && t_cur >= 0.0)
   {
     pos = traj_[0].evaluateDeBoorT(t_query);
     Eigen::Vector3d raw_vel = traj_[1].evaluateDeBoorT(t_query);
     raw_speed = raw_vel.norm();
-    vel = raw_vel * speed_scale;
+    vel = raw_vel * s_dot;
     pre_focus_speed = vel.norm();
-    acc = traj_[2].evaluateDeBoorT(t_query) * speed_scale * speed_scale;
+    Eigen::Vector3d raw_acc = traj_[2].evaluateDeBoorT(t_query);
+    acc = raw_acc * (s_dot * s_dot) + raw_vel * s_dot_dot;
 
     if (focus_active && has_target_)
     {
@@ -453,6 +502,11 @@ void cmdCallback()
           vel = vel - (1.0 - damp_factor) * v_rad * r_hat;
         }
         acc = acc - acc.dot(r_hat) * r_hat;
+        double radial_speed = vel.norm();
+        if (radial_speed > 1e-6 && radial_speed < MIN_RADIAL_SPEED_MPS)
+        {
+          vel = vel / radial_speed * MIN_RADIAL_SPEED_MPS;
+        }
       }
     }
     post_focus_speed = vel.norm();
@@ -465,7 +519,7 @@ void cmdCallback()
     }
     else
     {
-      yaw_yawdot = calculate_yaw(t_query, pos, time_now, time_last);
+      yaw_yawdot = calculate_yaw(t_query, pos, time_now, time_last_);
     }
     /*** calculate yaw ***/
 
@@ -508,25 +562,28 @@ void cmdCallback()
   }
   double current_speed = vel.norm();
   applyLightYawAvoidance(dt, time_now, yaw_yawdot, current_speed);
-  time_last = time_now;
-
-  double max_vel = focus_active ? focus_max_vel_ : default_max_vel_;
-  double max_acc = focus_active ? focus_max_acc_ : default_max_acc_;
+  time_last_ = time_now;
 
   double vel_damp = std::clamp(vel_damping_, 0.0, 1.0);
   double acc_damp = std::clamp(acc_damping_, 0.0, 1.0);
   vel = vel * (1.0 - vel_damp) + last_vel_ * vel_damp;
   acc = acc * (1.0 - acc_damp) + last_acc_ * acc_damp;
 
-  double vel_norm = vel.norm();
-  if (vel_norm > max_vel && vel_norm > 1e-6)
+  if (max_vel > 0.0)
   {
-    vel = vel / vel_norm * max_vel;
+    double vel_norm = vel.norm();
+    if (vel_norm > max_vel && vel_norm > 1e-6)
+    {
+      vel = vel / vel_norm * max_vel;
+    }
   }
-  double acc_norm = acc.norm();
-  if (acc_norm > max_acc && acc_norm > 1e-6)
+  if (max_acc > 0.0)
   {
-    acc = acc / acc_norm * max_acc;
+    double acc_norm = acc.norm();
+    if (acc_norm > max_acc && acc_norm > 1e-6)
+    {
+      acc = acc / acc_norm * max_acc;
+    }
   }
   double filtered_speed = vel.norm();
 
@@ -544,7 +601,7 @@ void cmdCallback()
           post_focus_speed,
           filtered_speed,
           focus_active ? "true" : "false",
-          speed_scale,
+          1.0,
           max_vel);
     }
   }

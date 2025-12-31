@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 
 import rclpy
 from geometry_msgs.msg import Point, PointStamped, PoseStamped, Vector3Stamped
@@ -19,6 +20,9 @@ class CinematicWaypointGenerator(Node):
         self.detections_topic = str(self.declare_parameter("detections_topic", "/object_detections").value)
         self.light_vector_topic = str(self.declare_parameter("light_vector_topic", "/cinematography/light_vector").value)
         self.enable_cost_optimization = bool(self.declare_parameter("enable_cost_optimization", True).value)
+        self.light_avoidance_enabled = bool(self.declare_parameter("light_avoidance_enabled", True).value)
+        self.light_avoidance_gain = float(self.declare_parameter("light_avoidance_gain", 2.5).value)
+        self.light_influence_distance_m = float(self.declare_parameter("light_influence_distance_m", 4.0).value)
         self.use_dynamic_waypoints_on_detection = bool(self.declare_parameter("use_dynamic_waypoints_on_detection", True).value)
         self.candidate_angle_window_rad = float(self.declare_parameter("candidate_angle_window_rad", 0.6).value)
         self.candidate_angle_samples = int(self.declare_parameter("candidate_angle_samples", 7).value)
@@ -68,7 +72,7 @@ class CinematicWaypointGenerator(Node):
         self.min_altitude_m = float(self.declare_parameter("min_altitude_m", 0.2).value)
         self.max_altitude_m = float(self.declare_parameter("max_altitude_m", 3.0).value)
         self.min_orbit_radius_m = float(self.declare_parameter("min_orbit_radius_m", 0.2).value)
-        self.waypoint_radius_m = float(self.declare_parameter("waypoint_radius_m", 0.1).value)
+        self.waypoint_radius_m = float(self.declare_parameter("waypoint_radius_m", 0.13).value)
         self.max_waypoint_jump_m = float(self.declare_parameter("max_waypoint_jump_m", 3.0).value)
         self.min_waypoint_separation_m = float(self.declare_parameter("min_waypoint_separation_m", 0.5).value)
         self.bezier_blend_length_m = float(self.declare_parameter("bezier_blend_length_m", 0.1).value)
@@ -192,6 +196,7 @@ class CinematicWaypointGenerator(Node):
         self.target_world: tuple[float, float, float] | None = None
         self.last_target_world: tuple[float, float, float] | None = None
         self.light_vector = None
+        self.light_distance = None
         self.cost_calculator = CostCalculator(self)
 
     def _build_room_orbit(self):
@@ -249,7 +254,10 @@ class CinematicWaypointGenerator(Node):
             pass
 
     def light_callback(self, msg: Vector3Stamped):
-        self.light_vector = (float(msg.vector.x), float(msg.vector.y), float(msg.vector.z))
+        vec = (float(msg.vector.x), float(msg.vector.y), float(msg.vector.z))
+        self.light_vector = vec
+        norm = math.sqrt(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2])
+        self.light_distance = norm if norm > 1e-6 else None
         try:
             self.cost_calculator.update_light_vector(msg)
         except Exception:
@@ -1160,6 +1168,10 @@ class CinematicWaypointGenerator(Node):
                     )
                 )
 
+        light_marker = self._create_light_marker(now)
+        if light_marker is not None:
+            markers.markers.append(light_marker)
+
         self.debug_markers_pub.publish(markers)
 
     def _waypoint_diameter(self):
@@ -1232,6 +1244,44 @@ class CinematicWaypointGenerator(Node):
         marker.color.b = float(color[2])
         marker.color.a = float(color[3])
         marker.text = text
+        return marker
+
+    def _create_light_marker(self, stamp):
+        if self.light_vector is None or self.current_pos is None:
+            return None
+        length = max(1.0, (float(self.light_distance) if self.light_distance is not None else 1.0) * 1.2)
+        norm = math.sqrt(self.light_vector[0] * self.light_vector[0] + self.light_vector[1] * self.light_vector[1] + self.light_vector[2] * self.light_vector[2])
+        if norm <= 1e-6:
+            return None
+        direction = tuple(v / norm * length for v in self.light_vector)
+
+        marker = Marker()
+        marker.header.stamp = stamp
+        marker.header.frame_id = self.frame_id
+        marker.ns = "light_vector"
+        marker.id = 999
+        marker.type = Marker.ARROW
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = 0.05
+        marker.scale.y = 0.12
+        marker.scale.z = 0.12
+        marker.color.r = 1.0
+        marker.color.g = 0.2
+        marker.color.b = 0.1
+        marker.color.a = 1.0
+
+        start = Point()
+        start.x = float(self.current_pos[0])
+        start.y = float(self.current_pos[1])
+        start.z = float(self.current_pos[2])
+
+        end = Point()
+        end.x = start.x + direction[0]
+        end.y = start.y + direction[1]
+        end.z = start.z + direction[2]
+
+        marker.points = [start, end]
         return marker
 
     def _create_sphere_wireframe(self, center, radius, marker_id, namespace, color, stamp, num_segments=32):
@@ -1934,6 +1984,30 @@ class CinematicWaypointGenerator(Node):
             return max(min_goal, min(base, 0.9 * spacing))
         return max(base, min_goal)
 
+    def _light_avoidance_weight(self) -> float:
+        if not self.light_avoidance_enabled or self.light_distance is None or self.light_influence_distance_m <= 0.0:
+            return 0.0
+        weight = (self.light_influence_distance_m - self.light_distance) / self.light_influence_distance_m
+        weight = max(0.0, min(1.0, weight))
+        return math.sqrt(weight)
+
+    def _light_avoidance_yaw(self) -> Optional[float]:
+        if self.light_vector is None:
+            return None
+        dx, dy = float(self.light_vector[0]), float(self.light_vector[1])
+        if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+            return None
+        # Look opposite the light horizontal projection.
+        return math.atan2(-dy, -dx)
+
+    def _blend_angles(self, base: float, target: float, weight: float) -> float:
+        if weight <= 0.0:
+            return base
+        if weight >= 1.0:
+            return target
+        diff = ((target - base + math.pi) % (2.0 * math.pi)) - math.pi
+        return base + diff * weight
+
     def _current_target_reached(self):
         if self.active_waypoints is None or self.current_pos is None:
             return False
@@ -1966,6 +2040,13 @@ class CinematicWaypointGenerator(Node):
                 dx = float(look_at[0]) - float(target_world[0])
                 dy = float(look_at[1]) - float(target_world[1])
                 yaw = math.atan2(dy, dx)
+        else:
+            if self.light_avoidance_enabled:
+                avoidance_weight = self._light_avoidance_weight()
+                avoidance_yaw = self._light_avoidance_yaw()
+                if avoidance_yaw is not None and avoidance_weight > 0.0:
+                    blend = min(1.0, float(self.light_avoidance_gain) * (avoidance_weight + 0.25))
+                    yaw = self._blend_angles(yaw, avoidance_yaw, blend)
         qw = math.cos(0.5 * yaw)
         qz = math.sin(0.5 * yaw)
         goal.pose.orientation.w = qw

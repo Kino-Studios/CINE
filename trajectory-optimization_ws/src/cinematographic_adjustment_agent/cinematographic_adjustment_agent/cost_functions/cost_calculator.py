@@ -17,12 +17,15 @@ class CostCalculator:
         self.depth_image = None
         self.center_depth = None
         self.light_vector = None
+        self.light_distance = None
+        self._declare_parameter("light_distance_attenuation_m", 4.0)
         self.angular_velocity = None
         self.orientation = None
         self._prev_ang_vel = None
         self.ROSParams = ROSParams
         self.UserRequestedParams = UserRequestedParams
         self.ImageParams = ImageParams
+        self._last_light_setpoint = np.array([0.0, 0.0, 0.0], dtype=float)
         self._declare_parameter("focus_object_id", UserRequestedParams.FOCUS_OBJECT_ID)
         self._declare_parameter("huber_delta_px", 6.0)
         self._declare_parameter("deadband_px", 4.0)
@@ -32,6 +35,20 @@ class CostCalculator:
         self._declare_parameter("w_stab", 0.2)
         self._declare_parameter("w_light", 1.0)
         self._declare_parameter("w_smooth", 1.0)
+        self._declare_parameter("light_yaw_deadband_rad", 0.05)
+        self._declare_parameter("light_pitch_deadband_rad", 0.04)
+        self._declare_parameter("light_roll_deadband_rad", 0.01)
+        self._declare_parameter("light_pitch_weight_factor", 0.2)
+        self._declare_parameter("light_roll_weight_factor", 0.0)
+        self._declare_parameter("light_pitch_max_rad", 0.35)
+        self._declare_parameter("light_pitch_damping_factor", 2.0)
+        self._declare_parameter("light_setpoint_smooth_alpha", 0.3)
+        self._declare_parameter("light_planar_norm_threshold", 0.01)
+        self._declare_parameter("light_yaw_change_limit_rad", 0.5)
+        self._declare_parameter("light_pitch_change_limit_rad", 0.15)
+        self._declare_parameter("light_roll_gain", 1.0)
+        self._declare_parameter("light_pitch_gain", 1.03)
+        self._declare_parameter("light_yaw_gain", 1.03)
 
     def _declare_parameter(self, name: str, default):
         try:
@@ -51,6 +68,19 @@ class CostCalculator:
         vector = np.array([msg.vector.x, msg.vector.y, msg.vector.z], dtype=float)
         norm = np.linalg.norm(vector)
         self.light_vector = vector / norm if norm > 0 else None
+        self.light_distance = float(norm) if norm > 0 else None
+
+    def _light_attenuation(self) -> float:
+        if self.light_distance is None:
+            return 1.0
+        try:
+            max_range = float(self.node.get_parameter("light_distance_attenuation_m").value)
+        except Exception:
+            max_range = 0.0
+        if max_range <= 0.0:
+            return 1.0
+        fac = 1.0 - min(self.light_distance, max_range) / max_range
+        return max(0.0, min(1.0, fac))
 
     def update_odometry(self, msg: Odometry):
         self.angular_velocity = np.array([
@@ -105,6 +135,42 @@ class CostCalculator:
         forward = np.array([r00, r10, r20], dtype=float)
         norm_f = np.linalg.norm(forward)
         return forward / norm_f if norm_f > 0 else None
+
+    def _quaternion_to_euler(self, quat: np.ndarray) -> Optional[np.ndarray]:
+        if quat is None or quat.shape[0] != 4:
+            return None
+        x, y, z, w = quat
+        norm = math.sqrt(x * x + y * y + z * z + w * w)
+        if norm == 0.0:
+            return None
+        x /= norm
+        y /= norm
+        z /= norm
+        w /= norm
+
+        # Roll (x-axis rotation)
+        t0 = +2.0 * (w * x + y * z)
+        t1 = +1.0 - 2.0 * (x * x + y * y)
+        roll = math.atan2(t0, t1)
+
+        # Pitch (y-axis rotation)
+        t2 = +2.0 * (w * y - z * x)
+        t2 = max(-1.0, min(1.0, t2))
+        pitch = math.asin(t2)
+
+        # Yaw (z-axis rotation)
+        t3 = +2.0 * (w * z + x * y)
+        t4 = +1.0 - 2.0 * (y * y + z * z)
+        yaw = math.atan2(t3, t4)
+
+        return np.array([roll, pitch, yaw], dtype=float)
+
+    def _angle_diff(self, target: float, current: float) -> float:
+        delta = target - current
+        return math.atan2(math.sin(delta), math.cos(delta))
+
+    def _deadband_error(self, error: float, deadband: float) -> float:
+        return max(0.0, abs(error) - deadband)
 
     def _update_center_depth(self):
         if self.depth_image is None:
@@ -248,13 +314,99 @@ class CostCalculator:
         depth_cost = (w_dist * J_dist) + (w_near * J_near) + (w_stab * J_stab)
 
         lighting_cost = 0.0
+        yaw_setpoint = 0.0
+        pitch_setpoint = 0.0
+        roll_setpoint = 0.0
+        yaw_error = 0.0
+        pitch_error = 0.0
+        roll_error = 0.0
+        actual_roll = 0.0
+        actual_pitch = 0.0
+        actual_yaw = 0.0
+        attenuation = self._light_attenuation()
+        w_light = float(self.node.get_parameter('w_light').value)
+        yaw_deadband = float(self.node.get_parameter("light_yaw_deadband_rad").value)
+        pitch_deadband = float(self.node.get_parameter("light_pitch_deadband_rad").value)
+        roll_deadband = float(self.node.get_parameter("light_roll_deadband_rad").value)
+        pitch_weight_factor = float(self.node.get_parameter("light_pitch_weight_factor").value)
+        roll_weight_factor = float(self.node.get_parameter("light_roll_weight_factor").value)
+        w_pitch = w_light * pitch_weight_factor
+        w_roll = w_light * roll_weight_factor
         if self.light_vector is not None:
-            forward = self._camera_forward_vector()
-            if forward is not None:
-                dot_val = float(np.clip(np.dot(forward, self.light_vector), -1.0, 1.0))
-                angle = math.acos(dot_val)
-                w_light = float(self.node.get_parameter('w_light').value)
-                lighting_cost = w_light * angle
+            target_dir = -self.light_vector.copy()
+            target_norm = np.linalg.norm(target_dir)
+            if target_norm > 1e-6:
+                target_dir /= target_norm
+            planar_norm = math.hypot(target_dir[0], target_dir[1])
+            planar_deadzone = float(self.node.get_parameter("light_planar_norm_threshold").value)
+            planar_deadzone = max(0.0, planar_deadzone)
+            if planar_norm >= planar_deadzone:
+                raw_yaw = math.atan2(target_dir[1], target_dir[0])
+            else:
+                raw_yaw = self._last_light_setpoint[2]
+            raw_pitch = math.atan2(-target_dir[2], planar_norm)
+            raw_roll = 0.0
+            alpha = float(self.node.get_parameter("light_setpoint_smooth_alpha").value)
+            alpha = np.clip(alpha, 0.0, 1.0)
+            roll_gain = float(self.node.get_parameter("light_roll_gain").value)
+            pitch_gain = float(self.node.get_parameter("light_pitch_gain").value)
+            yaw_gain = float(self.node.get_parameter("light_yaw_gain").value)
+            roll_gain = max(0.0, roll_gain)
+            pitch_gain = max(0.0, pitch_gain)
+            yaw_gain = max(0.0, yaw_gain)
+            raw_setpoints = np.array([
+                raw_roll * roll_gain,
+                raw_pitch * pitch_gain,
+                raw_yaw * yaw_gain
+            ], dtype=float)
+            smooth_setpoints = alpha * self._last_light_setpoint + (1.0 - alpha) * raw_setpoints
+            yaw_limit = float(self.node.get_parameter("light_yaw_change_limit_rad").value)
+            yaw_limit = max(0.0, yaw_limit)
+            yaw_delta = self._angle_diff(smooth_setpoints[2], self._last_light_setpoint[2])
+            if yaw_delta > yaw_limit:
+                yaw_delta = yaw_limit
+            elif yaw_delta < -yaw_limit:
+                yaw_delta = -yaw_limit
+            smooth_setpoints[2] = self._last_light_setpoint[2] + yaw_delta
+            pitch_limit = float(self.node.get_parameter("light_pitch_change_limit_rad").value)
+            pitch_limit = max(0.0, pitch_limit)
+            pitch_delta = self._angle_diff(smooth_setpoints[1], self._last_light_setpoint[1])
+            if pitch_delta > pitch_limit:
+                pitch_delta = pitch_limit
+            elif pitch_delta < -pitch_limit:
+                pitch_delta = -pitch_limit
+            smooth_setpoints[1] = self._last_light_setpoint[1] + pitch_delta
+            roll_setpoint, pitch_setpoint, yaw_setpoint = smooth_setpoints
+            self._last_light_setpoint = smooth_setpoints
+            max_pitch = float(self.node.get_parameter("light_pitch_max_rad").value)
+            pitch_setpoint = float(np.clip(pitch_setpoint, -abs(max_pitch), abs(max_pitch)))
+            accel_factor = float(self.node.get_parameter("light_pitch_damping_factor").value)
+            ang_vel_norm = float(np.linalg.norm(self.angular_velocity)) if self.angular_velocity is not None else 0.0
+            damping = 1.0 / (1.0 + accel_factor * ang_vel_norm)
+            pitch_setpoint *= damping
+            current_euler = self._quaternion_to_euler(self.orientation) if self.orientation is not None else None
+            if current_euler is not None:
+                roll_val, pitch_val, yaw_val = current_euler
+                actual_roll = roll_val
+                actual_pitch = pitch_val
+                actual_yaw = yaw_val
+                yaw_error = self._angle_diff(yaw_setpoint, yaw_val)
+                pitch_error = self._angle_diff(pitch_setpoint, pitch_val)
+                roll_error = self._angle_diff(roll_setpoint, roll_val)
+                yaw_error_cost = self._deadband_error(yaw_error, yaw_deadband)
+                pitch_error_cost = self._deadband_error(pitch_error, pitch_deadband)
+                roll_error_cost = self._deadband_error(roll_error, roll_deadband)
+                lighting_cost = attenuation * (
+                    w_light * yaw_error_cost
+                    + w_pitch * pitch_error_cost
+                    + w_roll * roll_error_cost
+                )
+            else:
+                forward = self._camera_forward_vector()
+                if forward is not None:
+                    dot_val = float(np.clip(np.dot(forward, self.light_vector), -1.0, 1.0))
+                    angle = math.acos(dot_val)
+                    lighting_cost = w_light * (math.pi - angle) * attenuation
 
         smoothness_cost = 0.0
         if self.angular_velocity is not None:
@@ -274,6 +426,15 @@ class CostCalculator:
             'lighting_cost': float(lighting_cost),
             'smoothness_cost': float(smoothness_cost),
             'total_cost': float(total_cost),
+            'yaw_setpoint': float(yaw_setpoint),
+            'pitch_setpoint': float(pitch_setpoint),
+            'roll_setpoint': float(roll_setpoint),
+            'yaw_error': float(yaw_error),
+            'pitch_error': float(pitch_error),
+            'roll_error': float(roll_error),
+            'actual_yaw': float(actual_yaw),
+            'actual_pitch': float(actual_pitch),
+            'actual_roll': float(actual_roll),
         }
     
     def estimate_cost_at_position(self, drone_x: float, drone_y: float, drone_z: float, 
@@ -378,6 +539,7 @@ class CostCalculator:
                 j_stab = (distance - prev_distance) ** 2
 
         depth_cost = (w_dist * j_dist) + (w_near * j_near) + (w_stab * j_stab)
+        attenuation = self._light_attenuation()
 
         desired_forward = np.array([dx, dy, dz], dtype=float) / float(distance)
 
@@ -386,7 +548,7 @@ class CostCalculator:
             dot_val = float(np.clip(np.dot(desired_forward, self.light_vector), -1.0, 1.0))
             angle = math.acos(dot_val)
             w_light = float(self.node.get_parameter("w_light").value)
-            lighting_cost = w_light * float(angle)
+            lighting_cost = w_light * float(math.pi - angle) * attenuation
 
         smoothness_cost = 0.0
         framing_cost = 0.0

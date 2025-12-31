@@ -3794,7 +3794,7 @@ Visualization Manager:
       Color: 204; 41; 204
       Enabled: true
       History Length: 1
-      Name: PointStamped
+      Name: FocusObject
       Radius: 0.20000000298023224
       Topic:
         Depth: 5
@@ -3806,7 +3806,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: MarkerArray
+      Name: Anchors
       Namespaces:
         cinematography_anchors: true
       Topic:
@@ -3817,28 +3817,44 @@ Visualization Manager:
         Value: /cinematography/anchor_markers
       Value: true
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
-      Name: MarkerArray
+      Enabled: false
+      Name: ComputationalDebug
       Namespaces:
-        active_labels: true
-        active_path: true
-        active_targets: true
-        arc_anchors: true
-        arc_labels: true
-        arc_path: true
-        arc_waypoints: true
-        combined_path: true
-        distance_errors: true
-        static_path: true
-        target_sphere: true
-        transition_in: true
-        transition_out: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /cinematography/debug_markers
+      Value: false
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: FramingArc
+      Namespaces:
+        focus_vector: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /cinematography/focus_vector
+      Value: true
+    - Alpha: 1
+      Class: rviz_default_plugins/PointStamped
+      Color: 204; 41; 204
+      Enabled: true
+      History Length: 1
+      Name: LightPoint
+      Radius: 0.20000000298023224
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /cinematography/light_point
       Value: true
   Enabled: true
   Global Options:
@@ -3886,25 +3902,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 5.357248306274414
+      Distance: 5.8817644119262695
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -13.243943214416504
-        Y: -0.1084795668721199
-        Z: 6.080155372619629
+        X: -12.26721477508545
+        Y: 1.028718113899231
+        Z: 5.149843215942383
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.219796061515808
+      Pitch: 1.1497961282730103
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.697122573852539
+      Yaw: 5.5521240234375
     Saved: ~
 Window Geometry:
   Displays:
