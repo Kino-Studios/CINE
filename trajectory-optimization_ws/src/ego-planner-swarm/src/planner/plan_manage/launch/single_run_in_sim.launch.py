@@ -80,7 +80,24 @@ def generate_launch_description():
     target_distance_tol_m = LaunchConfiguration('target_distance_tol_m', default=constraints.TARGET_DISTANCE_TOL_M)
     target_distance_gate_m = LaunchConfiguration('target_distance_gate_m', default=constraints.TARGET_DISTANCE_GATE_M)
     yawdot_max = LaunchConfiguration('yawdot_max', default=constraints.YAWDOT_MAX)
-    light_avoid_gain = LaunchConfiguration('light_avoid_gain', default=2.0)
+    light_avoid_gain = LaunchConfiguration('light_avoid_gain', default=constraints.LIGHT_AVOID_GAIN)
+    light_influence_distance_m = LaunchConfiguration('light_influence_distance_m', default=constraints.LIGHT_INFLUENCE_DISTANCE_M)
+    light_avoid_speed_threshold = LaunchConfiguration(
+        'light_avoid_speed_threshold', default=constraints.LIGHT_AVOID_SPEED_THRESHOLD_MPS)
+    light_avoid_blend_base = LaunchConfiguration('light_avoid_blend_base', default=constraints.LIGHT_AVOID_BLEND_BASE)
+    light_avoid_max_blend = LaunchConfiguration('light_avoid_max_blend', default=constraints.LIGHT_AVOID_MAX_BLEND)
+    light_avoid_transition_s = LaunchConfiguration(
+        'light_avoid_transition_s', default=constraints.LIGHT_AVOID_TRANSITION_S)
+    light_cooldown_after_framing_s = LaunchConfiguration(
+        'light_cooldown_after_framing_s', default=constraints.LIGHT_COOLDOWN_AFTER_FRAMING_S)
+    light_distance_blend_gain = LaunchConfiguration(
+        'light_distance_blend_gain', default=constraints.LIGHT_DISTANCE_BLEND_GAIN)
+    light_rotation_damping = LaunchConfiguration(
+        'light_rotation_damping', default=constraints.LIGHT_ROTATION_DAMPING)
+    light_yaw_smooth_alpha = LaunchConfiguration(
+        'light_yaw_smooth_alpha', default=constraints.LIGHT_YAW_SMOOTH_ALPHA)
+    light_disable_near_finish_s = LaunchConfiguration(
+        'light_disable_near_finish_s', default=constraints.LIGHT_DISABLE_NEAR_FINISH_S)
     use_target_yaw = LaunchConfiguration('use_target_yaw', default=str(constraints.USE_TARGET_YAW).lower())
     use_light_avoid_yaw = LaunchConfiguration('use_light_avoid_yaw', default='true')
     debug_light_yaw = LaunchConfiguration('debug_light_yaw', default='true')
@@ -99,6 +116,16 @@ def generate_launch_description():
     target_distance_gate_m_cmd = DeclareLaunchArgument('target_distance_gate_m', default_value=target_distance_gate_m, description='Framing distance gate')
     yawdot_max_cmd = DeclareLaunchArgument('yawdot_max', default_value=yawdot_max, description='Max yaw rate in rad/s')
     light_avoid_gain_cmd = DeclareLaunchArgument('light_avoid_gain', default_value=light_avoid_gain, description='Light avoidance yaw blend')
+    light_influence_distance_m_cmd = DeclareLaunchArgument('light_influence_distance_m', default_value=light_influence_distance_m, description='Light avoidance influence radius')
+    light_avoid_speed_threshold_cmd = DeclareLaunchArgument('light_avoid_speed_threshold', default_value=light_avoid_speed_threshold, description='Speed below which light avoidance can run')
+    light_avoid_blend_base_cmd = DeclareLaunchArgument('light_avoid_blend_base', default_value=light_avoid_blend_base, description='Minor blend floor for light yaw')
+    light_avoid_max_blend_cmd = DeclareLaunchArgument('light_avoid_max_blend', default_value=light_avoid_max_blend, description='Maximum blend factor for light yaw')
+    light_avoid_transition_s_cmd = DeclareLaunchArgument('light_avoid_transition_s', default_value=light_avoid_transition_s, description='Time to ramp light avoidance after framing')
+    light_cooldown_after_framing_s_cmd = DeclareLaunchArgument('light_cooldown_after_framing_s', default_value=light_cooldown_after_framing_s, description='Cooldown after framing before light avoidance engages')
+    light_distance_blend_gain_cmd = DeclareLaunchArgument('light_distance_blend_gain', default_value=light_distance_blend_gain, description='Closer range blend boost')
+    light_rotation_damping_cmd = DeclareLaunchArgument('light_rotation_damping', default_value=light_rotation_damping, description='Damping factor applied to light yaw change')
+    light_yaw_smooth_alpha_cmd = DeclareLaunchArgument('light_yaw_smooth_alpha', default_value=light_yaw_smooth_alpha, description='Low-pass alpha applied to light yaw output')
+    light_disable_near_finish_s_cmd = DeclareLaunchArgument('light_disable_near_finish_s', default_value=light_disable_near_finish_s, description='Disable light rotation when near trajectory end')
     use_target_yaw_cmd = DeclareLaunchArgument('use_target_yaw', default_value=use_target_yaw, description='Use target-facing yaw during framing')
     use_light_avoid_yaw_cmd = DeclareLaunchArgument('use_light_avoid_yaw', default_value=use_light_avoid_yaw, description='Enable light avoidance yaw during framing')
     debug_light_yaw_cmd = DeclareLaunchArgument('debug_light_yaw', default_value=debug_light_yaw, description='Log light/yaw debug info')
@@ -230,6 +257,16 @@ def generate_launch_description():
             {'traj_server/target_distance_gate_m': target_distance_gate_m},
             {'traj_server/yawdot_max': yawdot_max},
             {'traj_server/light_avoid_gain': light_avoid_gain},
+            {'traj_server/light_influence_distance_m': light_influence_distance_m},
+            {'traj_server/light_avoid_speed_threshold': light_avoid_speed_threshold},
+            {'traj_server/light_avoid_blend_base': light_avoid_blend_base},
+            {'traj_server/light_avoid_max_blend': light_avoid_max_blend},
+            {'traj_server/light_avoid_transition_s': light_avoid_transition_s},
+            {'traj_server/light_avoid_cooldown_after_framing_s': light_cooldown_after_framing_s},
+            {'traj_server/light_disable_near_finish_s': light_disable_near_finish_s},
+            {'traj_server/light_distance_blend_gain': light_distance_blend_gain},
+            {'traj_server/light_rotation_damping': light_rotation_damping},
+            {'traj_server/light_yaw_smooth_alpha': light_yaw_smooth_alpha},
             {'traj_server/use_target_yaw': use_target_yaw},
             {'traj_server/use_light_avoid_yaw': use_light_avoid_yaw},
             {'traj_server/debug_light_yaw': debug_light_yaw},

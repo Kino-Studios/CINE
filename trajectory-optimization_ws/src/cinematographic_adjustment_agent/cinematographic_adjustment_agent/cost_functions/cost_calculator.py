@@ -47,8 +47,11 @@ class CostCalculator:
         self._declare_parameter("light_yaw_change_limit_rad", 0.5)
         self._declare_parameter("light_pitch_change_limit_rad", 0.15)
         self._declare_parameter("light_roll_gain", 1.0)
-        self._declare_parameter("light_pitch_gain", 1.03)
-        self._declare_parameter("light_yaw_gain", 1.03)
+        self._declare_parameter("light_pitch_gain", 0.3)
+        self._declare_parameter("light_yaw_gain", 2.5)
+        self._declare_parameter("light_distance_bias_m", 0.1)
+        self._declare_parameter("light_distance_gain", 1.5)
+        self._declare_parameter("light_cost_increase_when_close", True)
 
     def _declare_parameter(self, name: str, default):
         try:
@@ -79,7 +82,12 @@ class CostCalculator:
             max_range = 0.0
         if max_range <= 0.0:
             return 1.0
-        fac = 1.0 - min(self.light_distance, max_range) / max_range
+        normalized = min(self.light_distance, max_range) / max_range
+        favor_close = bool(self.node.get_parameter("light_cost_increase_when_close").value)
+        if favor_close:
+            fac = 1.0 - normalized
+        else:
+            fac = normalized
         return max(0.0, min(1.0, fac))
 
     def update_odometry(self, msg: Odometry):
@@ -406,7 +414,12 @@ class CostCalculator:
                 if forward is not None:
                     dot_val = float(np.clip(np.dot(forward, self.light_vector), -1.0, 1.0))
                     angle = math.acos(dot_val)
-                    lighting_cost = w_light * (math.pi - angle) * attenuation
+            distance_bias = float(self.node.get_parameter("light_distance_bias_m").value)
+            distance_bias = max(1e-3, distance_bias)
+            distance_gain = float(self.node.get_parameter("light_distance_gain").value)
+            distance_gain = max(0.0, distance_gain)
+            distance_factor = 1.0 / max(self.light_distance, distance_bias) if self.light_distance is not None else 1.0
+            lighting_cost = w_light * (math.pi - angle) * attenuation * (1.0 + distance_gain * distance_factor)
 
         smoothness_cost = 0.0
         if self.angular_velocity is not None:
