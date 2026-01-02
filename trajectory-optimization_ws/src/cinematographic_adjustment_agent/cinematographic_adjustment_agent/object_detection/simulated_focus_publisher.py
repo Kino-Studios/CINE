@@ -8,9 +8,9 @@ from rclpy.node import Node
 from std_msgs.msg import Float32
 
 
-class FakeFocusPublisher(Node):
+class SimulatedFocusPublisher(Node):
     def __init__(self):
-        super().__init__("fake_focus_publisher")
+        super().__init__("simulated_focus_publisher")
 
         self.frame_id = str(self.declare_parameter("frame_id", "world").value)
         self.publish_rate_hz = float(self.declare_parameter("publish_rate_hz", 10.0).value)
@@ -83,7 +83,7 @@ class FakeFocusPublisher(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = FakeFocusPublisher()
+    node = SimulatedFocusPublisher()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

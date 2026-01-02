@@ -33,8 +33,8 @@ setup(
             'cinematic_waypoint_generator = cinematographic_adjustment_agent.waypoint_automation.cinematic_waypoint_generator:main',
             'room_waypoint_sender = cinematographic_adjustment_agent.waypoint_automation.room_waypoint_sender:main',
             'simulated_object_detector = cinematographic_adjustment_agent.object_detection.simulated_object_detector:main',
-            'fake_focus_publisher = cinematographic_adjustment_agent.object_detection.fake_focus_publisher:main',
-            'fake_light_publisher = cinematographic_adjustment_agent.object_detection.fake_light_publisher:main',
+            'simulated_focus_publisher = cinematographic_adjustment_agent.object_detection.simulated_focus_publisher:main',
+            'simulated_light_publisher = cinematographic_adjustment_agent.object_detection.simulated_light_publisher:main',
         ],
     },
 )

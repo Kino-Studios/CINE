@@ -1,3 +1,16 @@
+import sys
+import os
+from pathlib import Path
+
+# Add repo root to sys.path to find 'configs'
+here = Path(__file__).resolve()
+for parent in [here] + list(here.parents):
+    if (parent / "configs").is_dir():
+        python_constants_path = parent / "configs" / "python-constants"
+        if str(python_constants_path) not in sys.path:
+            sys.path.insert(0, str(python_constants_path))
+        break
+
 import math
 from typing import Dict, Optional
 
@@ -5,7 +18,7 @@ import numpy as np
 from geometry_msgs.msg import PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 
-from ..config.constants import ROSParams, UserRequestedParams, ImageParams
+from constants import ROSParams, UserRequestedParams, ImageParams, CostParams, LightOrientationParams
 
 
 class CostCalculator:
@@ -25,26 +38,28 @@ class CostCalculator:
         self.ROSParams = ROSParams
         self.UserRequestedParams = UserRequestedParams
         self.ImageParams = ImageParams
+        self.CostParams = CostParams
+        self.LightOrientationParams = LightOrientationParams
         self._last_light_setpoint = np.array([0.0, 0.0, 0.0], dtype=float)
         self._declare_parameter("focus_object_id", UserRequestedParams.FOCUS_OBJECT_ID)
-        self._declare_parameter("huber_delta_px", 6.0)
-        self._declare_parameter("deadband_px", 4.0)
-        self._declare_parameter("w_framing", 0.056)
-        self._declare_parameter("w_dist", 4.0)
-        self._declare_parameter("w_near", 25.0)
-        self._declare_parameter("w_stab", 0.2)
-        self._declare_parameter("w_light", 1.0)
-        self._declare_parameter("w_smooth", 1.0)
-        self._declare_parameter("light_yaw_deadband_rad", 0.05)
-        self._declare_parameter("light_pitch_deadband_rad", 0.04)
-        self._declare_parameter("light_roll_deadband_rad", 0.01)
-        self._declare_parameter("light_pitch_weight_factor", 0.2)
-        self._declare_parameter("light_roll_weight_factor", 0.0)
-        self._declare_parameter("light_pitch_max_rad", 0.35)
-        self._declare_parameter("light_pitch_damping_factor", 2.0)
-        self._declare_parameter("light_setpoint_smooth_alpha", 0.3)
-        self._declare_parameter("light_planar_norm_threshold", 0.01)
-        self._declare_parameter("light_yaw_change_limit_rad", 0.5)
+        self._declare_parameter("huber_delta_px", CostParams.HUBER_DELTA_PX)
+        self._declare_parameter("deadband_px", CostParams.DEADBAND_PX)
+        self._declare_parameter("w_framing", CostParams.W_FRAMING)
+        self._declare_parameter("w_dist", CostParams.W_DIST)
+        self._declare_parameter("w_near", CostParams.W_NEAR)
+        self._declare_parameter("w_stab", CostParams.W_STAB)
+        self._declare_parameter("w_light", CostParams.W_LIGHT)
+        self._declare_parameter("w_smooth", CostParams.W_SMOOTH)
+        self._declare_parameter("light_yaw_deadband_rad", LightOrientationParams.YAW_DEADBAND_RAD)
+        self._declare_parameter("light_pitch_deadband_rad", LightOrientationParams.PITCH_DEADBAND_RAD)
+        self._declare_parameter("light_roll_deadband_rad", LightOrientationParams.ROLL_DEADBAND_RAD)
+        self._declare_parameter("light_pitch_weight_factor", LightOrientationParams.PITCH_WEIGHT_FACTOR)
+        self._declare_parameter("light_roll_weight_factor", LightOrientationParams.ROLL_WEIGHT_FACTOR)
+        self._declare_parameter("light_pitch_max_rad", LightOrientationParams.PITCH_MAX_RAD)
+        self._declare_parameter("light_pitch_damping_factor", LightOrientationParams.PITCH_DAMPING_FACTOR)
+        self._declare_parameter("light_setpoint_smooth_alpha", LightOrientationParams.SETPOINT_SMOOTH_ALPHA)
+        self._declare_parameter("light_planar_norm_threshold", LightOrientationParams.PLANAR_NORM_THRESHOLD)
+        self._declare_parameter("light_yaw_change_limit_rad", LightOrientationParams.YAW_CHANGE_LIMIT_RAD)
         self._declare_parameter("light_pitch_change_limit_rad", 0.15)
         self._declare_parameter("light_roll_gain", 1.0)
         self._declare_parameter("light_pitch_gain", 0.3)
@@ -65,7 +80,7 @@ class CostCalculator:
             h = float(self.node.get_parameter('image_height').value)
             return max(1.0, w), max(1.0, h)
         except Exception:
-            return float(getattr(self.ImageParams, "IMAGE_WIDTH", 1152)), float(getattr(self.ImageParams, "IMAGE_HEIGHT", 648))
+            return float(self.ImageParams.IMAGE_WIDTH), float(self.ImageParams.IMAGE_HEIGHT)
 
     def update_light_vector(self, msg: Vector3Stamped):
         vector = np.array([msg.vector.x, msg.vector.y, msg.vector.z], dtype=float)

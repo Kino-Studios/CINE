@@ -1,4 +1,16 @@
 import os
+import sys
+from pathlib import Path
+
+# Add repo root to sys.path to find 'configs'
+here = Path(__file__).resolve()
+for parent in [here] + list(here.parents):
+    if (parent / "configs").is_dir():
+        python_constants_path = parent / "configs" / "python-constants"
+        if str(python_constants_path) not in sys.path:
+            sys.path.insert(0, str(python_constants_path))
+        break
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
@@ -9,8 +21,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch.substitutions import PythonExpression
 from launch.conditions import IfCondition, UnlessCondition
 
-from cinematographic_adjustment_agent.config.constants import CinematicConstraints
-from cinematographic_adjustment_agent.config.planner_params import CinematographyParams
+from constants import CinematicConstraints, CinematographyParams
 
 def generate_launch_description():
     # 定义参数的 LaunchConfiguration
@@ -50,13 +61,13 @@ def generate_launch_description():
     use_cinematic_intent = LaunchConfiguration('use_cinematic_intent', default='true')
     use_cinematic_bspline_cmd = DeclareLaunchArgument('use_cinematic_bspline', default_value='true', description='Use cinematographic B-spline filter')
     use_cinematic_intent_cmd = DeclareLaunchArgument('use_cinematic_intent', default_value=use_cinematic_intent, description='Enable cinematographic intent node')
-    use_fake_light = LaunchConfiguration('use_fake_light', default='true')
-    fake_light_use_target_world = LaunchConfiguration('fake_light_use_target_world', default='true')
-    use_fake_light_cmd = DeclareLaunchArgument('use_fake_light', default_value=use_fake_light, description='Enable fake light vector publisher')
-    fake_light_use_target_world_cmd = DeclareLaunchArgument(
-        'fake_light_use_target_world',
-        default_value=fake_light_use_target_world,
-        description='Use /cinematography/target_world as the fake light source'
+    use_simulated_light = LaunchConfiguration('use_simulated_light', default='true')
+    simulated_light_use_target_world = LaunchConfiguration('simulated_light_use_target_world', default='true')
+    use_simulated_light_cmd = DeclareLaunchArgument('use_simulated_light', default_value=use_simulated_light, description='Enable simulated light vector publisher')
+    simulated_light_use_target_world_cmd = DeclareLaunchArgument(
+        'simulated_light_use_target_world',
+        default_value=simulated_light_use_target_world,
+        description='Use /cinematography/target_world as the simulated light source'
     )
 
     use_distinctive_trajs = LaunchConfiguration('use_distinctive_trajs', default='false')
@@ -66,7 +77,7 @@ def generate_launch_description():
         description='Enable multi-trajectory search'
     )
 
-    params = CinematographyParams.from_env()
+    params = CinematographyParams()
     constraints = CinematicConstraints()
     default_max_vel = LaunchConfiguration('default_max_vel', default=constraints.DEFAULT_MAX_VELOCITY_MPS)
     default_max_acc = LaunchConfiguration('default_max_acc', default=constraints.DEFAULT_MAX_ACCEL_MPS2)
@@ -184,7 +195,6 @@ def generate_launch_description():
         condition = IfCondition(use_mockamap)
     )
     
-    # Include advanced parameters
     advanced_param_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('ego_planner'), 'launch', 'advanced_param.launch.py')),
@@ -232,7 +242,6 @@ def generate_launch_description():
         }.items()
     )
     
-    # Trajectory server node
     traj_server_node = Node(
         package='ego_planner',
         executable='traj_server',
@@ -329,24 +338,23 @@ def generate_launch_description():
         ],
     )
 
-    fake_light_node = Node(
+    simulated_light_node = Node(
         package="cinematographic_adjustment_agent",
-        executable="fake_light_publisher",
-        name="fake_light_publisher",
+        executable="simulated_light_publisher",
+        name="simulated_light_publisher",
         output="screen",
-        condition=IfCondition(use_fake_light),
+        condition=IfCondition(use_simulated_light),
         parameters=[
             {'frame_id': 'world'},
             {'use_odom': True},
             {'odom_topic': PythonExpression(["'/drone_' + str(", drone_id, ") + '_", odom_topic, "'"])},
-            {'use_target_world_as_source': fake_light_use_target_world},
+            {'use_target_world_as_source': simulated_light_use_target_world},
             {'light_source_relative_to_start': True},
             {'light_source_offset_xyz': [0.31, -1.625, 0.85]},
             {'publish_costs': True},
         ],
     )
     
-    # Include simulator 
     simulator_include = IncludeLaunchDescription(PythonLaunchDescriptionSource(
         os.path.join(get_package_share_directory('ego_planner'), 'launch', 'simulator.launch.py')),
         launch_arguments={
@@ -377,8 +385,8 @@ def generate_launch_description():
     ld.add_action(use_mockamap_cmd)
     ld.add_action(use_cinematic_bspline_cmd)
     ld.add_action(use_cinematic_intent_cmd)
-    ld.add_action(use_fake_light_cmd)
-    ld.add_action(fake_light_use_target_world_cmd)
+    ld.add_action(use_simulated_light_cmd)
+    ld.add_action(simulated_light_use_target_world_cmd)
     ld.add_action(use_distinctive_trajs_cmd)
     ld.add_action(default_max_vel_cmd)
     ld.add_action(default_max_acc_cmd)
@@ -404,7 +412,7 @@ def generate_launch_description():
     ld.add_action(advanced_param_include)
     ld.add_action(traj_server_node)
     ld.add_action(simulated_object_detector_node)
-    ld.add_action(fake_light_node)
+    ld.add_action(simulated_light_node)
     ld.add_action(cinematic_intent_node)
     ld.add_action(cinematic_bspline_filter_node)
     ld.add_action(simulator_include)

@@ -1,3 +1,16 @@
+import sys
+import os
+from pathlib import Path
+
+# Add repo root to sys.path to find 'configs'
+here = Path(__file__).resolve()
+for parent in [here] + list(here.parents):
+    if (parent / "configs").is_dir():
+        python_constants_path = parent / "configs" / "python-constants"
+        if str(python_constants_path) not in sys.path:
+            sys.path.insert(0, str(python_constants_path))
+        break
+
 import math
 from typing import Optional
 
@@ -6,7 +19,7 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 
-from ..config.constants import Constraints
+from constants import Constraints
 
 
 class TrapezoidalProfile:

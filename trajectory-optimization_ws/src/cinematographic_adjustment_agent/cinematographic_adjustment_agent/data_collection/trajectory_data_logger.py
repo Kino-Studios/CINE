@@ -12,7 +12,16 @@ from datetime import datetime
 import signal
 import sys
 
-from ..config.constants import CinematicConstraints
+# Add repo root to sys.path to find 'configs'
+here = Path(__file__).resolve()
+for parent in [here] + list(here.parents):
+    if (parent / "configs").is_dir():
+        python_constants_path = parent / "configs" / "python-constants"
+        if str(python_constants_path) not in sys.path:
+            sys.path.insert(0, str(python_constants_path))
+        break
+
+from constants import CinematicConstraints, SimulationParams
 
 
 class UniformBspline:
@@ -121,13 +130,13 @@ class TrajectoryDataLogger(Node):
             (p for p in Path(__file__).resolve().parents if p.name == "trajectory-optimization_ws"),
             Path.cwd(),
         )
-        default_dir = workspace_root / "trajectory_data"
-        output_dir = Path(os.environ.get("TRAJECTORY_DATA_DIR", default_dir))
+        default_dir = workspace_root / SimulationParams.TRAJECTORY_DATA_DIR
+        output_dir = Path(default_dir)
         output_dir.mkdir(exist_ok=True, parents=True)
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.output_dir = output_dir
 
-        drone_id = os.environ.get("DRONE_ID", "0")
+        drone_id = SimulationParams.DRONE_ID
         self.declare_parameter("baseline_bspline_topic", f"/drone_{drone_id}_planning/bspline")
         self.declare_parameter("cinematic_bspline_topic", f"/drone_{drone_id}_planning/cinematic_bspline")
         self.declare_parameter("odom_topic", f"/drone_{drone_id}_visual_slam/odom")

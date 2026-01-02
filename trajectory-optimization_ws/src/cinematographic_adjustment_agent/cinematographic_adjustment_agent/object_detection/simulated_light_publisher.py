@@ -6,9 +6,9 @@ from nav_msgs.msg import Odometry
 from rclpy.node import Node
 
 
-class FakeLightPublisher(Node):
+class SimulatedLightPublisher(Node):
     def __init__(self):
-        super().__init__("fake_light_publisher")
+        super().__init__("simulated_light_publisher")
 
         self.frame_id = str(self.declare_parameter("frame_id", "world").value)
         self.publish_rate_hz = float(self.declare_parameter("publish_rate_hz", 10.0).value)
@@ -96,7 +96,7 @@ class FakeLightPublisher(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = FakeLightPublisher()
+    node = SimulatedLightPublisher()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

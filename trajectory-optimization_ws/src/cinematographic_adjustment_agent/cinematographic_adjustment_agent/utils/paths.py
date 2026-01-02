@@ -5,7 +5,7 @@ def repo_root_from(file_path: str, max_levels_up: int = 12) -> str:
     cur = os.path.abspath(os.path.dirname(file_path))
 
     for _ in range(int(max_levels_up)):
-        if os.path.isfile(os.path.join(cur, "configs", "user_params", "constants.py")):
+        if os.path.isdir(os.path.join(cur, "configs")):
             return cur
 
         if os.path.isdir(os.path.join(cur, "trajectory-optimization_ws")):

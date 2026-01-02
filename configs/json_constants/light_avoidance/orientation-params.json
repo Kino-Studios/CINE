@@ -1,0 +1,37 @@
+{
+  "light_avoidance": {
+    "light_avoid_gain": 2.5,
+    "light_influence_distance_m": 4.0,
+    "light_avoid_speed_threshold_mps": 3.0,
+    "light_avoid_blend_base": 0.05,
+    "light_avoid_max_blend": 0.25,
+    "light_avoid_transition_s": 6.0,
+    "light_cooldown_after_framing_s": 0.7,
+    "light_disable_near_finish_s": 0.1,
+    "light_distance_gain": 1.5,
+    "light_distance_blend_gain": 1.2,
+    "light_rotation_damping": 0.85,
+    "light_yaw_smooth_alpha": 0.7,
+    "light_distance_attenuation_m": 4.0,
+    "light_avoidance_enabled": true
+  },
+  "light_orientation_deadbands": {
+    "light_yaw_deadband_rad": 0.05,
+    "light_pitch_deadband_rad": 0.04,
+    "light_roll_deadband_rad": 0.01
+  },
+  "light_orientation_weights": {
+    "light_pitch_weight_factor": 0.2,
+    "light_roll_weight_factor": 0.0
+  },
+  "light_orientation_limits": {
+    "light_pitch_max_rad": 0.35,
+    "light_pitch_damping_factor": 2.0,
+    "light_yaw_change_limit_rad": 0.5
+  },
+  "light_smoothing": {
+    "light_setpoint_smooth_alpha": 0.3,
+    "light_planar_norm_threshold": 0.01
+  }
+}
+

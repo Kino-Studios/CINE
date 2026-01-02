@@ -1,0 +1,10 @@
+{
+  "camera_params": {
+    "camera_fx": 525.0,
+    "camera_fy": 525.0,
+    "camera_cx": 576.0,
+    "camera_cy": 324.0,
+    "image_width": 1152,
+    "image_height": 648
+  }
+}

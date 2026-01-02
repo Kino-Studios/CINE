@@ -1,0 +1,14 @@
+{
+  "cost_function_weights": {
+    "w_framing": 0.056,
+    "w_dist": 4.0,
+    "w_near": 25.0,
+    "w_stab": 0.2,
+    "w_light": 1.0,
+    "w_smooth": 1.0
+  },
+  "cost_function_parameters": {
+    "huber_delta_px": 6.0,
+    "deadband_px": 4.0
+  }
+}

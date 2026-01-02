@@ -29,31 +29,26 @@ fi
 rm -rf /tmp/cyclonedds* ~/.local/share/cyclonedds* 2>/dev/null
 sleep 2
 
-export TRAJECTORY_DATA_DIR="${REPO_ROOT}/trajectory_data"
-export DRONE_ID="${DRONE_ID:-0}"
+GET_CONFIG="python3 ${REPO_ROOT}/configs/python-constants/get_config.py"
+
+DRONE_ID=$($GET_CONFIG DRONE_ID)
+TRAJECTORY_DATA_DIR="${REPO_ROOT}/$($GET_CONFIG TRAJECTORY_DATA_DIR)"
 
 ODOM_TOPIC="/drone_${DRONE_ID}_visual_slam/odom"
 BASELINE_TOPIC="/drone_${DRONE_ID}_planning/bspline"
 CINEMATIC_TOPIC="/drone_${DRONE_ID}_planning/cinematic_bspline"
 
-# Optional local config file (edit this instead of setting env vars / CLI).
-# Example:
-#   USE_FAKE_FOCUS=1
-#   USE_FAKE_LIGHT=1
-#   DRONE_ID=0
-#   ODOM_TOPIC=/drone_0_visual_slam/odom
 CONFIG_FILE="${SCRIPT_DIR}/collect_constrained_data.env"
+
 if [ -f "${CONFIG_FILE}" ]; then
-  # shellcheck disable=SC1090
   source "${CONFIG_FILE}"
 fi
 
-# Defaults (can be overridden by env vars or by collect_constrained_data.env)
-USE_FAKE_FOCUS="${USE_FAKE_FOCUS:-1}"
-USE_FAKE_LIGHT="${USE_FAKE_LIGHT:-1}"
-TARGET_OFFSET_XYZ="${TARGET_OFFSET_XYZ:-[2.34,4.35,1.35]}"
-FOCUS_DEPTH_M="${FOCUS_DEPTH_M:-1.5}"
-FRAME_ID="${FRAME_ID:-world}"
+USE_SIMULATED_FOCUS="${USE_SIMULATED_FOCUS:-$($GET_CONFIG USE_SIMULATED_FOCUS)}"
+USE_SIMULATED_LIGHT="${USE_SIMULATED_LIGHT:-$($GET_CONFIG USE_SIMULATED_LIGHT)}"
+TARGET_XYZ="${TARGET_XYZ:-$($GET_CONFIG TARGET_XYZ)}"
+FOCUS_DEPTH_M="${FOCUS_DEPTH_M:-$($GET_CONFIG FOCUS_DEPTH_M)}"
+FRAME_ID="${FRAME_ID:-$($GET_CONFIG FRAME_ID)}"
 
 SIM_PID=""
 TAIL_PID=""
@@ -62,8 +57,8 @@ LOGGER_PID=""
 WAYPOINT_PID=""
 DETECTOR_PID=""
 COSTS_PID=""
-FAKE_FOCUS_PID=""
-FAKE_LIGHT_PID=""
+SIMULATED_FOCUS_PID=""
+SIMULATED_LIGHT_PID=""
 
 if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
   "${SCRIPT_DIR}/start_simulation.sh" constrained > /tmp/ego_planner_constrained.log 2>&1 &
@@ -94,14 +89,14 @@ ros2 run cinematographic_adjustment_agent cinematic_bspline_filter &
 FILTER_PID=$!
 sleep 2
 
-if [ "${USE_FAKE_FOCUS}" = "1" ]; then
-  ros2 run cinematographic_adjustment_agent fake_focus_publisher --ros-args \
+if [ "${USE_SIMULATED_FOCUS}" = "1" ]; then
+  ros2 run cinematographic_adjustment_agent simulated_focus_publisher --ros-args \
     -p odom_topic:=${ODOM_TOPIC} \
     -p frame_id:=${FRAME_ID} \
-    -p target_offset_xyz:="${TARGET_OFFSET_XYZ}" \
-    -p target_xyz:="${TARGET_OFFSET_XYZ}" \
+    -p target_offset_xyz:="${TARGET_XYZ}" \
+    -p target_xyz:="${TARGET_XYZ}" \
     -p focus_depth_m:=${FOCUS_DEPTH_M} &
-  FAKE_FOCUS_PID=$!
+  SIMULATED_FOCUS_PID=$!
   sleep 2
 else
   ros2 run cinematographic_adjustment_agent simulated_object_detector &
@@ -115,10 +110,10 @@ else
   sleep 2
 fi
 
-if [ "${USE_FAKE_LIGHT}" = "1" ]; then
-  ros2 run cinematographic_adjustment_agent fake_light_publisher --ros-args \
+if [ "${USE_SIMULATED_LIGHT}" = "1" ]; then
+  ros2 run cinematographic_adjustment_agent simulated_light_publisher --ros-args \
     -p frame_id:=map &
-  FAKE_LIGHT_PID=$!
+  SIMULATED_LIGHT_PID=$!
   sleep 1
 fi
 
@@ -134,6 +129,6 @@ ros2 run cinematographic_adjustment_agent cinematic_waypoint_generator --ros-arg
   -p frame_id:=${FRAME_ID} &
 WAYPOINT_PID=$!
 
-trap 'echo ""; echo "stopping data collection."; for pid in "${LOGGER_PID:-}" "${WAYPOINT_PID:-}" "${FILTER_PID:-}" "${FAKE_FOCUS_PID:-}" "${FAKE_LIGHT_PID:-}" "${COSTS_PID:-}" "${DETECTOR_PID:-}" "${TAIL_PID:-}" "${SIM_PID:-}"; do if [ -n "${pid}" ]; then kill "${pid}" 2>/dev/null || true; fi; done; exit 0' INT TERM
+trap 'echo ""; echo "stopping data collection."; for pid in "${LOGGER_PID:-}" "${WAYPOINT_PID:-}" "${FILTER_PID:-}" "${SIMULATED_FOCUS_PID:-}" "${SIMULATED_LIGHT_PID:-}" "${COSTS_PID:-}" "${DETECTOR_PID:-}" "${TAIL_PID:-}" "${SIM_PID:-}"; do if [ -n "${pid}" ]; then kill "${pid}" 2>/dev/null || true; fi; done; exit 0' INT TERM
 
 wait

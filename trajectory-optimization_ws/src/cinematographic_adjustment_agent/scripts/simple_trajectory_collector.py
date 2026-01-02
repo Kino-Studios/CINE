@@ -6,7 +6,20 @@ from typing import List, Tuple
 from pathlib import Path
 from datetime import datetime
 
-from cinematographic_adjustment_agent.config.constants import CinematicConstraints
+import sys
+import os
+from pathlib import Path
+
+# Add repo root to sys.path to find 'configs'
+here = Path(__file__).resolve()
+for parent in [here] + list(here.parents):
+    if (parent / "configs").is_dir():
+        python_constants_path = parent / "configs" / "python-constants"
+        if str(python_constants_path) not in sys.path:
+            sys.path.insert(0, str(python_constants_path))
+        break
+
+from constants import CinematicConstraints
 class BSplineTrajectory:
     
     def __init__(self, control_points: np.ndarray, degree: int = 3):

@@ -47,8 +47,10 @@ fi
 rm -rf /tmp/cyclonedds* ~/.local/share/cyclonedds* 2>/dev/null
 sleep 2
 
-export TRAJECTORY_DATA_DIR="${REPO_ROOT}/trajectory_data"
-export DRONE_ID="${DRONE_ID:-0}"
+GET_CONFIG="python3 ${REPO_ROOT}/configs/python-constants/get_config.py"
+
+DRONE_ID=$($GET_CONFIG DRONE_ID)
+TRAJECTORY_DATA_DIR="${REPO_ROOT}/$($GET_CONFIG TRAJECTORY_DATA_DIR)"
 
 ODOM_TOPIC="/drone_${DRONE_ID}_visual_slam/odom"
 BASELINE_TOPIC="/drone_${DRONE_ID}_planning/bspline"

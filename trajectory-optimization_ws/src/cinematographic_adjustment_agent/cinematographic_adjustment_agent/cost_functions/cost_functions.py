@@ -1,3 +1,16 @@
+import sys
+import os
+from pathlib import Path
+
+# Add repo root to sys.path to find 'configs'
+here = Path(__file__).resolve()
+for parent in [here] + list(here.parents):
+    if (parent / "configs").is_dir():
+        python_constants_path = parent / "configs" / "python-constants"
+        if str(python_constants_path) not in sys.path:
+            sys.path.insert(0, str(python_constants_path))
+        break
+
 import rclpy
 from cinematography_msgs.msg import CinematographyCosts
 from geometry_msgs.msg import PointStamped, PolygonStamped, Vector3Stamped
@@ -6,30 +19,30 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32
 
-from ..config.planner_params import CinematographyParams
+from constants import CinematographyParams
 from .cost_calculator import CostCalculator
 
 
 class CostFunctionCalculatorNode(Node):
     def __init__(self):
         super().__init__("cost_function_calculator")
-        self.params = CinematographyParams.from_env()
+        self.params = CinematographyParams()
         self.cost_calculator = CostCalculator(self)
         self._last_odom: Odometry | None = None
         self.declare_parameter("frame_id", "map")
 
-        self.declare_parameter("image_width", self.params.image_width)
-        self.declare_parameter("image_height", self.params.image_height)
-        self.declare_parameter("camera_fx", self.params.camera_fx)
-        self.declare_parameter("camera_fy", self.params.camera_fy)
-        self.declare_parameter("camera_cx", self.params.camera_cx)
-        self.declare_parameter("camera_cy", self.params.camera_cy)
-        self.declare_parameter("depth_topic", self.params.depth_topic)
-        self.declare_parameter("center_topic", self.params.center_topic)
-        self.declare_parameter("bbox_topic", self.params.bbox_topic)
-        self.declare_parameter("dimensions_topic", self.params.dimensions_topic)
-        self.declare_parameter("odom_topic", self.params.odom_topic)
-        self.declare_parameter("light_vector_topic", self.params.light_vector_topic)
+        self.declare_parameter("image_width", self.params.IMAGE_WIDTH)
+        self.declare_parameter("image_height", self.params.IMAGE_HEIGHT)
+        self.declare_parameter("camera_fx", self.params.CAMERA_FX)
+        self.declare_parameter("camera_fy", self.params.CAMERA_FY)
+        self.declare_parameter("camera_cx", self.params.CAMERA_CX)
+        self.declare_parameter("camera_cy", self.params.CAMERA_CY)
+        self.declare_parameter("depth_topic", self.params.DEPTH_TOPIC)
+        self.declare_parameter("center_topic", self.params.CENTER_TOPIC)
+        self.declare_parameter("bbox_topic", self.params.BBOX_TOPIC)
+        self.declare_parameter("dimensions_topic", self.params.DIMENSIONS_TOPIC)
+        self.declare_parameter("odom_topic", self.params.ODOM_TOPIC)
+        self.declare_parameter("light_vector_topic", self.params.LIGHT_VECTOR_TOPIC)
         self.declare_parameter("publish_topic", "/cinematography/cinematography_costs")
         self.declare_parameter("publish_rate_hz", 10.0)
 

@@ -1,3 +1,16 @@
+import sys
+import os
+from pathlib import Path
+
+# Add repo root to sys.path to find 'configs'
+here = Path(__file__).resolve()
+for parent in [here] + list(here.parents):
+    if (parent / "configs").is_dir():
+        python_constants_path = parent / "configs" / "python-constants"
+        if str(python_constants_path) not in sys.path:
+            sys.path.insert(0, str(python_constants_path))
+        break
+
 import math
 
 import numpy as np
@@ -8,7 +21,7 @@ from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 
-from ..config.planner_params import CinematographyParams
+from constants import CinematographyParams
 
 
 def _quat_to_rot(q: np.ndarray) -> np.ndarray:
@@ -33,26 +46,26 @@ def _quat_to_rot(q: np.ndarray) -> np.ndarray:
 class LightVectorAnalysisNode(Node):
     def __init__(self):
         super().__init__("light_vector_analysis")
-        self.params = CinematographyParams.from_env()
+        self.params = CinematographyParams()
         self.bridge = CvBridge()
         self.has_odom = False
         self.drone_orientation = np.array([0.0, 0.0, 0.0, 1.0], dtype=float)
 
-        self.declare_parameter("image_topic", self.params.image_topic)
-        self.declare_parameter("odom_topic", self.params.odom_topic)
-        self.declare_parameter("light_vector_topic", self.params.light_vector_topic)
-        self.declare_parameter("camera_fx", self.params.camera_fx)
-        self.declare_parameter("camera_fy", self.params.camera_fy)
-        self.declare_parameter("camera_cx", self.params.camera_cx)
-        self.declare_parameter("camera_cy", self.params.camera_cy)
+        self.declare_parameter("image_topic", self.params.IMAGE_TOPIC)
+        self.declare_parameter("odom_topic", self.params.ODOM_TOPIC)
+        self.declare_parameter("light_vector_topic", self.params.LIGHT_VECTOR_TOPIC)
+        self.declare_parameter("camera_fx", self.params.CAMERA_FX)
+        self.declare_parameter("camera_fy", self.params.CAMERA_FY)
+        self.declare_parameter("camera_cx", self.params.CAMERA_CX)
+        self.declare_parameter("camera_cy", self.params.CAMERA_CY)
 
         self.image_topic = str(self.get_parameter("image_topic").value)
         self.odom_topic = str(self.get_parameter("odom_topic").value)
         self.light_vector_topic = str(self.get_parameter("light_vector_topic").value)
-        self.params.camera_fx = float(self.get_parameter("camera_fx").value)
-        self.params.camera_fy = float(self.get_parameter("camera_fy").value)
-        self.params.camera_cx = float(self.get_parameter("camera_cx").value)
-        self.params.camera_cy = float(self.get_parameter("camera_cy").value)
+        self.params.CAMERA_FX = float(self.get_parameter("camera_fx").value)
+        self.params.CAMERA_FY = float(self.get_parameter("camera_fy").value)
+        self.params.CAMERA_CX = float(self.get_parameter("camera_cx").value)
+        self.params.CAMERA_CY = float(self.get_parameter("camera_cy").value)
 
         self._image_sub = self.create_subscription(Image, self.image_topic, self.image_callback, 20)
         self._odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, 10)
@@ -96,8 +109,8 @@ class LightVectorAnalysisNode(Node):
 
         cam_vec = np.array(
             [
-                (float(u) - self.params.camera_cx) / max(1e-6, self.params.camera_fx),
-                (float(v) - self.params.camera_cy) / max(1e-6, self.params.camera_fy),
+                (float(u) - self.params.CAMERA_CX) / max(1e-6, self.params.CAMERA_FX),
+                (float(v) - self.params.CAMERA_CY) / max(1e-6, self.params.CAMERA_FY),
                 1.0,
             ],
             dtype=float,

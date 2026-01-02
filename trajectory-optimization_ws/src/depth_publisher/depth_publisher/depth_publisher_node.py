@@ -2,6 +2,15 @@ import sys
 import os
 from pathlib import Path
 
+# Add repo root to sys.path to find 'configs'
+here = Path(__file__).resolve()
+for parent in [here] + list(here.parents):
+    if (parent / "configs").is_dir():
+        python_constants_path = parent / "configs" / "python-constants"
+        if str(python_constants_path) not in sys.path:
+            sys.path.insert(0, str(python_constants_path))
+        break
+
 user_site = os.path.expanduser('~/.local/lib/python3.12/site-packages')
 if user_site in sys.path:
     sys.path.remove(user_site)
@@ -12,6 +21,7 @@ from sensor_msgs.msg import Image
 import cv2
 import numpy as np
 from cv_bridge import CvBridge
+from constants import DepthAnythingParams
 
 class DepthPublisherNode(Node):
     def __init__(self):
@@ -65,20 +75,24 @@ class DepthPublisherNode(Node):
             default_depth_anything = (repo_root / 'src' / 'Depth-Anything') if repo_root else None
             default_venv_site = (repo_root / 'venv' / 'lib' / py_ver / 'site-packages') if repo_root else None
 
-            depth_anything_path = configured_depth_anything or os.getenv('DEPTH_ANYTHING_PATH', '') or (
-                str(default_depth_anything) if default_depth_anything else ''
+            depth_anything_path = (
+                configured_depth_anything or 
+                DepthAnythingParams.DEPTH_ANYTHING_PATH or 
+                (str(default_depth_anything) if default_depth_anything else '')
             )
-            venv_site = configured_venv_site or os.getenv('DEPTH_ANYTHING_VENV_SITE', '') or (
-                str(default_venv_site) if default_venv_site else ''
+            venv_site = (
+                configured_venv_site or 
+                DepthAnythingParams.VENV_SITE_PATH or 
+                (str(default_venv_site) if default_venv_site else '')
             )
 
             if not depth_anything_path:
                 raise RuntimeError(
-                    "Depth-Anything path not set; provide ROS param `depth_anything_path` or env `DEPTH_ANYTHING_PATH`."
+                    "Depth-Anything path not set; provide ROS param `depth_anything_path` or set it in configs/json_constants/user_params/params.json."
                 )
             if not venv_site:
                 raise RuntimeError(
-                    "Venv site-packages path not set; provide ROS param `venv_site_path` or env `DEPTH_ANYTHING_VENV_SITE`."
+                    "Venv site-packages path not set; provide ROS param `venv_site_path` or set it in configs/json_constants/user_params/params.json."
                 )
             
             if venv_site not in sys.path:

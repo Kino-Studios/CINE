@@ -1,0 +1,36 @@
+{
+  "kinematic_constraints": {
+    "default_max_velocity_mps": 1.55,
+    "default_max_accel_mps2": 3.7,
+    "default_speed_scale": 0.8,
+    "vel_damping": 0.08,
+    "acc_damping": 0.05,
+    "min_dt": 0.05,
+    "max_velocity": 1.5,
+    "max_acceleration": 10.0
+  },
+  "yaw_constraints": {
+    "yawdot_max": 1.25,
+    "yaw_lpf_alpha": 0.85,
+    "use_target_yaw": true,
+    "always_face_target": true
+  },
+  "target_distance": {
+    "target_distance_m": 1.0,
+    "target_distance_tol_m": 0.05,
+    "target_distance_gate_m": 1.0
+  },
+  "bspline_filter": {
+    "cinematic_offset_m": 0.5,
+    "cinematic_smooth_alpha": 0.2,
+    "min_altitude_m": 0.2,
+    "max_altitude_m": 3.0,
+    "virtual_ceiling_m": 2.8,
+    "world_bounds_min": [-10.0, -10.0, 0.0],
+    "world_bounds_max": [10.0, 10.0, 2.8],
+    "focus_radius_m": -1.0,
+    "focus_radius_tolerance_m": 0.05,
+    "focus_altitude_m": -1.0
+  }
+}
+

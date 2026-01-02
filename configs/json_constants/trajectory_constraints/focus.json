@@ -1,0 +1,24 @@
+{
+  "focus_velocity_constraints": {
+    "focus_max_velocity_mps": 0.7,
+    "focus_max_accel_mps2": 2.5,
+    "focus_speed_scale": 0.7
+  },
+  "focus_yaw_constraints": {
+    "yawdot_max_framing": 0.6,
+    "yaw_lpf_alpha_framing": 0.9
+  },
+  "focus_distance": {
+    "desired_focus_distance_m": 1.0,
+    "focus_distance_min_m": 1.0,
+    "target_focus_distance_m": 1.0,
+    "min_focus_distance_m": 1.0
+  },
+  "focus_parameters": {
+    "focus_object_id": 2,
+    "thirds_anchor": [0.6666666666666666, 0.3333333333333333],
+    "thirds_strength": 0.6,
+    "thirds_use_nearest_anchor": true
+  }
+}
+

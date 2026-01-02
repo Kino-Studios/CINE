@@ -1,3 +1,16 @@
+import sys
+import os
+from pathlib import Path
+
+# Add repo root to sys.path to find 'configs'
+here = Path(__file__).resolve()
+for parent in [here] + list(here.parents):
+    if (parent / "configs").is_dir():
+        python_constants_path = parent / "configs" / "python-constants"
+        if str(python_constants_path) not in sys.path:
+            sys.path.insert(0, str(python_constants_path))
+        break
+
 import math
 from typing import List, Optional, Tuple
 
@@ -10,7 +23,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cinematography_msgs.msg import CinematographyCosts
 
-from ..config.planner_params import CinematographyParams
+from constants import CinematicConstraints, UserRequestedParams, WaypointParams, CinematographyParams
 from ..cost_functions.cost_calculator import CostCalculator
 from .state_tracker import StateTracker
 from .trajectory_planner import (
@@ -21,12 +34,11 @@ from .trajectory_planner import (
     clamp_depth_to_preference,
 )
 from ..setpoint_sender.waypoint_sender import WaypointPublisher
-from ..config.constants import CinematicConstraints
 
 class CinematographicPlannerNode(Node):
     def __init__(self):
         super().__init__("cinematographic_planner_node")
-        self.params = CinematographyParams.from_env()
+        self.params = CinematographyParams()
         self.constraints = CinematicConstraints()
         self.bridge = CvBridge()
         self.depth_image = None
@@ -40,56 +52,56 @@ class CinematographicPlannerNode(Node):
         
         self.cost_calculator = CostCalculator(self)
 
-        self.declare_parameter("target_focus_distance_m", self.params.target_focus_distance_m)
-        self.declare_parameter("min_focus_distance_m", self.params.min_focus_distance_m)
-        self.declare_parameter("constant_altitude_m", self.params.constant_altitude_m)
-        self.declare_parameter("orbit_radius_m", self.params.orbit_radius_m)
-        self.declare_parameter("angular_velocity_rps", self.params.angular_velocity_rps)
-        self.declare_parameter("look_duration_s", self.params.look_duration_s)
-        self.declare_parameter("waypoint_rate_hz", self.params.waypoint_rate_hz)
-        self.declare_parameter("num_initial_waypoints", self.params.num_initial_waypoints)
-        self.declare_parameter("image_width", self.params.image_width)
-        self.declare_parameter("image_height", self.params.image_height)
-        self.declare_parameter("camera_fx", self.params.camera_fx)
-        self.declare_parameter("camera_fy", self.params.camera_fy)
-        self.declare_parameter("camera_cx", self.params.camera_cx)
-        self.declare_parameter("camera_cy", self.params.camera_cy)
-        self.declare_parameter("waypoints_topic", self.params.waypoints_topic)
-        self.declare_parameter("odom_topic", self.params.odom_topic)
-        self.declare_parameter("depth_topic", self.params.depth_topic)
-        self.declare_parameter("center_topic", self.params.center_topic)
-        self.declare_parameter("bbox_topic", self.params.bbox_topic)
-        self.declare_parameter("dimensions_topic", self.params.dimensions_topic)
-        self.declare_parameter("light_vector_topic", self.params.light_vector_topic)
-        self.declare_parameter("thirds_strength", 0.6)
-        self.declare_parameter("thirds_use_nearest_anchor", True)
-        self.declare_parameter("candidate_angle_window_rad", 0.6)
-        self.declare_parameter("candidate_angle_samples", 7)
-        self.declare_parameter("candidate_radius_samples", 5)
-        self.declare_parameter("candidate_radius_range_m", [0.8, 2.0])
-        self.declare_parameter("max_waypoint_step_m", 0.5)
+        self.declare_parameter("target_focus_distance_m", self.params.TARGET_FOCUS_DISTANCE_M)
+        self.declare_parameter("min_focus_distance_m", self.params.MIN_FOCUS_DISTANCE_M)
+        self.declare_parameter("constant_altitude_m", self.params.CONSTANT_ALTITUDE_M)
+        self.declare_parameter("orbit_radius_m", self.params.ORBIT_RADIUS_M)
+        self.declare_parameter("angular_velocity_rps", self.params.ANGULAR_VELOCITY_RPS)
+        self.declare_parameter("look_duration_s", self.params.LOOK_DURATION_S)
+        self.declare_parameter("waypoint_rate_hz", self.params.WAYPOINT_RATE_HZ)
+        self.declare_parameter("num_initial_waypoints", self.params.NUM_INITIAL_WAYPOINTS)
+        self.declare_parameter("image_width", self.params.IMAGE_WIDTH)
+        self.declare_parameter("image_height", self.params.IMAGE_HEIGHT)
+        self.declare_parameter("camera_fx", self.params.CAMERA_FX)
+        self.declare_parameter("camera_fy", self.params.CAMERA_FY)
+        self.declare_parameter("camera_cx", self.params.CAMERA_CX)
+        self.declare_parameter("camera_cy", self.params.CAMERA_CY)
+        self.declare_parameter("waypoints_topic", self.params.WAYPOINTS_TOPIC)
+        self.declare_parameter("odom_topic", self.params.ODOM_TOPIC)
+        self.declare_parameter("depth_topic", self.params.DEPTH_TOPIC)
+        self.declare_parameter("center_topic", self.params.CENTER_TOPIC)
+        self.declare_parameter("bbox_topic", self.params.BBOX_TOPIC)
+        self.declare_parameter("dimensions_topic", self.params.DIMENSIONS_TOPIC)
+        self.declare_parameter("light_vector_topic", self.params.LIGHT_VECTOR_TOPIC)
+        self.declare_parameter("thirds_strength", UserRequestedParams.THIRDS_STRENGTH)
+        self.declare_parameter("thirds_use_nearest_anchor", UserRequestedParams.THIRDS_USE_NEAREST_ANCHOR)
+        self.declare_parameter("candidate_angle_window_rad", WaypointParams.CANDIDATE_ANGLE_WINDOW_RAD)
+        self.declare_parameter("candidate_angle_samples", WaypointParams.CANDIDATE_ANGLE_SAMPLES)
+        self.declare_parameter("candidate_radius_samples", WaypointParams.CANDIDATE_RADIUS_SAMPLES)
+        self.declare_parameter("candidate_radius_range_m", WaypointParams.CANDIDATE_RADIUS_RANGE_M)
+        self.declare_parameter("max_waypoint_step_m", WaypointParams.MAX_WAYPOINT_STEP_M)
 
-        self.params.target_focus_distance_m = float(self.get_parameter("target_focus_distance_m").value)
-        self.params.min_focus_distance_m = float(self.get_parameter("min_focus_distance_m").value)
-        self.params.constant_altitude_m = float(self.get_parameter("constant_altitude_m").value)
-        self.params.orbit_radius_m = float(self.get_parameter("orbit_radius_m").value)
-        self.params.angular_velocity_rps = float(self.get_parameter("angular_velocity_rps").value)
-        self.params.look_duration_s = float(self.get_parameter("look_duration_s").value)
-        self.params.waypoint_rate_hz = float(self.get_parameter("waypoint_rate_hz").value)
-        self.params.num_initial_waypoints = int(self.get_parameter("num_initial_waypoints").value)
-        self.params.image_width = int(self.get_parameter("image_width").value)
-        self.params.image_height = int(self.get_parameter("image_height").value)
-        self.params.camera_fx = float(self.get_parameter("camera_fx").value)
-        self.params.camera_fy = float(self.get_parameter("camera_fy").value)
-        self.params.camera_cx = float(self.get_parameter("camera_cx").value)
-        self.params.camera_cy = float(self.get_parameter("camera_cy").value)
-        self.params.waypoints_topic = str(self.get_parameter("waypoints_topic").value)
-        self.params.odom_topic = str(self.get_parameter("odom_topic").value)
-        self.params.depth_topic = str(self.get_parameter("depth_topic").value)
-        self.params.center_topic = str(self.get_parameter("center_topic").value)
-        self.params.bbox_topic = str(self.get_parameter("bbox_topic").value)
-        self.params.dimensions_topic = str(self.get_parameter("dimensions_topic").value)
-        self.params.light_vector_topic = str(self.get_parameter("light_vector_topic").value)
+        self.params.TARGET_FOCUS_DISTANCE_M = float(self.get_parameter("target_focus_distance_m").value)
+        self.params.MIN_FOCUS_DISTANCE_M = float(self.get_parameter("min_focus_distance_m").value)
+        self.params.CONSTANT_ALTITUDE_M = float(self.get_parameter("constant_altitude_m").value)
+        self.params.ORBIT_RADIUS_M = float(self.get_parameter("orbit_radius_m").value)
+        self.params.ANGULAR_VELOCITY_RPS = float(self.get_parameter("angular_velocity_rps").value)
+        self.params.LOOK_DURATION_S = float(self.get_parameter("look_duration_s").value)
+        self.params.WAYPOINT_RATE_HZ = float(self.get_parameter("waypoint_rate_hz").value)
+        self.params.NUM_INITIAL_WAYPOINTS = int(self.get_parameter("num_initial_waypoints").value)
+        self.params.IMAGE_WIDTH = int(self.get_parameter("image_width").value)
+        self.params.IMAGE_HEIGHT = int(self.get_parameter("image_height").value)
+        self.params.CAMERA_FX = float(self.get_parameter("camera_fx").value)
+        self.params.CAMERA_FY = float(self.get_parameter("camera_fy").value)
+        self.params.CAMERA_CX = float(self.get_parameter("camera_cx").value)
+        self.params.CAMERA_CY = float(self.get_parameter("camera_cy").value)
+        self.params.WAYPOINTS_TOPIC = str(self.get_parameter("waypoints_topic").value)
+        self.params.ODOM_TOPIC = str(self.get_parameter("odom_topic").value)
+        self.params.DEPTH_TOPIC = str(self.get_parameter("depth_topic").value)
+        self.params.CENTER_TOPIC = str(self.get_parameter("center_topic").value)
+        self.params.BBOX_TOPIC = str(self.get_parameter("bbox_topic").value)
+        self.params.DIMENSIONS_TOPIC = str(self.get_parameter("dimensions_topic").value)
+        self.params.LIGHT_VECTOR_TOPIC = str(self.get_parameter("light_vector_topic").value)
         self.thirds_strength = float(self.get_parameter("thirds_strength").value)
         self.thirds_use_nearest_anchor = bool(self.get_parameter("thirds_use_nearest_anchor").value)
         self.candidate_angle_window_rad = float(self.get_parameter("candidate_angle_window_rad").value)
@@ -99,48 +111,48 @@ class CinematographicPlannerNode(Node):
         self.max_waypoint_step_m = float(self.get_parameter("max_waypoint_step_m").value)
 
         self.tracker = StateTracker(
-            look_duration_s=self.params.look_duration_s,
+            look_duration_s=self.params.LOOK_DURATION_S,
             depth_window_size=15
         )
 
         self.center_sub = self.create_subscription(
             PolygonStamped,
-            self.params.center_topic,
+            self.params.CENTER_TOPIC,
             self.center_callback,
             10,
         )
 
         self.depth_sub = self.create_subscription(
             Image,
-            self.params.depth_topic,
+            self.params.DEPTH_TOPIC,
             self.depth_callback,
             10,
         )
 
         self.bounding_box_sub = self.create_subscription(
             PolygonStamped,
-            self.params.bbox_topic,
+            self.params.BBOX_TOPIC,
             self.bounding_box_callback,
             10,
         )
 
         self.dimensions_sub = self.create_subscription(
             PolygonStamped,
-            self.params.dimensions_topic,
+            self.params.DIMENSIONS_TOPIC,
             self.dimensions_callback,
             10,
         )
         
         self.odom_sub = self.create_subscription(
             Odometry,
-            self.params.odom_topic,
+            self.params.ODOM_TOPIC,
             self.odom_callback,
             10,
         )
 
         self.light_vector_sub = self.create_subscription(
             Vector3Stamped,
-            self.params.light_vector_topic,
+            self.params.LIGHT_VECTOR_TOPIC,
             self.light_vector_callback,
             10,
         )
@@ -151,7 +163,7 @@ class CinematographicPlannerNode(Node):
             10,
         )
 
-        self.waypoint_pub_node = WaypointPublisher(self, self.params.waypoints_topic)
+        self.waypoint_pub_node = WaypointPublisher(self, self.params.WAYPOINTS_TOPIC)
         
         self.use_cost_optimization = True
         self.optimization_frequency = 2.0 
@@ -159,7 +171,7 @@ class CinematographicPlannerNode(Node):
         self.optimized_center = None
         self.optimized_radius = None
 
-        self.timer = self.create_timer(1.0 / max(1.0, self.params.waypoint_rate_hz), self.tick)
+        self.timer = self.create_timer(1.0 / max(1.0, self.params.WAYPOINT_RATE_HZ), self.tick)
         self.phase_theta = 0.0
         self.last_tick_time_s = None
         self.smooth_pos = None
@@ -181,8 +193,8 @@ class CinematographicPlannerNode(Node):
             return uv
 
         u, v = int(uv[0]), int(uv[1])
-        w = int(max(1, self.params.image_width))
-        h = int(max(1, self.params.image_height))
+        w = int(max(1, self.params.IMAGE_WIDTH))
+        h = int(max(1, self.params.IMAGE_HEIGHT))
 
         anchors = [
             (w / 3.0, h / 3.0),
@@ -251,7 +263,7 @@ class CinematographicPlannerNode(Node):
         now_s = self.get_clock().now().nanoseconds / 1e9
         if self.last_tick_time_s is None:
             self.last_tick_time_s = now_s
-            return 1.0 / max(1.0, self.params.waypoint_rate_hz)
+            return 1.0 / max(1.0, self.params.WAYPOINT_RATE_HZ)
         dt = now_s - self.last_tick_time_s
         self.last_tick_time_s = now_s
         return float(max(1e-3, min(dt, 0.5)))
@@ -323,7 +335,7 @@ class CinematographicPlannerNode(Node):
                 reference_drone_z=float(self.drone_position[2]),
             )
 
-        self.phase_theta += 2.0 * math.pi * float(self.params.angular_velocity_rps) * dt
+        self.phase_theta += 2.0 * math.pi * float(self.params.ANGULAR_VELOCITY_RPS) * dt
 
         angle_samples = max(1, self.candidate_angle_samples)
         window = float(max(0.0, self.candidate_angle_window_rad))
@@ -372,8 +384,8 @@ class CinematographicPlannerNode(Node):
         
         preferred_depth = clamp_depth_to_preference(
             smoothed_depth,
-            self.params.target_focus_distance_m,
-            self.params.min_focus_distance_m,
+            self.params.TARGET_FOCUS_DISTANCE_M,
+            self.params.MIN_FOCUS_DISTANCE_M,
         )
 
         u, v = self.center_uv
@@ -381,10 +393,10 @@ class CinematographicPlannerNode(Node):
             u,
             v,
             preferred_depth,
-            self.params.camera_fx,
-            self.params.camera_fy,
-            self.params.camera_cx,
-            self.params.camera_cy,
+            self.params.CAMERA_FX,
+            self.params.CAMERA_FY,
+            self.params.CAMERA_CX,
+            self.params.CAMERA_CY,
         )
         
         return x_cam, y_cam, preferred_depth
@@ -414,7 +426,7 @@ class CinematographicPlannerNode(Node):
             radius = self.optimized_radius
         else:
             center_xy = (tx, ty)
-            radius = self.params.orbit_radius_m
+            radius = self.params.ORBIT_RADIUS_M
         
         def cost_function(x: float, y: float, z: float) -> Optional[float]:
             return self.cost_calculator.estimate_full_cost_at_position(
@@ -429,16 +441,16 @@ class CinematographicPlannerNode(Node):
                 reference_drone_z=float(self.drone_position[2]),
             )
         
-        z = self.params.constant_altitude_m
+        z = self.params.CONSTANT_ALTITUDE_M
         
         if self.use_cost_optimization:
             try:
                 orbit = generate_cost_optimized_orbit_waypoints(
                     center_xy_m=center_xy,
                     initial_radius_m=radius,
-                    angular_velocity_rps=self.params.angular_velocity_rps,
-                    duration_s=float(self.params.num_initial_waypoints) / self.params.waypoint_rate_hz,
-                    waypoint_rate_hz=self.params.waypoint_rate_hz,
+                    angular_velocity_rps=self.params.ANGULAR_VELOCITY_RPS,
+                    duration_s=float(self.params.NUM_INITIAL_WAYPOINTS) / self.params.WAYPOINT_RATE_HZ,
+                    waypoint_rate_hz=self.params.WAYPOINT_RATE_HZ,
                     altitude_m=z,
                     cost_function=cost_function,
                     num_radius_samples=5,
@@ -451,9 +463,9 @@ class CinematographicPlannerNode(Node):
         orbit = generate_orbit_waypoints_xy(
             center_xy_m=center_xy,
             radius_m=radius,
-            angular_velocity_rps=self.params.angular_velocity_rps,
-            duration_s=float(self.params.num_initial_waypoints) / self.params.waypoint_rate_hz,
-            waypoint_rate_hz=self.params.waypoint_rate_hz,
+            angular_velocity_rps=self.params.ANGULAR_VELOCITY_RPS,
+            duration_s=float(self.params.NUM_INITIAL_WAYPOINTS) / self.params.WAYPOINT_RATE_HZ,
+            waypoint_rate_hz=self.params.WAYPOINT_RATE_HZ,
             altitude_m=z,
         )
         
@@ -507,8 +519,8 @@ class CinematographicPlannerNode(Node):
                     initial_center = (tx, ty)
                     optimized_center, optimized_radius = optimize_orbit_center_and_radius(
                         initial_center_xy=initial_center,
-                        initial_radius=self.params.orbit_radius_m,
-                        altitude_m=self.params.constant_altitude_m,
+                        initial_radius=self.params.ORBIT_RADIUS_M,
+                        altitude_m=self.params.CONSTANT_ALTITUDE_M,
                         cost_function=cost_function,
                         search_radius=0.5,
                         num_samples=9,
@@ -534,12 +546,12 @@ class CinematographicPlannerNode(Node):
             radius = float(self.optimized_radius)
         else:
             center_xy = (tx, ty)
-            radius = float(self.params.orbit_radius_m)
+            radius = float(self.params.ORBIT_RADIUS_M)
 
         desired = self._select_next_waypoint(
             center_xy=center_xy,
             radius_m=radius,
-            altitude_m=float(self.params.constant_altitude_m),
+            altitude_m=float(self.params.CONSTANT_ALTITUDE_M),
             target_world=target_world,
             dt=dt,
         )

@@ -1,3 +1,16 @@
+import sys
+import os
+from pathlib import Path
+
+# Add repo root to sys.path to find 'configs'
+here = Path(__file__).resolve()
+for parent in [here] + list(here.parents):
+    if (parent / "configs").is_dir():
+        python_constants_path = parent / "configs" / "python-constants"
+        if str(python_constants_path) not in sys.path:
+            sys.path.insert(0, str(python_constants_path))
+        break
+
 import math
 
 import numpy as np
@@ -9,48 +22,47 @@ from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from traj_utils.msg import Bspline
 
-from ..config.planner_params import CinematographyParams
-from ..config.constants import UserRequestedParams, CinematicConstraints
+from constants import UserRequestedParams, CinematicConstraints, BsplineFilterParams, CinematographyParams
 from .bspline_utils import msg_to_arrays, arrays_to_msg
 
 
 class CinematicBsplineFilter(Node):
     def __init__(self):
         super().__init__("cinematic_bspline_filter")
-        self.params = CinematographyParams.from_env()
+        self.params = CinematographyParams()
         self.constraints = CinematicConstraints()
         self.light_vector = None
         self.latest_costs = {}
         self.has_focus = False
 
-        self.declare_parameter("bspline_in_topic", self.params.bspline_in_topic)
-        self.declare_parameter("bspline_out_topic", self.params.bspline_out_topic)
-        self.declare_parameter("cinematic_offset_m", self.params.cinematic_offset_m)
-        self.declare_parameter("cinematic_smooth_alpha", self.params.cinematic_smooth_alpha)
-        self.declare_parameter("min_altitude_m", self.params.min_altitude_m)
-        self.declare_parameter("focus_radius_m", -1.0)
-        self.declare_parameter("focus_radius_tolerance_m", 0.05)
-        self.declare_parameter("focus_altitude_m", float("nan"))
+        self.declare_parameter("bspline_in_topic", self.params.BSPLINE_IN_TOPIC)
+        self.declare_parameter("bspline_out_topic", self.params.BSPLINE_OUT_TOPIC)
+        self.declare_parameter("cinematic_offset_m", self.params.CINEMATIC_OFFSET_M)
+        self.declare_parameter("cinematic_smooth_alpha", self.params.CINEMATIC_SMOOTH_ALPHA)
+        self.declare_parameter("min_altitude_m", self.params.MIN_ALTITUDE_M)
+        self.declare_parameter("focus_radius_m", BsplineFilterParams.FOCUS_RADIUS_M)
+        self.declare_parameter("focus_radius_tolerance_m", BsplineFilterParams.FOCUS_RADIUS_TOLERANCE_M)
+        self.declare_parameter("focus_altitude_m", BsplineFilterParams.FOCUS_ALTITUDE_M)
 
-        self.params.bspline_in_topic = str(self.get_parameter("bspline_in_topic").value)
-        self.params.bspline_out_topic = str(self.get_parameter("bspline_out_topic").value)
-        self.params.cinematic_offset_m = float(self.get_parameter("cinematic_offset_m").value)
-        self.params.cinematic_smooth_alpha = float(self.get_parameter("cinematic_smooth_alpha").value)
-        self.params.min_altitude_m = float(self.get_parameter("min_altitude_m").value)
+        self.params.BSPLINE_IN_TOPIC = str(self.get_parameter("bspline_in_topic").value)
+        self.params.BSPLINE_OUT_TOPIC = str(self.get_parameter("bspline_out_topic").value)
+        self.params.CINEMATIC_OFFSET_M = float(self.get_parameter("cinematic_offset_m").value)
+        self.params.CINEMATIC_SMOOTH_ALPHA = float(self.get_parameter("cinematic_smooth_alpha").value)
+        self.params.MIN_ALTITUDE_M = float(self.get_parameter("min_altitude_m").value)
         self.focus_radius_m = float(self.get_parameter("focus_radius_m").value)
         self.focus_radius_tolerance_m = float(self.get_parameter("focus_radius_tolerance_m").value)
         self.focus_altitude_m = float(self.get_parameter("focus_altitude_m").value)
 
         self.sub = self.create_subscription(
             Bspline,
-            self.params.bspline_in_topic,
+            self.params.BSPLINE_IN_TOPIC,
             self.bspline_callback,
             10,
         )
 
         self.light_sub = self.create_subscription(
             Vector3Stamped,
-            self.params.light_vector_topic,
+            self.params.LIGHT_VECTOR_TOPIC,
             self.light_callback,
             10,
         )
@@ -71,7 +83,7 @@ class CinematicBsplineFilter(Node):
 
         self.bbox_sub = self.create_subscription(
             PolygonStamped,
-            self.params.bbox_topic,
+            self.params.BBOX_TOPIC,
             self.bbox_callback,
             10,
         )
@@ -85,7 +97,7 @@ class CinematicBsplineFilter(Node):
 
         self.pub = self.create_publisher(
             Bspline,
-            self.params.bspline_out_topic,
+            self.params.BSPLINE_OUT_TOPIC,
             10,
         )
 
@@ -145,9 +157,9 @@ class CinematicBsplineFilter(Node):
         offset *= framing_scale
 
         pos_pts = pos_pts + offset
-        pos_pts[:, 2] = np.maximum(pos_pts[:, 2], self.params.min_altitude_m)
+        pos_pts[:, 2] = np.maximum(pos_pts[:, 2], self.params.MIN_ALTITUDE_M)
 
-        alpha = float(self.params.cinematic_smooth_alpha)
+        alpha = float(self.params.CINEMATIC_SMOOTH_ALPHA)
         alpha = min(
             0.9,
             alpha
@@ -225,7 +237,7 @@ class CinematicBsplineFilter(Node):
             if abs(dist - desired) <= tol * 2.0:
                 scale = desired / dist
                 out[i] = self.target_world + vec * scale
-                out[i, 2] = max(out[i, 2], self.params.min_altitude_m)
+                out[i, 2] = max(out[i, 2], self.params.MIN_ALTITUDE_M)
         return out
 
     def _enforce_focus_altitude(self, pos_pts: np.ndarray, focus_mask: np.ndarray | None = None) -> np.ndarray:
@@ -243,7 +255,7 @@ class CinematicBsplineFilter(Node):
             target_z = float(np.median(z_vals))
 
         out = pos_pts.copy()
-        out[focus_mask, 2] = max(target_z, self.params.min_altitude_m)
+        out[focus_mask, 2] = max(target_z, self.params.MIN_ALTITUDE_M)
         return out
 
     def _estimate_dt(self, knots: np.ndarray) -> float:

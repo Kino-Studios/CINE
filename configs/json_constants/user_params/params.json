@@ -1,0 +1,19 @@
+{
+  "simulation_params": {
+    "simulate_object": true,
+    "simulated_object_world_offset": [0.3, 0.6, 0.0],
+    "simulated_object_side_offset_m": 0.6,
+    "simulated_object_radius_m": 0.8,
+    "simulated_object_outward_offset_m": 1.0,
+    "drone_id": "0",
+    "trajectory_data_dir": "trajectory_data",
+    "use_simulated_focus": true,
+    "use_simulated_light": true,
+    "target_xyz": [2.34, 4.35, 1.35],
+    "focus_depth_m": 1.5
+  },
+  "depth_anything_params": {
+    "depth_anything_path": "",
+    "venv_site_path": ""
+  }
+}
