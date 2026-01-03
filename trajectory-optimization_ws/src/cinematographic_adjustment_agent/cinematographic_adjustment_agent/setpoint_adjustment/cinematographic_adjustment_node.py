@@ -73,6 +73,7 @@ class CinematographicPlannerNode(Node):
         self.declare_parameter("bbox_topic", self.params.BBOX_TOPIC)
         self.declare_parameter("dimensions_topic", self.params.DIMENSIONS_TOPIC)
         self.declare_parameter("light_vector_topic", self.params.LIGHT_VECTOR_TOPIC)
+        self.declare_parameter("image_topic", self.params.IMAGE_TOPIC)
         self.declare_parameter("thirds_strength", UserRequestedParams.THIRDS_STRENGTH)
         self.declare_parameter("thirds_use_nearest_anchor", UserRequestedParams.THIRDS_USE_NEAREST_ANCHOR)
         self.declare_parameter("candidate_angle_window_rad", WaypointParams.CANDIDATE_ANGLE_WINDOW_RAD)
@@ -102,6 +103,7 @@ class CinematographicPlannerNode(Node):
         self.params.BBOX_TOPIC = str(self.get_parameter("bbox_topic").value)
         self.params.DIMENSIONS_TOPIC = str(self.get_parameter("dimensions_topic").value)
         self.params.LIGHT_VECTOR_TOPIC = str(self.get_parameter("light_vector_topic").value)
+        self.params.IMAGE_TOPIC = str(self.get_parameter("image_topic").value)
         self.thirds_strength = float(self.get_parameter("thirds_strength").value)
         self.thirds_use_nearest_anchor = bool(self.get_parameter("thirds_use_nearest_anchor").value)
         self.candidate_angle_window_rad = float(self.get_parameter("candidate_angle_window_rad").value)
@@ -154,6 +156,13 @@ class CinematographicPlannerNode(Node):
             Vector3Stamped,
             self.params.LIGHT_VECTOR_TOPIC,
             self.light_vector_callback,
+            10,
+        )
+
+        self.image_sub = self.create_subscription(
+            Image,
+            self.params.IMAGE_TOPIC,
+            self.image_callback,
             10,
         )
 
@@ -241,6 +250,17 @@ class CinematographicPlannerNode(Node):
 
     def light_vector_callback(self, msg: Vector3Stamped):
         self.cost_calculator.update_light_vector(msg)
+    
+    def image_callback(self, msg: Image):
+        try:
+            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+            self.cost_calculator.update_bgr_image(cv_image)
+        except Exception:
+            try:
+                cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+                self.cost_calculator.update_bgr_image(cv_image)
+            except Exception as e:
+                self.get_logger().warn(f'Image callback error: {e}')
     
     def depth_callback(self, msg: Image):
         try:

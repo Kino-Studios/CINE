@@ -10,7 +10,8 @@
     "use_simulated_focus": true,
     "use_simulated_light": true,
     "target_xyz": [2.34, 4.35, 1.35],
-    "focus_depth_m": 1.5
+    "focus_depth_m": 1.5,
+    "epsilon": 1e-6
   },
   "depth_anything_params": {
     "depth_anything_path": "",

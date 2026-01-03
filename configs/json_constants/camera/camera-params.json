@@ -5,6 +5,7 @@
     "camera_cx": 576.0,
     "camera_cy": 324.0,
     "image_width": 1152,
-    "image_height": 648
+    "image_height": 648,
+    "max_pixel_value": 255.0
   }
 }

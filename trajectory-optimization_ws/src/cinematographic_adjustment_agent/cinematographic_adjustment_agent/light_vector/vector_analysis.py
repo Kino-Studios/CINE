@@ -23,7 +23,6 @@ from sensor_msgs.msg import Image
 
 from constants import CinematographyParams
 
-
 def _quat_to_rot(q: np.ndarray) -> np.ndarray:
     x, y, z, w = float(q[0]), float(q[1]), float(q[2]), float(q[3])
     n = math.sqrt(x * x + y * y + z * z + w * w)
@@ -41,7 +40,6 @@ def _quat_to_rot(q: np.ndarray) -> np.ndarray:
         ],
         dtype=float,
     )
-
 
 class LightVectorAnalysisNode(Node):
     def __init__(self):
@@ -81,6 +79,7 @@ class LightVectorAnalysisNode(Node):
             ],
             dtype=float,
         )
+
         self.has_odom = True
 
     def image_callback(self, msg: Image):
@@ -115,6 +114,7 @@ class LightVectorAnalysisNode(Node):
             ],
             dtype=float,
         )
+        
         cam_vec /= max(1e-12, float(np.linalg.norm(cam_vec)))
 
         rot = _quat_to_rot(self.drone_orientation)

@@ -9,6 +9,7 @@
     "light_vector_topic": "/cinematography/light_vector",
     "image_topic": "/camera_publisher/image_raw",
     "bspline_in_topic": "/drone_0_planning/bspline",
-    "bspline_out_topic": "/drone_0_planning/cinematic_bspline"
+    "bspline_out_topic": "/drone_0_planning/cinematic_bspline",
+    "qos_depth": 10
   }
 }
