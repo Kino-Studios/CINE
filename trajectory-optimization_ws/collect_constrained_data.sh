@@ -1,5 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
+: "${AMENT_TRACE_SETUP_FILES=}"
+: "${AMENT_PYTHON_EXECUTABLE:=python3}"
+: "${LD_LIBRARY_PATH=}"
+: "${COLCON_TRACE=}"
+: "${COLCON_PREFIX_PATH=}"
+
+PYTHON_BIN="$(command -v python3 || command -v python || true)"
+: "${COLCON_PYTHON_EXECUTABLE:=${PYTHON_BIN:-python3}}"
+
+export AMENT_TRACE_SETUP_FILES
+export AMENT_PYTHON_EXECUTABLE
+export LD_LIBRARY_PATH
+export COLCON_TRACE
+export COLCON_PREFIX_PATH
+export COLCON_PYTHON_EXECUTABLE
 
 export ROS_DOMAIN_ID=0
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
@@ -16,6 +31,11 @@ unset ROS_LOCALHOST_ONLY
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
+ROS_LOG_DIR="${REPO_ROOT}/ros_logs"
+mkdir -p "${ROS_LOG_DIR}"
+export ROS_LOG_DIR
+
+set +u
 source /opt/ros/jazzy/setup.bash
 if [ -f "${SCRIPT_DIR}/install/setup.bash" ]; then
   source "${SCRIPT_DIR}/install/setup.bash"
@@ -25,6 +45,7 @@ else
   echo "Could not find install/setup.bash under ${SCRIPT_DIR} or ${REPO_ROOT}" >&2
   exit 1
 fi
+set -u
 
 rm -rf /tmp/cyclonedds* ~/.local/share/cyclonedds* 2>/dev/null
 sleep 2
@@ -33,6 +54,10 @@ GET_CONFIG="python3 ${REPO_ROOT}/configs/python-constants/get_config.py"
 
 DRONE_ID=$($GET_CONFIG DRONE_ID)
 TRAJECTORY_DATA_DIR="${REPO_ROOT}/$($GET_CONFIG TRAJECTORY_DATA_DIR)"
+
+LOGGING_SEVERITY="${LOGGING_SEVERITY:-$($GET_CONFIG LOGGING_SEVERITY)}"
+LOGGING_SEVERITY="${LOGGING_SEVERITY:-DEBUG}"
+export RCUTILS_LOGGING_SEVERITY="${LOGGING_SEVERITY^^}"
 
 ODOM_TOPIC="/drone_${DRONE_ID}_visual_slam/odom"
 BASELINE_TOPIC="/drone_${DRONE_ID}_planning/bspline"
@@ -59,6 +84,26 @@ DETECTOR_PID=""
 COSTS_PID=""
 SIMULATED_FOCUS_PID=""
 SIMULATED_LIGHT_PID=""
+stop_collection() {
+  echo ""
+  echo "stopping data collection."
+  for pid in \
+    "${LOGGER_PID:-}" \
+    "${WAYPOINT_PID:-}" \
+    "${FILTER_PID:-}" \
+    "${SIMULATED_FOCUS_PID:-}" \
+    "${SIMULATED_LIGHT_PID:-}" \
+    "${COSTS_PID:-}" \
+    "${DETECTOR_PID:-}" \
+    "${TAIL_PID:-}" \
+    "${SIM_PID:-}"; do
+    if [ -n "${pid}" ]; then
+      kill "${pid}" 2>/dev/null || true
+    fi
+  done
+  exit 0
+}
+trap stop_collection INT TERM
 
 if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
   "${SCRIPT_DIR}/start_simulation.sh" constrained > /tmp/ego_planner_constrained.log 2>&1 &
@@ -128,7 +173,5 @@ ros2 run cinematographic_adjustment_agent cinematic_waypoint_generator --ros-arg
   -p odom_topic:=${ODOM_TOPIC} \
   -p frame_id:=${FRAME_ID} &
 WAYPOINT_PID=$!
-
-trap 'echo ""; echo "stopping data collection."; for pid in "${LOGGER_PID:-}" "${WAYPOINT_PID:-}" "${FILTER_PID:-}" "${SIMULATED_FOCUS_PID:-}" "${SIMULATED_LIGHT_PID:-}" "${COSTS_PID:-}" "${DETECTOR_PID:-}" "${TAIL_PID:-}" "${SIM_PID:-}"; do if [ -n "${pid}" ]; then kill "${pid}" 2>/dev/null || true; fi; done; exit 0' INT TERM
 
 wait

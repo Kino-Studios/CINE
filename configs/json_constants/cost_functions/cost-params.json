@@ -4,9 +4,9 @@
     "w_dist": 4.0,
     "w_near": 25.0,
     "w_stab": 0.2,
-    "w_light": 1.0,
+    "w_light": 0.4,
     "w_smooth": 1.0,
-    "w_saturation": 0.75
+    "w_saturation": 0.3
   },
   "cost_function_parameters": {
     "huber_delta_px": 6.0,
@@ -18,6 +18,11 @@
     "light_distance_gain": 1.0,
     "light_cost_increase_when_close": true,
     "roi_size": 40,
-    "large_penalty": 1000.0
+    "framing_vertical_weight": 0.75,
+    "large_penalty": 1000.0,
+    "include_lighting_in_position_cost": false,
+    "include_framing_in_position_cost": false,
+    "include_lighting_in_orientation_cost": true,
+    "include_framing_in_orientation_cost": true
   }
 }

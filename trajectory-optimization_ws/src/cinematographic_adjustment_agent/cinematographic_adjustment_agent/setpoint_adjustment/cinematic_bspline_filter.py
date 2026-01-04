@@ -141,34 +141,16 @@ class CinematicBsplineFilter(Node):
     def adjust_bspline(self, msg: Bspline) -> Bspline:
         pos_pts, knots = msg_to_arrays(msg)
 
-        framing_cost = self.latest_costs.get("framing_cost", 0.0)
         depth_cost = self.latest_costs.get("distance_cost", 0.0)
         smooth_cost = self.latest_costs.get("smoothness_cost", 0.0)
-        light_cost = self.latest_costs.get("light_cost", 0.0)
-        total_cost = self.latest_costs.get("total_cost", 0.0)
-
-        # Light should only affect yaw; disable any position offsets driven by light.
-        offset = np.zeros(3, dtype=float)
 
         depth_scale = np.tanh(depth_cost)
-        pos_pts[:, 2] += -0.05 * depth_scale
-
-        framing_scale = min(1.5, 1.0 + 0.1 * framing_cost + 0.05 * total_cost)
-        offset *= framing_scale
-
-        pos_pts = pos_pts + offset
-        pos_pts[:, 2] = np.maximum(pos_pts[:, 2], self.params.MIN_ALTITUDE_M)
 
         alpha = float(self.params.CINEMATIC_SMOOTH_ALPHA)
         alpha = min(
             0.9,
             alpha
-            * (
-                1.0
-                + 0.1 * framing_cost
-                + 0.05 * total_cost
-                + 0.05 * smooth_cost
-            ),
+            * (1.0 + 0.05 * smooth_cost),
         )
         
         if pos_pts.shape[0] > 2 and alpha > 0.0:
@@ -180,16 +162,46 @@ class CinematicBsplineFilter(Node):
         dt = self._estimate_dt(knots)
         focus_mask = self._compute_focus_mask(pos_pts)
         focus_ratio = float(np.mean(focus_mask)) if focus_mask is not None and focus_mask.size > 0 else 0.0
+        focus_mask_count = int(np.count_nonzero(focus_mask)) if focus_mask is not None else 0
         use_focus_limits = focus_ratio >= 0.15
         max_vel = self.constraints.FOCUS_MAX_VELOCITY_MPS if use_focus_limits else self.constraints.DEFAULT_MAX_VELOCITY_MPS
         max_acc = self.constraints.FOCUS_MAX_ACCEL_MPS2 if use_focus_limits else self.constraints.DEFAULT_MAX_ACCEL_MPS2
+        focus_vel_damping = max(0.0, min(1.0, float(self.constraints.FOCUS_VELOCITY_DAMPING)))
+        focus_acc_damping = max(0.0, min(1.0, float(self.constraints.FOCUS_ACCELERATION_DAMPING)))
+        if use_focus_limits:
+            max_vel = max_vel * focus_vel_damping
+            max_acc = max_acc * focus_acc_damping
         knots = self._time_scale_knots_for_limits(pos_pts, knots, dt, max_vel, max_acc, focus_mask=focus_mask)
         dt = self._estimate_dt(knots)
         pos_pts = self._enforce_velocity_acc_limits(pos_pts, dt, max_vel, max_acc, focus_mask=focus_mask)
 
         pos_pts = self.apply_mlp_adjustment(pos_pts)
         pos_pts = self._enforce_focus_radius(pos_pts, focus_mask=focus_mask)
-        pos_pts = self._enforce_focus_altitude(pos_pts, focus_mask=focus_mask)
+        if pos_pts.size:
+            z_stats = (
+                float(np.min(pos_pts[:, 2])),
+                float(np.mean(pos_pts[:, 2])),
+                float(np.max(pos_pts[:, 2])),
+            )
+        else:
+            z_stats = (0.0, 0.0, 0.0)
+        z_pre_stats = z_stats
+        z_post_stats = z_stats
+        self.get_logger().debug(
+            (
+                "CinematicBsplineFilter adjust: "
+                f"depth_cost={depth_cost:.3f} "
+                f"smooth_cost={smooth_cost:.3f} "
+                f"depth_scale={depth_scale:.3f} "
+                f"focus_ratio={focus_ratio:.3f} "
+                f"mask_count={focus_mask_count} "
+                f"use_focus_limits={use_focus_limits} "
+                f"max_vel={max_vel:.3f} "
+                f"max_acc={max_acc:.3f} "
+                f"z_pre=({z_pre_stats[0]:.3f},{z_pre_stats[1]:.3f},{z_pre_stats[2]:.3f}) "
+                f"z_post=({z_post_stats[0]:.3f},{z_post_stats[1]:.3f},{z_post_stats[2]:.3f})"
+            )
+        )
         return arrays_to_msg(msg, pos_pts, knots=knots)
 
     def apply_mlp_adjustment(self, pos_pts: np.ndarray) -> np.ndarray:
@@ -235,27 +247,20 @@ class CinematicBsplineFilter(Node):
             if not np.isfinite(dist) or dist < 1e-6:
                 continue
             if abs(dist - desired) <= tol * 2.0:
-                scale = desired / dist
-                out[i] = self.target_world + vec * scale
+                dz = vec[2]
+                horiz_vec = vec[:2]
+                horiz_norm = math.hypot(horiz_vec[0], horiz_vec[1])
+
+                target_horiz_sq = max(desired * desired - dz * dz, 0.0)
+                if horiz_norm < 1e-6 or target_horiz_sq <= 0.0:
+                    continue
+
+                horiz_scale = math.sqrt(target_horiz_sq) / horiz_norm
+                new_vec = vec.copy()
+                new_vec[:2] = horiz_vec * horiz_scale
+                out[i] = self.target_world + new_vec
                 out[i, 2] = max(out[i, 2], self.params.MIN_ALTITUDE_M)
-        return out
-
-    def _enforce_focus_altitude(self, pos_pts: np.ndarray, focus_mask: np.ndarray | None = None) -> np.ndarray:
-        if pos_pts is None:
-            return pos_pts
-        if focus_mask is None or focus_mask.size == 0:
-            return pos_pts
-
-        if math.isfinite(self.focus_altitude_m):
-            target_z = float(self.focus_altitude_m)
-        else:
-            z_vals = pos_pts[focus_mask, 2]
-            if z_vals.size == 0:
-                return pos_pts
-            target_z = float(np.median(z_vals))
-
-        out = pos_pts.copy()
-        out[focus_mask, 2] = max(target_z, self.params.MIN_ALTITUDE_M)
+                
         return out
 
     def _estimate_dt(self, knots: np.ndarray) -> float:

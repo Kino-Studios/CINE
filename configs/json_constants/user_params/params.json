@@ -7,10 +7,12 @@
     "simulated_object_outward_offset_m": 1.0,
     "drone_id": "0",
     "trajectory_data_dir": "trajectory_data",
+    "use_cinematic_bspline": true,
     "use_simulated_focus": true,
-    "use_simulated_light": true,
+    "use_simulated_light": false,
     "target_xyz": [2.34, 4.35, 1.35],
     "focus_depth_m": 1.5,
+    "logging_severity": "DEBUG",
     "epsilon": 1e-6
   },
   "depth_anything_params": {

@@ -3,6 +3,7 @@ import csv
 import os
 import rclpy
 import rclpy.time
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from traj_utils.msg import Bspline
 from nav_msgs.msg import Odometry
@@ -388,9 +389,8 @@ def main(args=None):
     def signal_handler(sig, frame):
         logger.get_logger().info('Received shutdown signal...')
         logger._save_on_exit(f"signal {sig}")
-        logger.destroy_node()
-        rclpy.shutdown()
-        sys.exit(0)
+        if rclpy.ok():
+            rclpy.shutdown()
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -400,10 +400,13 @@ def main(args=None):
     except KeyboardInterrupt:
         logger.get_logger().info('Shutting down...')
         logger._save_on_exit("KeyboardInterrupt")
+    except ExternalShutdownException:
+        logger.get_logger().info('External shutdown requested')
     finally:
         logger._save_on_exit("finalizer")
         logger.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

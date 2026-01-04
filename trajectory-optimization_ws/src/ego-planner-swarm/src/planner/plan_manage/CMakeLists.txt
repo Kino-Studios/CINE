@@ -16,6 +16,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(quadrotor_msgs REQUIRED)
+find_package(cinematography_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(plan_env REQUIRED)
@@ -77,7 +78,16 @@ ament_target_dependencies(traj_server
                           visualization_msgs geometry_msgs 
                           quadrotor_msgs plan_env 
                           path_searching bspline_opt 
-                          traj_utils cv_bridge pcl_conversions)
+                          traj_utils cv_bridge pcl_conversions 
+                          cinematography_msgs)
+
+set(CPP_CONSTANTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../configs/cpp-constants)
+set(CPP_CONSTANTS_SRC ${CPP_CONSTANTS_DIR}/constants.cpp)
+
+add_library(cpp_constants STATIC ${CPP_CONSTANTS_SRC})
+target_include_directories(cpp_constants PUBLIC ${CPP_CONSTANTS_DIR})
+target_include_directories(traj_server PRIVATE ${CPP_CONSTANTS_DIR})
+target_link_libraries(traj_server cpp_constants)
 
 # Install targets
 install(

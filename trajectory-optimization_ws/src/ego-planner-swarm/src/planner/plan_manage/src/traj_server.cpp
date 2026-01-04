@@ -9,6 +9,8 @@
 #include "std_msgs/msg/empty.hpp"
 #include "std_msgs/msg/float32.hpp"
 #include "visualization_msgs/msg/marker.hpp"
+#include "cinematography_msgs/msg/cinematography_costs.hpp"
+#include "constants.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -130,6 +132,7 @@ double vel_gain[3] = {0, 0, 0};
 using ego_planner::UniformBspline;
 
 static double last_speed_log_time_sec = -1.0;
+static double last_focus_log_time_sec = -1.0;
 
 static const rclcpp::Logger traj_logger = rclcpp::get_logger("traj_server");
 
@@ -147,26 +150,33 @@ static rclcpp::Time time_last_(0L, RCL_ROS_TIME);
 double scaled_time_ = 0.0;
 double last_s_dot_ = 1.0;
 
-double default_speed_scale_ = 0.8;
-double focus_speed_scale_ = 0.7;
-double default_max_vel_ = 1.55;
-double default_max_acc_ = 3.7;
-double focus_max_vel_ = 0.7;
-double focus_max_acc_ = 2.5;
-double target_dist_m_ = 1.0;
-double target_dist_tol_m_ = 0.05;
-double target_dist_gate_m_ = 1.0;
-double yawdot_max_ = 1.25;
-double yawdot_max_framing_ = 0.6;
-double yaw_lpf_alpha_ = 0.85;
-double yaw_lpf_alpha_framing_ = 0.9;
+namespace {
+const auto& kConfig = constants::Config::instance();
+}
+
+double default_speed_scale_ = kConfig.kinematic().default_speed_scale;
+double focus_speed_scale_ = kConfig.focusVelocity().focus_speed_scale;
+double default_max_vel_ = kConfig.kinematic().default_max_velocity_mps;
+double default_max_acc_ = kConfig.kinematic().default_max_accel_mps2;
+double focus_max_vel_ = kConfig.focusVelocity().focus_max_velocity_mps;
+double focus_max_acc_ = kConfig.focusVelocity().focus_max_accel_mps2;
+double target_dist_m_ = kConfig.targetDistance().target_distance_m;
+double target_dist_tol_m_ = kConfig.targetDistance().target_distance_tol_m;
+double target_dist_gate_m_ = kConfig.targetDistance().target_distance_gate_m;
+double yawdot_max_ = kConfig.yaw().yawdot_max;
+double yawdot_max_framing_ = kConfig.focusYaw().yawdot_max_framing;
+double yaw_lpf_alpha_ = kConfig.yaw().yaw_lpf_alpha;
+double yaw_lpf_alpha_framing_ = kConfig.focusYaw().yaw_lpf_alpha_framing;
 double yaw_tracking_smooth_alpha_ = 0.08;
-bool use_target_yaw_ = true;
-bool always_face_target_ = true;
+bool use_target_yaw_ = kConfig.yaw().use_target_yaw;
+bool always_face_target_ = kConfig.yaw().always_face_target;
 bool use_cinematic_ = true;
-double vel_damping_ = 0.08;
-double acc_damping_ = 0.05;
-double pitch_acc_smooth_alpha_ = 0.78;
+double vel_damping_ = kConfig.kinematic().vel_damping;
+double acc_damping_ = kConfig.kinematic().acc_damping;
+double pitch_acc_smooth_alpha_ = kConfig.kinematic().pitch_acc_smooth_alpha;
+static bool use_cinematic_yaw_ = true;
+static double cinematic_yaw_setpoint_ = 0.0;
+static bool cinematic_yaw_valid_ = false;
 
 Eigen::Vector3d last_vel_(Eigen::Vector3d::Zero());
 Eigen::Vector3d last_acc_(Eigen::Vector3d::Zero());
@@ -209,6 +219,14 @@ void lightVectorCallback(const geometry_msgs::msg::Vector3Stamped::SharedPtr msg
   light_vector_(2) = msg->vector.z;
   light_distance_ = light_vector_.norm();
   have_light_vector_ = light_distance_ > 1e-6;
+}
+
+void cinematographyCostsCallback(const cinematography_msgs::msg::CinematographyCosts::SharedPtr msg)
+{
+  if (!msg)
+    return;
+  cinematic_yaw_setpoint_ = msg->yaw_setpoint;
+  cinematic_yaw_valid_ = true;
 }
 
 void handleBsplineMsg(traj_utils::msg::Bspline::SharedPtr msg)
@@ -487,12 +505,14 @@ void cmdCallback()
 
   double dt = std::max(0.0, (time_now - time_last_).seconds());
   bool focus_active = false;
-  if (has_target_ && framing_active_)
+  double focus_distance_error = 0.0;
 
+  if (has_target_ && framing_active_)
   {
     double focus_time = std::max(0.0, std::min(traj_duration_, scaled_time_));
     Eigen::Vector3d pos_current = traj_[0].evaluateDeBoorT(focus_time);
     double dist = (pos_current - target_world_).norm();
+    focus_distance_error = dist - target_dist_m_;
     double gate = std::max(target_dist_gate_m_, target_dist_tol_m_);
     focus_active = fabs(dist - target_dist_m_) <= gate;
   }
@@ -631,6 +651,15 @@ void cmdCallback()
     double yawdot_smoothed = safe_dt > 1e-6 ? yaw_delta / safe_dt : 0.0;
     yaw_yawdot.first = smoothed_yaw;
     yaw_yawdot.second = yawdot_smoothed;
+    if (use_cinematic_yaw_ && cinematic_yaw_valid_)
+    {
+      double yaw_diff = shortestAngleDiff(last_yaw_, cinematic_yaw_setpoint_);
+      double yawdot_cost = safe_dt > 1e-6 ? yaw_diff / safe_dt : 0.0;
+      yawdot_cost = std::clamp(yawdot_cost, -yawdot_max_, yawdot_max_);
+      yaw_yawdot.first = cinematic_yaw_setpoint_;
+      yaw_yawdot.second = yawdot_cost;
+      cinematic_yaw_valid_ = false;
+    }
   }
   else
   {
@@ -688,6 +717,19 @@ void cmdCallback()
           focus_active ? "true" : "false",
           1.0,
           max_vel);
+    }
+    if (focus_active && (last_focus_log_time_sec < 0 || now_sec - last_focus_log_time_sec >= 1.0))
+    {
+      last_focus_log_time_sec = now_sec;
+      RCLCPP_INFO(
+          traj_logger,
+          "[Traj server]: focus status pos_z=%.3f target_z=%.3f focus_err=%.3f target_dist=%.3f gate=%.3f framing=%s",
+          pos(2),
+          target_world_(2),
+          focus_distance_error,
+          target_dist_m_,
+          std::max(target_dist_gate_m_, target_dist_tol_m_),
+          framing_active_ ? "true" : "false");
     }
   }
 
@@ -769,6 +811,7 @@ int main(int argc, char **argv)
   node->declare_parameter("traj_server/yaw_tracking_smooth_alpha", yaw_tracking_smooth_alpha_);
   node->declare_parameter("traj_server/use_target_yaw", use_target_yaw_);
   node->declare_parameter("traj_server/always_face_target", always_face_target_);
+  node->declare_parameter("traj_server/use_cinematic_yaw", use_cinematic_yaw_);
   node->declare_parameter("traj_server/vel_damping", vel_damping_);
   node->declare_parameter("traj_server/acc_damping", acc_damping_);
   node->declare_parameter("traj_server/pitch_acc_smooth_alpha", pitch_acc_smooth_alpha_);
@@ -806,6 +849,7 @@ int main(int argc, char **argv)
   yaw_tracking_smooth_alpha_ = node->get_parameter("traj_server/yaw_tracking_smooth_alpha").as_double();
   use_target_yaw_ = node->get_parameter("traj_server/use_target_yaw").as_bool();
   always_face_target_ = node->get_parameter("traj_server/always_face_target").as_bool();
+  use_cinematic_yaw_ = node->get_parameter("traj_server/use_cinematic_yaw").as_bool();
   vel_damping_ = node->get_parameter("traj_server/vel_damping").as_double();
   acc_damping_ = node->get_parameter("traj_server/acc_damping").as_double();
   pitch_acc_smooth_alpha_ = node->get_parameter("traj_server/pitch_acc_smooth_alpha").as_double();
@@ -872,6 +916,12 @@ int main(int argc, char **argv)
       10,
       lightVectorCallback);
   (void)light_vector_sub;
+
+  auto cinematic_costs_sub = node->create_subscription<cinematography_msgs::msg::CinematographyCosts>(
+      "/cinematography/cinematography_costs",
+      10,
+      cinematographyCostsCallback);
+  (void)cinematic_costs_sub;
 
   auto cmd_timer = node->create_wall_timer(
       std::chrono::milliseconds(10),

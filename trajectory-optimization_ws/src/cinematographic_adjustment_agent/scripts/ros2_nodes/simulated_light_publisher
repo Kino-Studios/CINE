@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from cinematographic_adjustment_agent.object_detection.simulated_light_publisher import main
+
+if __name__ == '__main__':
+    main()

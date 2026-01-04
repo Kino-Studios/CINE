@@ -23,7 +23,13 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cinematography_msgs.msg import CinematographyCosts
 
-from constants import CinematicConstraints, UserRequestedParams, WaypointParams, CinematographyParams
+from constants import (
+    CinematicConstraints,
+    UserRequestedParams,
+    WaypointParams,
+    CinematographyParams,
+    LightAvoidanceParams,
+)
 from ..cost_functions.cost_calculator import CostCalculator
 from .state_tracker import StateTracker
 from .trajectory_planner import (
@@ -50,6 +56,12 @@ class CinematographicPlannerNode(Node):
         self.drone_orientation = np.array([0.0, 0.0, 0.0, 0.0])
         self.has_odom = False
         
+        self.light_avoidance_enabled = bool(
+            self.declare_parameter(
+                "light_avoidance_enabled", LightAvoidanceParams.ENABLED
+            ).value
+        )
+
         self.cost_calculator = CostCalculator(self)
 
         self.declare_parameter("target_focus_distance_m", self.params.TARGET_FOCUS_DISTANCE_M)
@@ -152,12 +164,15 @@ class CinematographicPlannerNode(Node):
             10,
         )
 
-        self.light_vector_sub = self.create_subscription(
-            Vector3Stamped,
-            self.params.LIGHT_VECTOR_TOPIC,
-            self.light_vector_callback,
-            10,
-        )
+        if self.light_avoidance_enabled:
+            self.light_vector_sub = self.create_subscription(
+                Vector3Stamped,
+                self.params.LIGHT_VECTOR_TOPIC,
+                self.light_vector_callback,
+                10,
+            )
+        else:
+            self.light_vector_sub = None
 
         self.image_sub = self.create_subscription(
             Image,
@@ -249,6 +264,8 @@ class CinematographicPlannerNode(Node):
         self.cost_calculator.update_odometry(msg)
 
     def light_vector_callback(self, msg: Vector3Stamped):
+        if not self.light_avoidance_enabled:
+            return
         self.cost_calculator.update_light_vector(msg)
     
     def image_callback(self, msg: Image):
@@ -343,7 +360,7 @@ class CinematographicPlannerNode(Node):
         tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
 
         def cost_function(x: float, y: float, z: float) -> Optional[float]:
-            return self.cost_calculator.estimate_full_cost_at_position(
+            return self.cost_calculator.estimate_position_cost_at_position(
                 x,
                 y,
                 z,
@@ -449,7 +466,7 @@ class CinematographicPlannerNode(Node):
             radius = self.params.ORBIT_RADIUS_M
         
         def cost_function(x: float, y: float, z: float) -> Optional[float]:
-            return self.cost_calculator.estimate_full_cost_at_position(
+            return self.cost_calculator.estimate_position_cost_at_position(
                 x,
                 y,
                 z,
@@ -523,7 +540,7 @@ class CinematographicPlannerNode(Node):
                 tx, ty, tz = target_world[0], target_world[1], target_world[2]
                 
                 def cost_function(x: float, y: float, z: float) -> Optional[float]:
-                    return self.cost_calculator.estimate_full_cost_at_position(
+                    return self.cost_calculator.estimate_position_cost_at_position(
                         x,
                         y,
                         z,

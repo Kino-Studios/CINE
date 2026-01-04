@@ -27,6 +27,9 @@ class CinematicConstraints:
     FOCUS_SPEED_SCALE: float = field(default_factory=lambda: config.get("focus", "focus_velocity_constraints", "focus_speed_scale"))
     YAWDOT_MAX_FRAMING: float = field(default_factory=lambda: config.get("focus", "focus_yaw_constraints", "yawdot_max_framing"))
     YAW_LPF_ALPHA_FRAMING: float = field(default_factory=lambda: config.get("focus", "focus_yaw_constraints", "yaw_lpf_alpha_framing"))
+    FOCUS_VELOCITY_DAMPING: float = field(default_factory=lambda: config.get("focus", "focus_damping", "focus_velocity_damping"))
+    FOCUS_ACCELERATION_DAMPING: float = field(default_factory=lambda: config.get("focus", "focus_damping", "focus_acceleration_damping"))
+    FOCUS_YAW_DAMPING: float = field(default_factory=lambda: config.get("focus", "focus_damping", "focus_yaw_damping"))
 
     # yaw and target constraints
     YAWDOT_MAX: float = field(default_factory=lambda: config.get("defaults", "yaw_constraints", "yawdot_max"))
@@ -87,7 +90,7 @@ class WaypointParams:
     # waypoint generation settings
     WAYPOINT_LOOKAHEAD = config.get("waypoints", "waypoint_generator_params", "waypoint_lookahead")
     DYNAMIC_WAYPOINT_LOOKAHEAD = config.get("waypoints", "waypoint_generator_params", "dynamic_waypoint_lookahead")
-    DISTANCE_THRESHOLD_M = config.get("waypoints", "waypoint_generator_params", "distance_threshold_m")
+    DISTANCE_THRESHOLD_M = config.get("waypoints", "waypoint_generator_params", "waypoint_radius_m")
     PROGRESS_TIMEOUT_S = config.get("waypoints", "waypoint_generator_params", "progress_timeout_s")
     MIN_GOAL_DISTANCE_M = config.get("waypoints", "waypoint_generator_params", "min_goal_distance_m")
     MIN_FIRST_WAYPOINT_DISTANCE_M = config.get("waypoints", "waypoint_generator_params", "min_first_waypoint_distance_m")
@@ -117,6 +120,7 @@ class WaypointParams:
     WAYPOINT_XY_SCALE = config.get("waypoints", "waypoint_generator_params", "waypoint_xy_scale")
     WAYPOINT_Y_EXTRA_SCALE = config.get("waypoints", "waypoint_generator_params", "waypoint_y_extra_scale")
     WAYPOINT_Z_SCALE = config.get("waypoints", "waypoint_generator_params", "waypoint_z_scale")
+    FOCUS_ENTRY_DECEL_WAYPOINTS = config.get("waypoints", "waypoint_generator_params", "focus_entry_decel_waypoints")
     
     # zed constraints
     ENABLE_Z_CLAMP = config.get("waypoints", "waypoint_generator_params", "enable_z_clamp")
@@ -156,11 +160,13 @@ class SimulationParams:
     SIMULATED_OBJECT_OUTWARD_OFFSET_M = config.get("params", "simulation_params", "simulated_object_outward_offset_m")
     DRONE_ID = config.get("params", "simulation_params", "drone_id")
     TRAJECTORY_DATA_DIR = config.get("params", "simulation_params", "trajectory_data_dir")
+    USE_CINEMATIC_BSPLINE = config.get("params", "simulation_params", "use_cinematic_bspline")
     USE_SIMULATED_FOCUS = config.get("params", "simulation_params", "use_simulated_focus")
     USE_SIMULATED_LIGHT = config.get("params", "simulation_params", "use_simulated_light")
     TARGET_XYZ = config.get("params", "simulation_params", "target_xyz")
     FOCUS_DEPTH_M = config.get("params", "simulation_params", "focus_depth_m")
     EPSILON = config.get("params", "simulation_params", "epsilon")
+    LOGGING_SEVERITY = config.get("params", "simulation_params", "logging_severity", "DEBUG")
 
 class DepthAnythingParams:
     DEPTH_ANYTHING_PATH = config.get("params", "depth_anything_params", "depth_anything_path")
@@ -187,6 +193,11 @@ class CostParams:
     LIGHT_COST_INCREASE_WHEN_CLOSE = config.get("costs", "cost_function_parameters", "light_cost_increase_when_close")
     ROI_SIZE = config.get("costs", "cost_function_parameters", "roi_size")
     LARGE_PENALTY = config.get("costs", "cost_function_parameters", "large_penalty")
+    INCLUDE_LIGHTING_IN_POSITION_COST = config.get("costs", "cost_function_parameters", "include_lighting_in_position_cost")
+    INCLUDE_FRAMING_IN_POSITION_COST = config.get("costs", "cost_function_parameters", "include_framing_in_position_cost")
+    INCLUDE_LIGHTING_IN_ORIENTATION_COST = config.get("costs", "cost_function_parameters", "include_lighting_in_orientation_cost")
+    INCLUDE_FRAMING_IN_ORIENTATION_COST = config.get("costs", "cost_function_parameters", "include_framing_in_orientation_cost")
+    FRAMING_VERTICAL_WEIGHT = config.get("costs", "cost_function_parameters", "framing_vertical_weight")
 
 class LightOrientationParams:
     # deadbands
@@ -210,6 +221,10 @@ class LightOrientationParams:
     # setpoint smoothing
     SETPOINT_SMOOTH_ALPHA = config.get("light", "light_smoothing", "light_setpoint_smooth_alpha")
     PLANAR_NORM_THRESHOLD = config.get("light", "light_smoothing", "light_planar_norm_threshold")
+
+
+class LightAvoidanceParams:
+    ENABLED = config.get("light", "light_avoidance", "light_avoidance_enabled")
 
 @dataclass
 class CinematographyParams:

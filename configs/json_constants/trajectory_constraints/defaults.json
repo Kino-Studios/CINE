@@ -1,13 +1,14 @@
 {
   "kinematic_constraints": {
-    "default_max_velocity_mps": 1.55,
-    "default_max_accel_mps2": 3.7,
+    "default_max_velocity_mps": 0.95,
+    "default_max_accel_mps2": 3.2,
     "default_speed_scale": 0.8,
-    "vel_damping": 0.08,
+    "vel_damping": 0.09,
+    "pitch_acc_smooth_alpha": 0.78,
     "acc_damping": 0.05,
     "min_dt": 0.05,
-    "max_velocity": 1.5,
-    "max_acceleration": 10.0
+    "max_velocity": 0.95,
+    "max_acceleration": 3.2
   },
   "yaw_constraints": {
     "yawdot_max": 1.25,
@@ -33,4 +34,3 @@
     "focus_altitude_m": -1.0
   }
 }
-

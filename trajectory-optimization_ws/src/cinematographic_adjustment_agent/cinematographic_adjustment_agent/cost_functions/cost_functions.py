@@ -19,7 +19,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32
 
-from constants import CinematographyParams
+from constants import CinematographyParams, LightAvoidanceParams
 from .cost_calculator import CostCalculator
 
 
@@ -27,6 +27,11 @@ class CostFunctionCalculatorNode(Node):
     def __init__(self):
         super().__init__("cost_function_calculator")
         self.params = CinematographyParams()
+        self.light_avoidance_enabled = bool(
+            self.declare_parameter(
+                "light_avoidance_enabled", LightAvoidanceParams.ENABLED
+            ).value
+        )
         self.cost_calculator = CostCalculator(self)
         self._last_odom: Odometry | None = None
         self.declare_parameter("frame_id", "map")
@@ -60,7 +65,12 @@ class CostFunctionCalculatorNode(Node):
         self._bbox_sub = self.create_subscription(PolygonStamped, bbox_topic, self._bbox_cb, 10)
         self._dims_sub = self.create_subscription(PolygonStamped, dimensions_topic, self._dims_cb, 10)
         self._odom_sub = self.create_subscription(Odometry, odom_topic, self._odom_cb, 10)
-        self._light_sub = self.create_subscription(Vector3Stamped, light_vector_topic, self._light_cb, 10)
+        if self.light_avoidance_enabled:
+            self._light_sub = self.create_subscription(
+                Vector3Stamped, light_vector_topic, self._light_cb, 10
+            )
+        else:
+            self._light_sub = None
 
         self._pub = self.create_publisher(CinematographyCosts, publish_topic, 10)
         self._focus_depth_pub = self.create_publisher(Float32, "/cinematography/focus_depth_m", 10)
