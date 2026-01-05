@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Point32, PolygonStamped
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Bool, Float32MultiArray
 from cv_bridge import CvBridge
 import numpy as np
 import cv2
@@ -31,15 +31,24 @@ class SimulatedObjectDetector(Node):
         self.declare_parameter('min_object_area', 500)
         self.declare_parameter('depth_threshold', 0.3)
         self.declare_parameter('max_detection_range', 10.0)
-        
+
         self.min_area = self.get_parameter('min_object_area').value
         self.depth_thresh = self.get_parameter('depth_threshold').value
         self.max_range = self.get_parameter('max_detection_range').value
-        
+        self._last_primary_detection = None
+        self._last_detection_time = None
+        self._framing_active = False
+
         self.depth_sub = self.create_subscription(
             Image,
             'depth/image_raw',
             self.depth_callback,
+            10
+        )
+        self._framing_sub = self.create_subscription(
+            Bool,
+            '/cinematography/framing_active',
+            self._framing_cb,
             10
         )
         
@@ -78,6 +87,8 @@ class SimulatedObjectDetector(Node):
             
             if detections:
                 self.publish_detections(detections)
+            else:
+                self._republish_cached_detection()
                 
         except Exception as e:
             self.get_logger().error(f'Error processing depth image: {e}')
@@ -156,7 +167,7 @@ class SimulatedObjectDetector(Node):
         
         return detections
     
-    def publish_detections(self, detections):
+    def publish_detections(self, detections, cache_last=True):
         msg = Float32MultiArray()
         
         data = [float(len(detections))]
@@ -177,7 +188,18 @@ class SimulatedObjectDetector(Node):
         self.detection_pub.publish(msg)
 
         primary = max(detections, key=lambda d: d.get('area_pixels', 0.0))
+        if cache_last:
+            self._last_primary_detection = dict(primary)
+            self._last_detection_time = self.get_clock().now()
         self._publish_polygons(primary)
+
+    def _republish_cached_detection(self):
+        if not self._framing_active or self._last_primary_detection is None:
+            return
+        self.publish_detections([self._last_primary_detection], cache_last=False)
+
+    def _framing_cb(self, msg: Bool):
+        self._framing_active = bool(msg.data)
 
     def _publish_polygons(self, det):
         now = self.get_clock().now().to_msg()

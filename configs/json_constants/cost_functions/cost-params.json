@@ -11,7 +11,7 @@
   "cost_function_parameters": {
     "huber_delta_px": 6.0,
     "deadband_px": 4.0,
-    "light_tau": 0.8,
+    "light_tau": 0.7,
     "light_saturation_threshold": 250,
     "light_distance_attenuation_m": 10.0,
     "light_distance_bias_m": 0.0,

@@ -226,6 +226,19 @@ class LightOrientationParams:
 class LightAvoidanceParams:
     ENABLED = config.get("light", "light_avoidance", "light_avoidance_enabled")
 
+
+class SensorNoiseParams:
+    ENABLE_SENSOR_NOISE = config.get("sensing", "sensor_noise", "enable_sensor_noise", False)
+    NOISY_ODOM_TOPIC = config.get("sensing", "sensor_noise", "noisy_odom_topic", "/odometry/noisy")
+    LINEAR_NOISE_STD_M = config.get("sensing", "sensor_noise", "linear_noise_std_m", 0.0005)
+    ANGULAR_NOISE_STD_RAD = config.get("sensing", "sensor_noise", "angular_noise_std_rad", 0.0003)
+    RAW_ODOM_TOPIC = config.get("topics", "topics", "odom_topic", "/odom_world")
+
+    @classmethod
+    def effective_odom_topic(cls) -> str:
+        return cls.NOISY_ODOM_TOPIC if cls.ENABLE_SENSOR_NOISE else cls.RAW_ODOM_TOPIC
+
+
 @dataclass
 class CinematographyParams:
     # focus params
@@ -250,7 +263,7 @@ class CinematographyParams:
     
     # topic strings
     WAYPOINTS_TOPIC: str = field(default_factory=lambda: config.get("topics", "topics", "waypoints_topic"))
-    ODOM_TOPIC: str = field(default_factory=lambda: config.get("topics", "topics", "odom_topic"))
+    ODOM_TOPIC: str = field(default_factory=lambda: SensorNoiseParams.effective_odom_topic())
     DEPTH_TOPIC: str = field(default_factory=lambda: config.get("topics", "topics", "depth_topic"))
     CENTER_TOPIC: str = field(default_factory=lambda: config.get("topics", "topics", "center_topic"))
     BBOX_TOPIC: str = field(default_factory=lambda: config.get("topics", "topics", "bbox_topic"))

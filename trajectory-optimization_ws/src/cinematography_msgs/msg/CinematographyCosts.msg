@@ -7,6 +7,7 @@ float32 distance_cost
 
 float32 total_cost
 float32 yaw_setpoint
+bool has_cinematic_yaw
 float32 pitch_setpoint
 float32 roll_setpoint
 float32 yaw_error

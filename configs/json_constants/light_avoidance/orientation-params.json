@@ -10,10 +10,25 @@
     "light_disable_near_finish_s": 0.1,
     "light_distance_gain": 1.5,
     "light_distance_blend_gain": 1.2,
-    "light_rotation_damping": 0.15,
-    "light_yaw_smooth_alpha": 0.35,
+    "light_rotation_damping": 0.2,
+    "light_yaw_smooth_alpha": 0.0,
     "light_distance_attenuation_m": 4.0,
-    "light_avoidance_enabled": false
+    "light_avoid_blend_smooth_alpha": 0.6,
+    "light_avoid_weight": 0.75,
+    "use_light_avoid_yaw": true,
+    "debug_light_yaw": false,
+    "debug_light_period_s": 0.2,
+    "light_avoidance_enabled": true
+  },
+  "traj_server": {
+    "yaw_tracking_smooth_alpha": 0.0,
+    "final_yaw_smooth_alpha_framing": 0.0,
+    "yaw_dot_boost_factor": 2.0,
+    "framing_exit_smooth_duration": 1.0,
+    "framing_exit_acc_scale_min": 0.25,
+    "framing_exit_acc_transition_s": 2.0,
+    "use_cinematic_yaw": true,
+    "time_forward": -1.0
   },
   "light_orientation_deadbands": {
     "light_yaw_deadband_rad": 0.05,
@@ -36,7 +51,7 @@
     "light_pitch_change_limit_rad": 0.35
   },
   "light_smoothing": {
-    "light_setpoint_smooth_alpha": 0.3,
+    "light_setpoint_smooth_alpha": 0.0,
     "light_planar_norm_threshold": 0.01
   }
 }

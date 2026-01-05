@@ -84,7 +84,7 @@ DETECTOR_PID=""
 COSTS_PID=""
 SIMULATED_FOCUS_PID=""
 SIMULATED_LIGHT_PID=""
-stop_collection() {
+cleanup_collection() {
   echo ""
   echo "stopping data collection."
   for pid in \
@@ -101,6 +101,9 @@ stop_collection() {
       kill "${pid}" 2>/dev/null || true
     fi
   done
+}
+stop_collection() {
+  cleanup_collection
   exit 0
 }
 trap stop_collection INT TERM
@@ -175,3 +178,4 @@ ros2 run cinematographic_adjustment_agent cinematic_waypoint_generator --ros-arg
 WAYPOINT_PID=$!
 
 wait
+cleanup_collection

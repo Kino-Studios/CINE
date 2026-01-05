@@ -19,6 +19,7 @@ import rclpy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
+from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cinematography_msgs.msg import CinematographyCosts
@@ -29,6 +30,7 @@ from constants import (
     WaypointParams,
     CinematographyParams,
     LightAvoidanceParams,
+    SensorNoiseParams,
 )
 from ..cost_functions.cost_calculator import CostCalculator
 from .state_tracker import StateTracker
@@ -40,6 +42,7 @@ from .trajectory_planner import (
     clamp_depth_to_preference,
 )
 from ..setpoint_sender.waypoint_sender import WaypointPublisher
+from cinematographic_adjustment_agent.sensor_noise.noisy_odometry import NoisyOdometryNode
 
 class CinematographicPlannerNode(Node):
     def __init__(self):
@@ -601,12 +604,23 @@ class CinematographicPlannerNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = CinematographicPlannerNode()
+    planner_node = CinematographicPlannerNode()
+
+    executor = MultiThreadedExecutor()
+    executor.add_node(planner_node)
+
+    noise_node = None
+    if SensorNoiseParams.ENABLE_SENSOR_NOISE:
+        noise_node = NoisyOdometryNode()
+        executor.add_node(noise_node)
 
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
-        node.destroy_node()
+        executor.shutdown()
+        if noise_node is not None:
+            noise_node.destroy_node()
+        planner_node.destroy_node()
         rclpy.shutdown()

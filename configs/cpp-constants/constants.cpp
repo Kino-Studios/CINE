@@ -91,6 +91,65 @@ Config::Config() {
       focus_parameters_.thirds_anchor[1] = anchor[1];
     }
   }
+
+  const auto orientation_text = loadText(root / "light_avoidance" / "orientation-params.json");
+
+  const auto traj_server_section = extractSection(orientation_text, "traj_server");
+  if (!traj_server_section.empty()) {
+    traj_server_.yaw_tracking_smooth_alpha =
+        parseNumber(traj_server_section, "yaw_tracking_smooth_alpha", traj_server_.yaw_tracking_smooth_alpha);
+    traj_server_.final_yaw_smooth_alpha_framing =
+        parseNumber(traj_server_section, "final_yaw_smooth_alpha_framing", traj_server_.final_yaw_smooth_alpha_framing);
+    traj_server_.yaw_dot_boost_factor =
+        parseNumber(traj_server_section, "yaw_dot_boost_factor", traj_server_.yaw_dot_boost_factor);
+    traj_server_.framing_exit_smooth_duration =
+        parseNumber(traj_server_section, "framing_exit_smooth_duration", traj_server_.framing_exit_smooth_duration);
+    traj_server_.framing_exit_acc_scale_min =
+        parseNumber(traj_server_section, "framing_exit_acc_scale_min", traj_server_.framing_exit_acc_scale_min);
+    traj_server_.framing_exit_acc_transition_s =
+        parseNumber(traj_server_section, "framing_exit_acc_transition_s", traj_server_.framing_exit_acc_transition_s);
+    traj_server_.use_cinematic_yaw =
+        parseBool(traj_server_section, "use_cinematic_yaw", traj_server_.use_cinematic_yaw);
+    traj_server_.time_forward =
+        parseNumber(traj_server_section, "time_forward", traj_server_.time_forward);
+  }
+
+  const auto light_section = extractSection(orientation_text, "light_avoidance");
+  if (!light_section.empty()) {
+    light_avoidance_.light_avoid_gain =
+        parseNumber(light_section, "light_avoid_gain", light_avoidance_.light_avoid_gain);
+    light_avoidance_.light_avoid_blend_base =
+        parseNumber(light_section, "light_avoid_blend_base", light_avoidance_.light_avoid_blend_base);
+    light_avoidance_.light_avoid_max_blend =
+        parseNumber(light_section, "light_avoid_max_blend", light_avoidance_.light_avoid_max_blend);
+    light_avoidance_.light_influence_distance_m =
+        parseNumber(light_section, "light_influence_distance_m", light_avoidance_.light_influence_distance_m);
+    light_avoidance_.light_avoid_transition_s =
+        parseNumber(light_section, "light_avoid_transition_s", light_avoidance_.light_avoid_transition_s);
+    light_avoidance_.light_avoid_speed_threshold_mps =
+        parseNumber(light_section, "light_avoid_speed_threshold_mps", light_avoidance_.light_avoid_speed_threshold_mps);
+    light_avoidance_.light_avoid_cooldown_after_framing_s =
+        parseNumber(light_section, "light_cooldown_after_framing_s",
+                    light_avoidance_.light_avoid_cooldown_after_framing_s);
+    light_avoidance_.light_disable_near_finish_s =
+        parseNumber(light_section, "light_disable_near_finish_s", light_avoidance_.light_disable_near_finish_s);
+    light_avoidance_.light_distance_blend_gain =
+        parseNumber(light_section, "light_distance_blend_gain", light_avoidance_.light_distance_blend_gain);
+    light_avoidance_.light_rotation_damping =
+        parseNumber(light_section, "light_rotation_damping", light_avoidance_.light_rotation_damping);
+    light_avoidance_.light_yaw_smooth_alpha =
+        parseNumber(light_section, "light_yaw_smooth_alpha", light_avoidance_.light_yaw_smooth_alpha);
+    light_avoidance_.light_avoid_blend_smooth_alpha =
+        parseNumber(light_section, "light_avoid_blend_smooth_alpha", light_avoidance_.light_avoid_blend_smooth_alpha);
+    light_avoidance_.light_avoid_weight =
+        parseNumber(light_section, "light_avoid_weight", light_avoidance_.light_avoid_weight);
+    light_avoidance_.use_light_avoid_yaw =
+        parseBool(light_section, "use_light_avoid_yaw", light_avoidance_.use_light_avoid_yaw);
+    light_avoidance_.debug_light_yaw =
+        parseBool(light_section, "debug_light_yaw", light_avoidance_.debug_light_yaw);
+    light_avoidance_.debug_light_period_s =
+        parseNumber(light_section, "debug_light_period_s", light_avoidance_.debug_light_period_s);
+  }
 }
 
 const Config& Config::instance() {

@@ -1,5 +1,6 @@
 #include "bspline_opt/uniform_bspline.h"
 #include "geometry_msgs/msg/point.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/point_stamped.hpp"
 #include "geometry_msgs/msg/vector3_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -14,35 +15,51 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <utility>
 #include <vector>
 #include <rclcpp/rclcpp.hpp>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 rclcpp::Publisher<quadrotor_msgs::msg::PositionCommand>::SharedPtr pos_cmd_pub;
 rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr focus_vector_pub;
+rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pov_pub;
 rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr light_vector_sub;
 
 [[maybe_unused]] constexpr double PI = 3.141592653589793;
 [[maybe_unused]] constexpr double MIN_RADIAL_SPEED_MPS = 0.1;
+constexpr double RAD_TO_DEG = 180.0 / PI;
+
+namespace {
+const auto& kConfig = constants::Config::instance();
+const auto& kTrajDefaults = kConfig.trajServer();
+const auto& kLightDefaults = kConfig.lightAvoidance();
+}
 
 static Eigen::Vector3d light_vector_(Eigen::Vector3d::Zero());
 static bool have_light_vector_ = false;
 static double light_distance_ = 0.0;
-static double light_avoid_gain_ = 2.5;
-static double light_avoid_blend_base_ = 0.05;
-static double light_avoid_max_blend_ = 0.25;
-static double light_influence_distance_m_ = 4.0;
-static double light_avoid_transition_s_ = 4.0;
-static double light_avoid_speed_threshold_ = 3.0;
-static bool use_light_avoid_yaw_ = true;
-static bool debug_light_yaw_ = false;
-static double debug_light_period_s_ = 0.2;
+static double light_avoid_gain_ = kLightDefaults.light_avoid_gain;
+static double light_avoid_blend_base_ = kLightDefaults.light_avoid_blend_base;
+static double light_avoid_max_blend_ = kLightDefaults.light_avoid_max_blend;
+static double light_influence_distance_m_ = kLightDefaults.light_influence_distance_m;
+static double light_avoid_transition_s_ = kLightDefaults.light_avoid_transition_s;
+static double light_avoid_speed_threshold_mps_ = kLightDefaults.light_avoid_speed_threshold_mps;
+static bool use_light_avoid_yaw_ = kLightDefaults.use_light_avoid_yaw;
+static bool debug_light_yaw_ = kLightDefaults.debug_light_yaw;
+static double debug_light_period_s_ = kLightDefaults.debug_light_period_s;
 static rclcpp::Time last_light_debug_time_(0L, RCL_ROS_TIME);
-static double light_disable_near_finish_s_ = 0.1;
-static double light_distance_blend_gain_ = 1.2;
-static double light_rotation_damping_ = 0.85;
-static double light_yaw_smooth_alpha_ = 0.7;
-static double light_avoid_blend_smooth_alpha_ = 0.6;
+static double light_disable_near_finish_s_ = kLightDefaults.light_disable_near_finish_s;
+static double light_distance_blend_gain_ = kLightDefaults.light_distance_blend_gain;
+static double light_rotation_damping_ = kLightDefaults.light_rotation_damping;
+static double light_yaw_smooth_alpha_ = kLightDefaults.light_yaw_smooth_alpha;
+static double light_avoid_blend_smooth_alpha_ = kLightDefaults.light_avoid_blend_smooth_alpha;
+static double light_avoid_weight_ = kLightDefaults.light_avoid_weight;
+static rclcpp::Time last_focus_diag_time_(0L, RCL_ROS_TIME);
+static constexpr double focus_diag_period_s_ = 0.5;
+static double last_light_damping_factor_ = 0.0;
+static bool have_last_light_damping_ = false;
 
 struct LightAvoidanceState
 {
@@ -53,8 +70,9 @@ struct LightAvoidanceState
 };
 
 static bool framing_active_ = false;
-static double light_avoid_cooldown_after_framing_s = 0.7;
+static double light_avoid_cooldown_after_framing_s = kLightDefaults.light_avoid_cooldown_after_framing_s;
 static rclcpp::Time last_framing_toggle_time_(0L, RCL_ROS_TIME);
+static rclcpp::Time last_framing_exit_time_(0L, RCL_ROS_TIME);
 
 static LightAvoidanceState computeLightAvoidanceState(
     const rclcpp::Time &time_now, double current_speed, bool disable_near_finish)
@@ -68,7 +86,7 @@ static LightAvoidanceState computeLightAvoidanceState(
   {
     return state;
   }
-  if (light_avoid_speed_threshold_ > 0.0 && current_speed > light_avoid_speed_threshold_)
+  if (light_avoid_speed_threshold_mps_ > 0.0 && current_speed > light_avoid_speed_threshold_mps_)
   {
     return state;
   }
@@ -143,16 +161,13 @@ rclcpp::Time start_time_;
 int traj_id_;
 
 // yaw control
-double last_yaw_, last_yaw_dot_;
-double time_forward_;
+double last_yaw_ = 0.0;
+double last_yaw_dot_ = 0.0;
+double time_forward_ = kTrajDefaults.time_forward;
 
 static rclcpp::Time time_last_(0L, RCL_ROS_TIME);
 double scaled_time_ = 0.0;
 double last_s_dot_ = 1.0;
-
-namespace {
-const auto& kConfig = constants::Config::instance();
-}
 
 double default_speed_scale_ = kConfig.kinematic().default_speed_scale;
 double focus_speed_scale_ = kConfig.focusVelocity().focus_speed_scale;
@@ -167,16 +182,21 @@ double yawdot_max_ = kConfig.yaw().yawdot_max;
 double yawdot_max_framing_ = kConfig.focusYaw().yawdot_max_framing;
 double yaw_lpf_alpha_ = kConfig.yaw().yaw_lpf_alpha;
 double yaw_lpf_alpha_framing_ = kConfig.focusYaw().yaw_lpf_alpha_framing;
-double yaw_tracking_smooth_alpha_ = 0.08;
+double final_yaw_smooth_alpha_ = kTrajDefaults.yaw_tracking_smooth_alpha;
+double final_yaw_smooth_alpha_framing_ = kTrajDefaults.final_yaw_smooth_alpha_framing;
 bool use_target_yaw_ = kConfig.yaw().use_target_yaw;
 bool always_face_target_ = kConfig.yaw().always_face_target;
-bool use_cinematic_ = true;
+bool use_cinematic_ = kConfig.bsplineFilter().use_cinematic_bspline;
 double vel_damping_ = kConfig.kinematic().vel_damping;
 double acc_damping_ = kConfig.kinematic().acc_damping;
 double pitch_acc_smooth_alpha_ = kConfig.kinematic().pitch_acc_smooth_alpha;
-static bool use_cinematic_yaw_ = true;
+static bool use_cinematic_yaw_ = kTrajDefaults.use_cinematic_yaw;
 static double cinematic_yaw_setpoint_ = 0.0;
 static bool cinematic_yaw_valid_ = false;
+double yaw_dot_boost_factor_ = kTrajDefaults.yaw_dot_boost_factor;
+double framing_exit_smooth_duration_ = kTrajDefaults.framing_exit_smooth_duration;
+double framing_exit_acc_scale_min_ = kTrajDefaults.framing_exit_acc_scale_min;
+double framing_exit_acc_transition_s_ = kTrajDefaults.framing_exit_acc_transition_s;
 
 Eigen::Vector3d last_vel_(Eigen::Vector3d::Zero());
 Eigen::Vector3d last_acc_(Eigen::Vector3d::Zero());
@@ -206,8 +226,14 @@ void framingActiveCallback(const std_msgs::msg::Bool::SharedPtr msg)
 {
   if (!msg)
     return;
+  auto now = rclcpp::Clock(RCL_ROS_TIME).now();
+  bool prev_active = framing_active_;
   framing_active_ = msg->data;
-  last_framing_toggle_time_ = rclcpp::Clock(RCL_ROS_TIME).now();
+  last_framing_toggle_time_ = now;
+  if (prev_active && !framing_active_)
+  {
+    last_framing_exit_time_ = now;
+  }
 }
 
 void lightVectorCallback(const geometry_msgs::msg::Vector3Stamped::SharedPtr msg)
@@ -225,8 +251,15 @@ void cinematographyCostsCallback(const cinematography_msgs::msg::CinematographyC
 {
   if (!msg)
     return;
-  cinematic_yaw_setpoint_ = msg->yaw_setpoint;
-  cinematic_yaw_valid_ = true;
+  if (msg->has_cinematic_yaw)
+  {
+    cinematic_yaw_setpoint_ = msg->yaw_setpoint;
+    cinematic_yaw_valid_ = true;
+  }
+  else
+  {
+    cinematic_yaw_valid_ = false;
+  }
 }
 
 void handleBsplineMsg(traj_utils::msg::Bspline::SharedPtr msg)
@@ -288,7 +321,7 @@ void cinematicBsplineCallback(traj_utils::msg::Bspline::SharedPtr msg)
   handleBsplineMsg(msg);
 }
 
-std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, rclcpp::Time &time_now, rclcpp::Time &time_last, const LightAvoidanceState &light_state)
+std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, double dt)
 {
   constexpr double YAW_DOT_MAX_PER_SEC = PI;
   
@@ -298,17 +331,8 @@ std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, rclc
 
   Eigen::Vector3d dir = t_cur + time_forward_ <= traj_duration_ ? traj_[0].evaluateDeBoorT(t_cur + time_forward_) - pos : traj_[0].evaluateDeBoorT(traj_duration_) - pos;
   double yaw_temp = dir.norm() > 0.1 ? atan2(dir(1), dir(0)) : last_yaw_;
-  if (light_state.active)
-  {
-    double normalized_temp = normalizeAngle(yaw_temp);
-    double avoidance = normalizeAngle(light_state.avoidance_yaw);
-    double diff = shortestAngleDiff(normalized_temp, avoidance);
-    double blended_diff = diff * light_state.blend;
-    double damping = std::clamp(light_rotation_damping_, 0.0, 1.0);
-    double damped_diff = blended_diff * (1.0 - damping);
-    yaw_temp = normalizeAngle(normalized_temp + damped_diff);
-  }
-  double max_yaw_change = YAW_DOT_MAX_PER_SEC * (time_now - time_last).seconds();
+  double safe_dt = std::max(dt, 1e-6);
+  double max_yaw_change = YAW_DOT_MAX_PER_SEC * dt;
   if (yaw_temp - last_yaw_ > PI)
   {
     if (yaw_temp - last_yaw_ - 2 * PI < -max_yaw_change)
@@ -325,7 +349,7 @@ std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, rclc
       if (yaw - last_yaw_ > PI)
         yawdot = -YAW_DOT_MAX_PER_SEC;
       else
-        yawdot = (yaw_temp - last_yaw_) / (time_now - time_last).seconds();
+        yawdot = (yaw_temp - last_yaw_) / safe_dt;
     }
   }
   else if (yaw_temp - last_yaw_ < -PI)
@@ -344,7 +368,7 @@ std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, rclc
       if (yaw - last_yaw_ < -PI)
         yawdot = YAW_DOT_MAX_PER_SEC;
       else
-        yawdot = (yaw_temp - last_yaw_) / (time_now - time_last).seconds();
+        yawdot = (yaw_temp - last_yaw_) / safe_dt;
     }
   }
   else
@@ -373,15 +397,10 @@ std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, rclc
       else if (yaw - last_yaw_ < -PI)
         yawdot = YAW_DOT_MAX_PER_SEC;
       else
-        yawdot = (yaw_temp - last_yaw_) / (time_now - time_last).seconds();
+        yawdot = (yaw_temp - last_yaw_) / safe_dt;
     }
   }
 
-  if (fabs(yaw - last_yaw_) <= max_yaw_change)
-  {
-    double alpha = std::clamp(yaw_lpf_alpha_, 0.0, 1.0);
-    yaw = alpha * last_yaw_ + (1.0 - alpha) * yaw;
-  }
   yawdot = 0.5 * last_yaw_dot_ + 0.5 * yawdot;
   last_yaw_ = yaw;
   last_yaw_dot_ = yawdot;
@@ -392,9 +411,10 @@ std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, rclc
   return yaw_yawdot;
 }
 
-void updateYawTowardsTarget(const Eigen::Vector3d &pos, bool focus_active, double dt, std::pair<double, double> &yaw_yawdot, const LightAvoidanceState &light_state)
+void updateYawTowardsTarget(const Eigen::Vector3d &pos, bool focus_active, double dt, std::pair<double, double> &yaw_yawdot, double &yaw_limit_out)
 {
-  double yaw_limit = focus_active ? yawdot_max_framing_ : yawdot_max_;
+  double yaw_limit = (focus_active ? yawdot_max_framing_ : yawdot_max_) * yaw_dot_boost_factor_;
+  yaw_limit_out = yaw_limit;
   double safe_dt = std::max(0.0, dt);
   double max_change = yaw_limit * safe_dt;
   Eigen::Vector3d dir = target_world_ - pos;
@@ -403,36 +423,42 @@ void updateYawTowardsTarget(const Eigen::Vector3d &pos, bool focus_active, doubl
   {
     yaw_target = atan2(dir(1), dir(0));
   }
-  double delta = yaw_target - last_yaw_;
-  if (delta > PI)
-  {
-    delta -= 2 * PI;
-  }
-  else if (delta < -PI)
-  {
-    delta += 2 * PI;
-  }
+  double delta = shortestAngleDiff(last_yaw_, yaw_target);
   if (max_change > 0.0 && std::fabs(delta) > max_change)
   {
     delta = (delta > 0 ? max_change : -max_change);
   }
-  double yaw = last_yaw_ + delta;
-  if (light_state.active)
-  {
-    double normalized_yaw = normalizeAngle(yaw);
-    double avoidance = normalizeAngle(light_state.avoidance_yaw);
-    double diff = shortestAngleDiff(normalized_yaw, avoidance);
-    double blended_diff = diff * light_state.blend;
-    double damping = std::clamp(light_rotation_damping_, 0.0, 1.0);
-    double damped_diff = blended_diff * (1.0 - damping);
-    yaw = normalizeAngle(normalized_yaw + damped_diff);
-  }
-  double alpha = std::clamp(focus_active ? yaw_lpf_alpha_framing_ : yaw_lpf_alpha_, 0.0, 1.0);
-  yaw = alpha * last_yaw_ + (1.0 - alpha) * yaw;
-  double yawdot = safe_dt > 1e-3 ? delta / safe_dt : 0.0;
-  yaw_yawdot.first = yaw;
+  double yaw_prev = last_yaw_;
+  double yaw = normalizeAngle(yaw_prev + delta);
+  double alpha = 0.0;
+  double yaw_smoothed = alpha * yaw_prev + (1.0 - alpha) * yaw;
+  double yawdot = safe_dt > 1e-6 ? shortestAngleDiff(yaw_prev, yaw_smoothed) / safe_dt : 0.0;
+  yaw_yawdot.first = yaw_smoothed;
   yaw_yawdot.second = yawdot;
-  last_yaw_ = yaw;
+  last_yaw_ = yaw_smoothed;
+  last_yaw_dot_ = yawdot;
+}
+
+void updateYawTowardsAngle(double yaw_target, bool focus_active, double dt, std::pair<double, double> &yaw_yawdot, double &yaw_limit_out)
+{
+  double yaw_limit = (focus_active ? yawdot_max_framing_ : yawdot_max_) * yaw_dot_boost_factor_;
+  yaw_limit_out = yaw_limit;
+  double safe_dt = std::max(0.0, dt);
+  double max_change = yaw_limit * safe_dt;
+  double yaw_prev = last_yaw_;
+  double normalized_target = normalizeAngle(yaw_target);
+  double delta = shortestAngleDiff(yaw_prev, normalized_target);
+  if (max_change > 0.0 && std::fabs(delta) > max_change)
+  {
+    delta = (delta > 0 ? max_change : -max_change);
+  }
+  double yaw = normalizeAngle(yaw_prev + delta);
+  double alpha = 0.0;
+  double yaw_smoothed = alpha * yaw_prev + (1.0 - alpha) * yaw;
+  double yawdot = safe_dt > 1e-6 ? shortestAngleDiff(yaw_prev, yaw_smoothed) / safe_dt : 0.0;
+  yaw_yawdot.first = yaw_smoothed;
+  yaw_yawdot.second = yawdot;
+  last_yaw_ = yaw_smoothed;
   last_yaw_dot_ = yawdot;
 }
 
@@ -445,6 +471,8 @@ void applyLightYawAvoidance(double dt, const LightAvoidanceState &light_state, s
   {
     have_last_light_blend = false;
     last_light_blend = 0.0;
+    have_last_light_damping_ = false;
+    last_light_damping_factor_ = 0.0;
     return;
   }
   double blend_for_smooth = have_last_light_blend ? last_light_blend : light_state.blend;
@@ -457,11 +485,14 @@ void applyLightYawAvoidance(double dt, const LightAvoidanceState &light_state, s
   double diff = shortestAngleDiff(original_yaw, avoidance_yaw);
   double blended_diff = diff * light_state.blend;
   double damping = std::clamp(light_rotation_damping_, 0.0, 1.0);
-  double damped_diff = blended_diff * (1.0 - damping);
+  double damping_factor = framing_active_ ? std::clamp(damping * 0.1, 0.0, 1.0) : damping;
+  last_light_damping_factor_ = damping_factor;
+  have_last_light_damping_ = true;
+  double damped_diff = blended_diff * (1.0 - damping_factor);
   double target_yaw = normalizeAngle(original_yaw + damped_diff);
   double delta = shortestAngleDiff(original_yaw, target_yaw);
   double safe_dt = std::max(0.0, dt);
-  double max_change = yawdot_max_ * safe_dt;
+  double max_change = yawdot_max_ * yaw_dot_boost_factor_ * safe_dt;
 
   if (max_change > 0.0 && std::fabs(delta) > max_change)
   {
@@ -472,8 +503,11 @@ void applyLightYawAvoidance(double dt, const LightAvoidanceState &light_state, s
   double smoothing_adjust = std::clamp(smoothed_blend * 0.25, 0.0, 0.45);
   double alpha = std::clamp(light_yaw_smooth_alpha_ + smoothing_adjust, 0.0, 0.98);
   double smoothed_yaw = alpha * last_yaw_ + (1.0 - alpha) * new_yaw;
-  double yawdot = safe_dt > 1e-6 ? shortestAngleDiff(last_yaw_, smoothed_yaw) / safe_dt : 0.0;
-  yaw_yawdot.first = smoothed_yaw;
+  double light_weight = std::clamp(light_avoid_weight_, 0.0, 1.0);
+  double blended_delta = shortestAngleDiff(original_yaw, smoothed_yaw);
+  double blended_yaw = normalizeAngle(original_yaw + light_weight * blended_delta);
+  double yawdot = safe_dt > 1e-6 ? shortestAngleDiff(last_yaw_, blended_yaw) / safe_dt : 0.0;
+  yaw_yawdot.first = blended_yaw;
   yaw_yawdot.second = yawdot;
 
   if (debug_light_yaw_ &&
@@ -487,6 +521,76 @@ void applyLightYawAvoidance(double dt, const LightAvoidanceState &light_state, s
         light_distance_);
     last_light_debug_time_ = time_now;
   }
+}
+
+void logFocusDiagnostics(const rclcpp::Time &time_now,
+                         bool focus_active,
+                         bool follow_target,
+                         bool override_with_cost_yaw,
+                         double yaw_before_smooth,
+                         double yaw_after_smooth,
+                         double yawdot,
+                         double target_yaw,
+                         bool have_target_yaw,
+                         bool has_target,
+                         double target_distance,
+                         const LightAvoidanceState &light_state,
+                         double focus_distance_error,
+                         bool had_cinematic_yaw,
+                         double cinematic_yaw_setpoint,
+                         double yaw_limit_rad_s,
+                         double yaw_smooth_alpha,
+                         bool have_light_damping,
+                         double light_damping_factor)
+{
+  if ((time_now - last_focus_diag_time_).seconds() < focus_diag_period_s_)
+  {
+    return;
+  }
+  last_focus_diag_time_ = time_now;
+  double target_dist = has_target ? target_distance : std::numeric_limits<double>::quiet_NaN();
+  double target_yaw_deg = have_target_yaw ? target_yaw * RAD_TO_DEG : std::numeric_limits<double>::quiet_NaN();
+  double yaw_post_deg = yaw_after_smooth * RAD_TO_DEG;
+  double yaw_pre_deg = yaw_before_smooth * RAD_TO_DEG;
+  double yaw_diff_deg = have_target_yaw ? shortestAngleDiff(target_yaw, yaw_after_smooth) * RAD_TO_DEG
+                                        : std::numeric_limits<double>::quiet_NaN();
+  double cinematic_deg =
+      had_cinematic_yaw ? cinematic_yaw_setpoint * RAD_TO_DEG : std::numeric_limits<double>::quiet_NaN();
+  double yaw_limit_deg = std::isfinite(yaw_limit_rad_s) ? yaw_limit_rad_s * RAD_TO_DEG
+                                                       : std::numeric_limits<double>::quiet_NaN();
+  double yaw_limit_ratio = (std::isfinite(yaw_limit_rad_s) && yaw_limit_rad_s > 0.0)
+                               ? std::fabs(yawdot) / yaw_limit_rad_s
+                               : std::numeric_limits<double>::quiet_NaN();
+  double smooth_alpha_val =
+      std::isfinite(yaw_smooth_alpha) ? yaw_smooth_alpha : std::numeric_limits<double>::quiet_NaN();
+  double light_damp = have_light_damping ? light_damping_factor : std::numeric_limits<double>::quiet_NaN();
+
+  RCLCPP_INFO(
+      traj_logger,
+      "[Traj server]: focus_diag focus=%s follow=%s override=%s framing=%s yaw_post=%.2f° pre=%.2f° yawdot=%.2f° "
+      "limit=%.2f°/s ratio=%.2f smooth=%.2f° light_damp=%.2f target=%.2f° diff=%.2f° focus_err=%.3f target_dist=%.3f "
+      "light_active=%s blend=%.2f weight=%.2f dist=%.2f cinematic=%s%.2f°",
+      focus_active ? "true" : "false",
+      follow_target ? "true" : "false",
+      override_with_cost_yaw ? "true" : "false",
+      framing_active_ ? "true" : "false",
+      yaw_post_deg,
+      yaw_pre_deg,
+      yawdot,
+      yaw_limit_deg,
+      yaw_limit_ratio,
+      smooth_alpha_val,
+      light_damp,
+      target_yaw_deg,
+      yaw_diff_deg,
+      focus_distance_error,
+      target_dist,
+      light_state.active ? "true" : "false",
+      light_state.blend,
+      light_state.weight,
+      light_distance_,
+      had_cinematic_yaw ? "cmd=" : "none=",
+      cinematic_deg);
 }
 
 void cmdCallback()
@@ -504,8 +608,13 @@ void cmdCallback()
   std::pair<double, double> yaw_yawdot(0, 0);
 
   double dt = std::max(0.0, (time_now - time_last_).seconds());
+  double dt_yaw = dt;
   bool focus_active = false;
   double focus_distance_error = 0.0;
+  double target_yaw = 0.0;
+  bool have_target_yaw = false;
+  double target_distance_to_object = 0.0;
+  bool have_target_distance = false;
 
   if (has_target_ && framing_active_)
   {
@@ -519,6 +628,38 @@ void cmdCallback()
 
   bool follow_target = has_target_ && framing_active_ && (always_face_target_ || (use_target_yaw_ && focus_active));
   bool have_position = false;
+  double since_framing_exit = (time_now - last_framing_exit_time_).seconds();
+  double post_framing_progress = 0.0;
+  bool post_framing_blend = false;
+  if (framing_exit_smooth_duration_ > 0.0 && since_framing_exit >= 0.0)
+  {
+    post_framing_progress = std::clamp(since_framing_exit / framing_exit_smooth_duration_, 0.0, 1.0);
+    post_framing_blend = (!framing_active_ && post_framing_progress < 1.0);
+  }
+  double post_framing_acc_progress = 0.0;
+  bool post_framing_acc_blend = false;
+  if (framing_exit_acc_transition_s_ > 0.0 && since_framing_exit >= 0.0)
+  {
+    post_framing_acc_progress =
+        std::clamp(since_framing_exit / framing_exit_acc_transition_s_, 0.0, 1.0);
+    post_framing_acc_blend = (!framing_active_ && post_framing_acc_progress < 1.0);
+  }
+  double post_framing_acc_scale = 1.0;
+  if (post_framing_acc_blend)
+  {
+    const double acc_growth_rate = 3.0;
+    double shaped_progress = post_framing_acc_progress;
+    if (acc_growth_rate > 0.0)
+    {
+      double denom = 1.0 - std::exp(-acc_growth_rate);
+      if (denom > 1e-6)
+      {
+        shaped_progress = (1.0 - std::exp(-acc_growth_rate * post_framing_acc_progress)) / denom;
+      }
+    }
+    post_framing_acc_scale =
+        framing_exit_acc_scale_min_ + (1.0 - framing_exit_acc_scale_min_) * shaped_progress;
+  }
 
   double t_query = 0.0;
   double raw_speed = 0.0;
@@ -527,7 +668,11 @@ void cmdCallback()
   bool valid_plan = false;
 
   const double max_vel = focus_active ? focus_max_vel_ : default_max_vel_;
-  const double max_acc = focus_active ? focus_max_acc_ : default_max_acc_;
+  double max_acc = focus_active ? focus_max_acc_ : default_max_acc_;
+  if (max_acc > 0.0)
+  {
+    max_acc *= post_framing_acc_scale;
+  }
 
   double s_dot = 0.0;
   double s_dot_dot = 0.0;
@@ -629,43 +774,107 @@ void cmdCallback()
         now_sec,
         traj_duration_);
   }
+  if (have_position && has_target_)
+  {
+    Eigen::Vector3d target_direction = target_world_ - pos;
+    target_distance_to_object = target_direction.norm();
+    have_target_distance = true;
+    if (target_distance_to_object > 1e-3)
+    {
+      target_yaw = std::atan2(target_direction(1), target_direction(0));
+      have_target_yaw = true;
+    }
+  }
   double current_speed = vel.norm();
   double remaining = traj_duration_ > 0.0 ? std::max(0.0, traj_duration_ - std::min(t_query, traj_duration_)) : 0.0;
   bool near_finish = traj_duration_ > 0.0 && remaining <= light_disable_near_finish_s_;
   LightAvoidanceState light_state = computeLightAvoidanceState(time_now, current_speed, near_finish);
+  const bool plan_finished = traj_duration_ > 0.0 && t_query >= traj_duration_;
+  
   if (have_position)
   {
-    if (follow_target)
+    double yaw_limit_for_logging = std::numeric_limits<double>::quiet_NaN();
+    double yaw_smooth_alpha_for_logging = std::numeric_limits<double>::quiet_NaN();
+    bool had_cinematic_request = false;
+    double cinematic_candidate = cinematic_yaw_setpoint_;
+    bool override_with_cost_yaw = false;
+    if (!plan_finished)
     {
-      updateYawTowardsTarget(pos, focus_active, dt, yaw_yawdot, light_state);
+      if (follow_target)
+      {
+        updateYawTowardsTarget(pos, focus_active, dt_yaw, yaw_yawdot, yaw_limit_for_logging);
+      }
+      else
+      {
+        yaw_yawdot = calculate_yaw(t_query, pos, dt_yaw);
+      }
+
+      had_cinematic_request = cinematic_yaw_valid_;
+      cinematic_candidate = cinematic_yaw_setpoint_;
+      double yaw_err_to_cine = shortestAngleDiff(last_yaw_, cinematic_yaw_setpoint_);
+      const double cinematic_deadband_rad = 3.0 * PI / 180.0;
+      if (use_cinematic_yaw_ && cinematic_yaw_valid_ && framing_active_ &&
+          std::fabs(yaw_err_to_cine) > cinematic_deadband_rad)
+      {
+        updateYawTowardsAngle(cinematic_yaw_setpoint_, true, dt_yaw, yaw_yawdot, yaw_limit_for_logging);
+        override_with_cost_yaw = true;
+      }
+      else
+      {
+        applyLightYawAvoidance(dt_yaw, light_state, yaw_yawdot, time_now);
+      }
     }
     else
     {
-      yaw_yawdot = calculate_yaw(t_query, pos, time_now, time_last_, light_state);
+      updateYawTowardsAngle(last_yaw_, false, dt_yaw, yaw_yawdot, yaw_limit_for_logging);
     }
-    applyLightYawAvoidance(dt, light_state, yaw_yawdot, time_now);
-    double safe_dt = std::max(dt, 1e-6);
-    double yaw_smooth_alpha = std::clamp(yaw_tracking_smooth_alpha_, 0.0, 0.98);
-    double smoothed_yaw = yaw_smooth_alpha * last_yaw_ + (1.0 - yaw_smooth_alpha) * yaw_yawdot.first;
+
+    auto yaw_before_smooth = yaw_yawdot;
+    double safe_dt = std::max(dt_yaw, 1e-6);
+    double final_smooth_alpha = framing_active_ ? final_yaw_smooth_alpha_framing_ : final_yaw_smooth_alpha_;
+    if (post_framing_blend)
+    {
+      final_smooth_alpha = final_yaw_smooth_alpha_framing_ +
+                           (final_yaw_smooth_alpha_ - final_yaw_smooth_alpha_framing_) * post_framing_progress;
+    }
+    final_smooth_alpha = std::clamp(final_smooth_alpha, 0.0, 1.0);
+    double smoothed_yaw = final_smooth_alpha * last_yaw_ + (1.0 - final_smooth_alpha) * yaw_yawdot.first;
     double yaw_delta = shortestAngleDiff(last_yaw_, smoothed_yaw);
     double yawdot_smoothed = safe_dt > 1e-6 ? yaw_delta / safe_dt : 0.0;
     yaw_yawdot.first = smoothed_yaw;
     yaw_yawdot.second = yawdot_smoothed;
-    if (use_cinematic_yaw_ && cinematic_yaw_valid_)
+    yaw_smooth_alpha_for_logging = final_smooth_alpha;
+
+    if (!plan_finished && (focus_active || follow_target || override_with_cost_yaw || light_state.active))
     {
-      double yaw_diff = shortestAngleDiff(last_yaw_, cinematic_yaw_setpoint_);
-      double yawdot_cost = safe_dt > 1e-6 ? yaw_diff / safe_dt : 0.0;
-      yawdot_cost = std::clamp(yawdot_cost, -yawdot_max_, yawdot_max_);
-      yaw_yawdot.first = cinematic_yaw_setpoint_;
-      yaw_yawdot.second = yawdot_cost;
-      cinematic_yaw_valid_ = false;
+      logFocusDiagnostics(
+          time_now,
+          focus_active,
+          follow_target,
+          override_with_cost_yaw,
+          yaw_before_smooth.first,
+          yaw_yawdot.first,
+          yaw_yawdot.second,
+          target_yaw,
+          have_target_yaw,
+          have_target_distance,
+          target_distance_to_object,
+          light_state,
+          focus_distance_error,
+          had_cinematic_request,
+          cinematic_candidate,
+          yaw_limit_for_logging,
+          yaw_smooth_alpha_for_logging,
+          have_last_light_damping_,
+          last_light_damping_factor_);
     }
+
   }
   else
-  {
-    yaw_yawdot.first = last_yaw_;
-    yaw_yawdot.second = 0.0;
-  }
+    {
+      yaw_yawdot.first = last_yaw_;
+      yaw_yawdot.second = last_yaw_dot_;
+    }
   time_last_ = time_now;
 
   double vel_damp = std::clamp(vel_damping_, 0.0, 1.0);
@@ -786,7 +995,20 @@ void cmdCallback()
     focus_vector_pub->publish(marker);
   }
 
-pos_cmd_pub->publish(cmd);
+  if (pov_pub)
+  {
+    geometry_msgs::msg::PoseStamped pov_msg;
+    pov_msg.header.stamp = time_now;
+    pov_msg.header.frame_id = "world";
+    pov_msg.pose.position = cmd.position;
+    tf2::Quaternion pov_quat;
+    pov_quat.setRPY(0.0, 0.0, cmd.yaw);
+    pov_quat.normalize();
+    pov_msg.pose.orientation = tf2::toMsg(pov_quat);
+    pov_pub->publish(pov_msg);
+  }
+
+  pos_cmd_pub->publish(cmd);
 }
 
 int main(int argc, char **argv)
@@ -794,7 +1016,7 @@ int main(int argc, char **argv)
   rclcpp::init(argc, argv);
   auto node = rclcpp::Node::make_shared("traj_server");
 
-  node->declare_parameter("traj_server/use_cinematic_bspline", true);
+  node->declare_parameter("traj_server/use_cinematic_bspline", use_cinematic_);
   node->declare_parameter("traj_server/default_speed_scale", default_speed_scale_);
   node->declare_parameter("traj_server/focus_speed_scale", focus_speed_scale_);
   node->declare_parameter("traj_server/default_max_vel", default_max_vel_);
@@ -808,8 +1030,13 @@ int main(int argc, char **argv)
   node->declare_parameter("traj_server/yawdot_max_framing", yawdot_max_framing_);
   node->declare_parameter("traj_server/yaw_lpf_alpha", yaw_lpf_alpha_);
   node->declare_parameter("traj_server/yaw_lpf_alpha_framing", yaw_lpf_alpha_framing_);
-  node->declare_parameter("traj_server/yaw_tracking_smooth_alpha", yaw_tracking_smooth_alpha_);
+  node->declare_parameter("traj_server/yaw_tracking_smooth_alpha", final_yaw_smooth_alpha_);
+  node->declare_parameter("traj_server/framing_final_yaw_smooth_alpha", final_yaw_smooth_alpha_framing_);
+  node->declare_parameter("traj_server/yaw_dot_boost_factor", yaw_dot_boost_factor_);
+  node->declare_parameter("traj_server/framing_exit_smooth_duration", framing_exit_smooth_duration_);
+  node->declare_parameter("traj_server/framing_exit_acc_scale_min", framing_exit_acc_scale_min_);
   node->declare_parameter("traj_server/use_target_yaw", use_target_yaw_);
+  node->declare_parameter("traj_server/framing_exit_acc_transition_s", framing_exit_acc_transition_s_);
   node->declare_parameter("traj_server/always_face_target", always_face_target_);
   node->declare_parameter("traj_server/use_cinematic_yaw", use_cinematic_yaw_);
   node->declare_parameter("traj_server/vel_damping", vel_damping_);
@@ -822,7 +1049,7 @@ int main(int argc, char **argv)
   node->declare_parameter("traj_server/debug_light_period_s", debug_light_period_s_);
   node->declare_parameter("traj_server/light_avoid_blend_base", light_avoid_blend_base_);
   node->declare_parameter("traj_server/light_avoid_max_blend", light_avoid_max_blend_);
-  node->declare_parameter("traj_server/light_avoid_speed_threshold", light_avoid_speed_threshold_);
+  node->declare_parameter("traj_server/light_avoid_speed_threshold", light_avoid_speed_threshold_mps_);
   node->declare_parameter("traj_server/light_avoid_transition_s", light_avoid_transition_s_);
   node->declare_parameter("traj_server/light_avoid_cooldown_after_framing_s", light_avoid_cooldown_after_framing_s);
   node->declare_parameter("traj_server/light_disable_near_finish_s", light_disable_near_finish_s_);
@@ -830,7 +1057,8 @@ int main(int argc, char **argv)
   node->declare_parameter("traj_server/light_rotation_damping", light_rotation_damping_);
   node->declare_parameter("traj_server/light_yaw_smooth_alpha", light_yaw_smooth_alpha_);
   node->declare_parameter("traj_server/light_avoid_blend_smooth_alpha", light_avoid_blend_smooth_alpha_);
-  node->declare_parameter("traj_server/time_forward", -1.0);
+  node->declare_parameter("traj_server/light_avoid_weight", light_avoid_weight_);
+  node->declare_parameter("traj_server/time_forward", time_forward_);
 
   use_cinematic_ = node->get_parameter("traj_server/use_cinematic_bspline").as_bool();
   default_speed_scale_ = node->get_parameter("traj_server/default_speed_scale").as_double();
@@ -846,8 +1074,13 @@ int main(int argc, char **argv)
   yawdot_max_framing_ = node->get_parameter("traj_server/yawdot_max_framing").as_double();
   yaw_lpf_alpha_ = node->get_parameter("traj_server/yaw_lpf_alpha").as_double();
   yaw_lpf_alpha_framing_ = node->get_parameter("traj_server/yaw_lpf_alpha_framing").as_double();
-  yaw_tracking_smooth_alpha_ = node->get_parameter("traj_server/yaw_tracking_smooth_alpha").as_double();
+  final_yaw_smooth_alpha_ = node->get_parameter("traj_server/yaw_tracking_smooth_alpha").as_double();
+  final_yaw_smooth_alpha_framing_ = node->get_parameter("traj_server/framing_final_yaw_smooth_alpha").as_double();
+  yaw_dot_boost_factor_ = node->get_parameter("traj_server/yaw_dot_boost_factor").as_double();
+  framing_exit_smooth_duration_ = node->get_parameter("traj_server/framing_exit_smooth_duration").as_double();
+  framing_exit_acc_scale_min_ = node->get_parameter("traj_server/framing_exit_acc_scale_min").as_double();
   use_target_yaw_ = node->get_parameter("traj_server/use_target_yaw").as_bool();
+  framing_exit_acc_transition_s_ = node->get_parameter("traj_server/framing_exit_acc_transition_s").as_double();
   always_face_target_ = node->get_parameter("traj_server/always_face_target").as_bool();
   use_cinematic_yaw_ = node->get_parameter("traj_server/use_cinematic_yaw").as_bool();
   vel_damping_ = node->get_parameter("traj_server/vel_damping").as_double();
@@ -860,7 +1093,7 @@ int main(int argc, char **argv)
   debug_light_period_s_ = node->get_parameter("traj_server/debug_light_period_s").as_double();
   light_avoid_blend_base_ = node->get_parameter("traj_server/light_avoid_blend_base").as_double();
   light_avoid_max_blend_ = node->get_parameter("traj_server/light_avoid_max_blend").as_double();
-  light_avoid_speed_threshold_ = node->get_parameter("traj_server/light_avoid_speed_threshold").as_double();
+  light_avoid_speed_threshold_mps_ = node->get_parameter("traj_server/light_avoid_speed_threshold").as_double();
   light_avoid_transition_s_ = node->get_parameter("traj_server/light_avoid_transition_s").as_double();
   light_avoid_cooldown_after_framing_s = node->get_parameter("traj_server/light_avoid_cooldown_after_framing_s").as_double();
   light_disable_near_finish_s_ = node->get_parameter("traj_server/light_disable_near_finish_s").as_double();
@@ -868,6 +1101,7 @@ int main(int argc, char **argv)
   light_rotation_damping_ = node->get_parameter("traj_server/light_rotation_damping").as_double();
   light_yaw_smooth_alpha_ = node->get_parameter("traj_server/light_yaw_smooth_alpha").as_double();
   light_avoid_blend_smooth_alpha_ = node->get_parameter("traj_server/light_avoid_blend_smooth_alpha").as_double();
+  light_avoid_weight_ = node->get_parameter("traj_server/light_avoid_weight").as_double();
   node->get_parameter("traj_server/time_forward", time_forward_);
 
   rclcpp::Subscription<traj_utils::msg::Bspline>::SharedPtr bspline_subscription;
@@ -891,6 +1125,10 @@ int main(int argc, char **argv)
 
   focus_vector_pub = node->create_publisher<visualization_msgs::msg::Marker>(
       "/cinematography/focus_vector",
+      10);
+
+  pov_pub = node->create_publisher<geometry_msgs::msg::PoseStamped>(
+      "/drone/pov",
       10);
 
   auto target_sub = node->create_subscription<geometry_msgs::msg::PointStamped>(

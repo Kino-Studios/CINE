@@ -1,18 +1,18 @@
 {
   "kinematic_constraints": {
-    "default_max_velocity_mps": 0.95,
-    "default_max_accel_mps2": 3.2,
+    "default_max_velocity_mps": 1.02,
+    "default_max_accel_mps2": 5.2,
     "default_speed_scale": 0.8,
-    "vel_damping": 0.09,
+    "vel_damping": 0.12,
     "pitch_acc_smooth_alpha": 0.78,
     "acc_damping": 0.05,
     "min_dt": 0.05,
     "max_velocity": 0.95,
-    "max_acceleration": 3.2
+    "max_acceleration": 5.2
   },
   "yaw_constraints": {
-    "yawdot_max": 1.25,
-    "yaw_lpf_alpha": 0.85,
+    "yawdot_max": 2.5,
+    "yaw_lpf_alpha": 0.02,
     "use_target_yaw": true,
     "always_face_target": true
   },
@@ -22,6 +22,7 @@
     "target_distance_gate_m": 1.0
   },
   "bspline_filter": {
+    "use_cinematic_bspline": true,
     "cinematic_offset_m": 0.5,
     "cinematic_smooth_alpha": 0.2,
     "min_altitude_m": 0.2,

@@ -17,7 +17,7 @@ from geometry_msgs.msg import PointStamped, PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Bool
 
 from constants import CinematographyParams, LightAvoidanceParams
 from .cost_calculator import CostCalculator
@@ -32,7 +32,9 @@ class CostFunctionCalculatorNode(Node):
                 "light_avoidance_enabled", LightAvoidanceParams.ENABLED
             ).value
         )
+        self._framing_active = False
         self.cost_calculator = CostCalculator(self)
+        self.cost_calculator.update_framing_active(self._framing_active)
         self._last_odom: Odometry | None = None
         self.declare_parameter("frame_id", "map")
 
@@ -78,6 +80,12 @@ class CostFunctionCalculatorNode(Node):
         self._focus_roi_depth_pub = self.create_publisher(Float32, "/cinematography/focus_roi_depth_median_m", 10)
         self._target_world_pub = self.create_publisher(PointStamped, "/cinematography/target_world", 10)
         self._timer = self.create_timer(1.0 / max(1.0, publish_rate_hz), self._tick)
+        self._framing_sub = self.create_subscription(
+            Bool,
+            "/cinematography/framing_active",
+            self._framing_cb,
+            10,
+        )
 
     def _depth_cb(self, msg: Image):
         try:
@@ -108,6 +116,11 @@ class CostFunctionCalculatorNode(Node):
     def _light_cb(self, msg: Vector3Stamped):
         self.cost_calculator.update_light_vector(msg)
 
+    def _framing_cb(self, msg: Bool):
+        active = bool(msg.data) if msg is not None else False
+        self._framing_active = active
+        self.cost_calculator.update_framing_active(active)
+
     def _tick(self):
         now_msg = self.get_clock().now().to_msg()
         frame_id = str(self.get_parameter("frame_id").value)
@@ -131,6 +144,7 @@ class CostFunctionCalculatorNode(Node):
             self._focus_depth_pub.publish(msg)
 
         target_world = self._estimate_target_world_position(focus_depth)
+        self.cost_calculator.update_target_world(target_world)
         if target_world is not None:
             msg = PointStamped()
             msg.header.stamp = now_msg
@@ -153,6 +167,7 @@ class CostFunctionCalculatorNode(Node):
         msg.distance_cost = float(result.get("distance_cost", 0.0))
         msg.total_cost = float(result.get("total_cost", 0.0))
         msg.yaw_setpoint = float(result.get("yaw_setpoint", 0.0))
+        msg.has_cinematic_yaw = bool(result.get("has_cinematic_yaw", False))
         msg.pitch_setpoint = float(result.get("pitch_setpoint", 0.0))
         msg.roll_setpoint = float(result.get("roll_setpoint", 0.0))
         msg.yaw_error = float(result.get("yaw_error", 0.0))

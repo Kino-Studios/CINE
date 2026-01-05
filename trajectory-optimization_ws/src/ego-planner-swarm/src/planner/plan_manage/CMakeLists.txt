@@ -24,6 +24,8 @@ find_package(path_searching REQUIRED)
 find_package(bspline_opt REQUIRED)
 find_package(traj_utils REQUIRED COMPONENTS traj_utils_lib)
 find_package(cv_bridge REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
@@ -79,7 +81,7 @@ ament_target_dependencies(traj_server
                           quadrotor_msgs plan_env 
                           path_searching bspline_opt 
                           traj_utils cv_bridge pcl_conversions 
-                          cinematography_msgs)
+                          cinematography_msgs tf2 tf2_geometry_msgs)
 
 set(CPP_CONSTANTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../configs/cpp-constants)
 set(CPP_CONSTANTS_SRC ${CPP_CONSTANTS_DIR}/constants.cpp)

@@ -1,7 +1,7 @@
 {
   "focus_velocity_constraints": {
-    "focus_max_velocity_mps": 0.55,
-    "focus_max_accel_mps2": 2.5,
+    "focus_max_velocity_mps": 0.45,
+    "focus_max_accel_mps2": 3.7,
     "focus_speed_scale": 0.8
   },
   "focus_yaw_constraints": {

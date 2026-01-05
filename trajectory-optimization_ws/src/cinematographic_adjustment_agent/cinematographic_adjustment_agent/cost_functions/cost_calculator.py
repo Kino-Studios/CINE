@@ -52,6 +52,9 @@ class CostCalculator:
         self.LightAvoidanceParams = LightAvoidanceParams
         self.SimulationParams = SimulationParams
         self._last_light_setpoint = np.array([0.0, 0.0, 0.0], dtype=float)
+        self.position = None
+        self.target_world: Optional[np.ndarray] = None
+        self.framing_active = False
         self._declare_parameter("focus_object_id", UserRequestedParams.FOCUS_OBJECT_ID)
         self._declare_parameter("huber_delta_px", CostParams.HUBER_DELTA_PX)
         self._declare_parameter("deadband_px", CostParams.DEADBAND_PX)
@@ -99,6 +102,7 @@ class CostCalculator:
         self._declare_parameter("light_roll_gain", LightOrientationParams.ROLL_GAIN)
         self._declare_parameter("light_pitch_gain", LightOrientationParams.PITCH_GAIN)
         self._declare_parameter("light_yaw_gain", LightOrientationParams.YAW_GAIN)
+        self._declare_parameter("focus_yaw_hold_deadband_rad", math.radians(2.0))
         self._declare_parameter(
             "light_distance_bias_m", CostParams.LIGHT_DISTANCE_BIAS_M
         )
@@ -224,6 +228,14 @@ class CostCalculator:
             ],
             dtype=float,
         )
+        self.position = np.array(
+            [
+                msg.pose.pose.position.x,
+                msg.pose.pose.position.y,
+                msg.pose.pose.position.z,
+            ],
+            dtype=float,
+        )
 
     def update_bounding_box(self, msg: PolygonStamped):
         self.bounding_box = msg
@@ -242,6 +254,14 @@ class CostCalculator:
 
     def update_bgr_image(self, bgr_image):
         self.bgr_image = bgr_image
+
+    def update_target_world(self, target_world: Optional[np.ndarray]):
+        self.target_world = (
+            np.array(target_world, dtype=float) if target_world is not None else None
+        )
+
+    def update_framing_active(self, active: bool):
+        self.framing_active = bool(active)
 
     def _camera_forward_vector(self) -> Optional[np.ndarray]:
         if self.orientation is None:
@@ -338,8 +358,15 @@ class CostCalculator:
 
             if depth_value > 0 and not np.isnan(depth_value):
                 self.center_depth = float(depth_value)
-            else:
-                self.center_depth = None
+
+    def _compute_yaw_to_target(self) -> Optional[float]:
+        if self.position is None or self.target_world is None:
+            return None
+        dx = float(self.target_world[0]) - self.position[0]
+        dy = float(self.target_world[1]) - self.position[1]
+        if abs(dx) < self.SimulationParams.EPSILON and abs(dy) < self.SimulationParams.EPSILON:
+            return None
+        return math.atan2(dy, dx)
 
     def get_depth_at_point(self, x, y):
         if self.depth_image is None:
@@ -607,6 +634,12 @@ class CostCalculator:
         w_stab = float(self.node.get_parameter("w_stab").value)
         depth_cost = (w_dist * J_dist) + (w_near * J_near) + (w_stab * J_stab)
 
+        current_euler = (
+            self._quaternion_to_euler(self.orientation)
+            if self.orientation is not None
+            else None
+        )
+
         lighting_cost = 0.0
         yaw_setpoint = 0.0
         pitch_setpoint = 0.0
@@ -618,7 +651,10 @@ class CostCalculator:
         actual_pitch = 0.0
         actual_yaw = 0.0
 
-        if self._light_avoidance_enabled():
+        light_override = False
+        focus_override = False
+
+        if self._light_avoidance_enabled() and self.framing_active:
             attenuation = self._light_attenuation()
             forward = self._camera_forward_vector()
 
@@ -679,7 +715,7 @@ class CostCalculator:
                 roll_gain = max(0.0, roll_gain)
                 pitch_gain = max(0.0, pitch_gain)
                 yaw_gain = max(0.0, yaw_gain)
-                
+
                 raw_setpoints = np.array(
                     [raw_roll * roll_gain, raw_pitch * pitch_gain, raw_yaw * yaw_gain],
                     dtype=float,
@@ -697,7 +733,7 @@ class CostCalculator:
                 yaw_delta = self._angle_diff(
                     smooth_setpoints[2], self._last_light_setpoint[2]
                 )
-                
+
                 if yaw_delta > yaw_limit:
                     yaw_delta = yaw_limit
                 elif yaw_delta < -yaw_limit:
@@ -741,27 +777,43 @@ class CostCalculator:
 
                 damping = 1.0 / (1.0 + accel_factor * ang_vel_norm)
                 pitch_setpoint *= damping
-
-                current_euler = (
-                    self._quaternion_to_euler(self.orientation)
-                    if self.orientation is not None
-                    else None
-                )
-
-                if current_euler is not None:
-                    roll_val, pitch_val, yaw_val = current_euler
-
-                    actual_roll = roll_val
-                    actual_pitch = pitch_val
-                    actual_yaw = yaw_val
-
-                    yaw_error = self._angle_diff(yaw_setpoint, yaw_val)
-                    pitch_error = self._angle_diff(pitch_setpoint, pitch_val)
-                    roll_error = self._angle_diff(roll_setpoint, roll_val)
         else:
             self.light_vector = None
             self.light_distance = None
             self._last_light_setpoint = np.array([0.0, 0.0, 0.0], dtype=float)
+
+        if self.framing_active and self.target_world is not None:
+            target_yaw = self._compute_yaw_to_target()
+            if target_yaw is not None:
+                yaw_setpoint = target_yaw
+                focus_override = True
+
+        if current_euler is not None:
+            roll_val, pitch_val, yaw_val = current_euler
+
+            actual_roll = roll_val
+            actual_pitch = pitch_val
+            actual_yaw = yaw_val
+
+            yaw_error = self._angle_diff(yaw_setpoint, yaw_val)
+            pitch_error = self._angle_diff(pitch_setpoint, pitch_val)
+            roll_error = self._angle_diff(roll_setpoint, roll_val)
+
+        focus_deadband = math.radians(2.0)
+        try:
+            focus_deadband = max(
+                0.0,
+                float(
+                    self.node.get_parameter("focus_yaw_hold_deadband_rad").value
+                ),
+            )
+        except Exception:
+            pass
+
+        focus_cinematic_active = focus_override and (
+            current_euler is None or abs(yaw_error) > focus_deadband
+        )
+        has_cinematic_yaw = light_override or focus_cinematic_active
 
         smoothness_cost = 0.0
 
@@ -810,6 +862,7 @@ class CostCalculator:
             "smoothness_cost": float(smoothness_cost),
             "total_cost": float(total_cost),
             "yaw_setpoint": float(yaw_setpoint),
+            "has_cinematic_yaw": has_cinematic_yaw,
             "pitch_setpoint": float(pitch_setpoint),
             "roll_setpoint": float(roll_setpoint),
             "yaw_error": float(yaw_error),

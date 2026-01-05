@@ -12,6 +12,7 @@ ros2_executables = [
     os.path.join('scripts', 'ros2_nodes', 'waypoint_sender'),
     os.path.join('scripts', 'ros2_nodes', 'cinematic_bspline_filter'),
     os.path.join('scripts', 'ros2_nodes', 'trajectory_data_logger'),
+    os.path.join('scripts', 'ros2_nodes', 'noisy_odometry_node'),
     os.path.join('scripts', 'ros2_nodes', 'cinematic_waypoint_generator'),
     os.path.join('scripts', 'ros2_nodes', 'room_waypoint_sender'),
     os.path.join('scripts', 'ros2_nodes', 'simulated_object_detector'),

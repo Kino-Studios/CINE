@@ -30,7 +30,8 @@ class ConfigLoader:
             "defaults": "trajectory_constraints/defaults.json",
             "focus": "trajectory_constraints/focus.json",
             "params": "user_params/params.json",
-            "waypoints": "waypoint_generation/waypoint-params.json"
+            "waypoints": "waypoint_generation/waypoint-params.json",
+            "sensing": "sensing/sensory-params.json",
         }
 
         for key, relative_path in config_files.items():

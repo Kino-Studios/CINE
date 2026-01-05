@@ -74,6 +74,36 @@ struct FocusParameters {
   bool thirds_use_nearest_anchor = false;
 };
 
+struct TrajServerParameters {
+  double yaw_tracking_smooth_alpha = 0.08;
+  bool use_cinematic_yaw = true;
+  double final_yaw_smooth_alpha_framing = 0.0;
+  double yaw_dot_boost_factor = 1.0;
+  double framing_exit_smooth_duration = 0.5;
+  double framing_exit_acc_scale_min = 0.25;
+  double framing_exit_acc_transition_s = 2.0;
+  double time_forward = -1.0;
+};
+
+struct LightAvoidanceParameters {
+  double light_avoid_gain = 2.0;
+  double light_avoid_blend_base = 0.08;
+  double light_avoid_max_blend = 0.18;
+  double light_influence_distance_m = 3.5;
+  double light_avoid_transition_s = 6.0;
+  double light_avoid_speed_threshold_mps = 2.5;
+  double light_avoid_cooldown_after_framing_s = 0.7;
+  double light_disable_near_finish_s = 0.1;
+  double light_distance_blend_gain = 1.2;
+  double light_rotation_damping = 0.15;
+  double light_yaw_smooth_alpha = 0.35;
+  double light_avoid_blend_smooth_alpha = 0.6;
+  double light_avoid_weight = 0.85;
+  bool use_light_avoid_yaw = true;
+  bool debug_light_yaw = false;
+  double debug_light_period_s = 0.2;
+};
+
 class Config {
 public:
   static const Config& instance();
@@ -87,6 +117,8 @@ public:
   const FocusDamping& focusDamping() const { return focus_damping_; }
   const FocusDistance& focusDistance() const { return focus_distance_; }
   const FocusParameters& focusParameters() const { return focus_parameters_; }
+  const TrajServerParameters& trajServer() const { return traj_server_; }
+  const LightAvoidanceParameters& lightAvoidance() const { return light_avoidance_; }
 
 private:
   Config();
@@ -107,6 +139,8 @@ private:
   FocusDamping focus_damping_;
   FocusDistance focus_distance_;
   FocusParameters focus_parameters_;
+  TrajServerParameters traj_server_;
+  LightAvoidanceParameters light_avoidance_;
 };
 
 }  // namespace constants

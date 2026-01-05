@@ -3820,17 +3820,34 @@ Visualization Manager:
         Value: /cinematography/anchor_markers
       Value: false
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
+      Enabled: true
       Name: ComputationalDebug
       Namespaces:
-        {}
+        active_labels: true
+        active_path: true
+        active_targets: true
+        arc_anchors: true
+        arc_labels: true
+        arc_path: true
+        arc_waypoints: true
+        combined_path: true
+        distance_errors: true
+        light_vector: true
+        queue_points: true
+        static_path: true
+        suffix_path: true
+        suffix_points: true
+        target_sphere: true
+        transition_in: true
+        transition_out: true
+        waypoint_queue: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /cinematography/debug_markers
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/Marker
       Enabled: false
       Name: FramingArc
@@ -3860,19 +3877,36 @@ Visualization Manager:
         Value: /cinematography/light_point
       Value: true
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: Bezier+Suffix
       Namespaces:
-        suffix_viz_points: true
-        transition_viz_in: true
-        transition_viz_out: true
-        transition_viz_suffix: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /cinematography/transition_viz
+      Value: false
+    - Alpha: 1
+      Axes Length: 1
+      Axes Radius: 0.10000000149011612
+      Class: rviz_default_plugins/Pose
+      Color: 255; 25; 0
+      Enabled: true
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Name: Pose
+      Shaft Length: 1
+      Shaft Radius: 0.05000000074505806
+      Shape: Arrow
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drone/pov
       Value: true
   Enabled: true
   Global Options:
@@ -3920,25 +3954,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 6.636098861694336
+      Distance: 8.902106285095215
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -12.38786792755127
-        Y: 1.9359863996505737
-        Z: 0.7034334540367126
+        X: -12.397342681884766
+        Y: 1.9073405265808105
+        Z: 0.6998106837272644
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.8797964453697205
+      Pitch: 1.3947964906692505
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 1.572130560874939
+      Yaw: 4.517131805419922
     Saved: ~
 Window Geometry:
   Displays:
