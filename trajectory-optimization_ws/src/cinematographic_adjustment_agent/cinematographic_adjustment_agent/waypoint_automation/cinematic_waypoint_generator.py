@@ -211,8 +211,6 @@ class CinematicWaypointGenerator(Node):
         self.viz_active_path = True
         self.viz_transitions = True
         self.viz_arc_only = True
-        self.viz_target_sphere = True
-        self.viz_waypoint_numbers = False
         self.transition_viz_pub = self.create_publisher(MarkerArray, "/cinematography/transition_viz", 10)
         self.debug_markers_pub = self.create_publisher(MarkerArray, "/cinematography/debug_markers", 10)
         self.debug_viz_timer = self.create_timer(0.2, self._publish_debug_visualization)
@@ -224,7 +222,6 @@ class CinematicWaypointGenerator(Node):
             "transition_in": None,
             "transition_out": None,
             "combined_world": None,
-            "suffix_world": None,
             "start_idx": None,
             "end_idx": None,
         }
@@ -1126,30 +1123,6 @@ class CinematicWaypointGenerator(Node):
                         400,
                     )
                 )
-        suffix_world = self.viz_data.get("suffix_world")
-        if suffix_world:
-            markers.markers.extend(
-                self._create_path_markers(
-                    suffix_world,
-                    "suffix_path",
-                    (1.0, 1.0, 0.0, 0.6),
-                    0.03,
-                    now,
-                    450,
-                )
-            )
-            for i, wp in enumerate(suffix_world[:8]):
-                markers.markers.append(
-                    self._create_waypoint_sphere(
-                        wp,
-                        860 + i,
-                        "suffix_points",
-                        (1.0, 1.0, 0.0, 0.9),
-                        self._waypoint_diameter() * 0.5,
-                        now,
-                    )
-                )
-
         if self.viz_data["arc_start"] is not None:
             markers.markers.append(
                 self._create_waypoint_sphere(
@@ -1272,58 +1245,6 @@ class CinematicWaypointGenerator(Node):
                             )
                         )
 
-        if self.viz_target_sphere and self.last_target_world is not None:
-            focus_dist = self._resolve_focus_distance(None)
-            if focus_dist > 0.0:
-                markers.markers.append(
-                    self._create_sphere_wireframe(
-                        self.last_target_world,
-                        focus_dist,
-                        900,
-                        "target_sphere",
-                        (1.0, 0.0, 1.0, 0.3),
-                        now,
-                    )
-                )
-
-        if (
-            self.viz_arc_only
-            and self.viz_data["cinematographic_waypoints"] is not None
-            and self.last_target_world is not None
-        ):
-            markers.markers.extend(
-                self._create_distance_error_markers(
-                    self.viz_data["cinematographic_waypoints"],
-                    self.last_target_world,
-                    self._resolve_focus_distance(None),
-                    now,
-                )
-            )
-
-        if self.viz_waypoint_numbers and self.active_waypoints is not None:
-            origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
-            active_world = [
-                (wp[0] + origin[0], wp[1] + origin[1], wp[2] + origin[2])
-                for wp in self.active_waypoints
-            ]
-            for i, wp in enumerate(active_world):
-                markers.markers.append(
-                    self._create_text_marker(
-                        wp,
-                        str(i),
-                        1000 + i,
-                        "wp_numbers",
-                        (1.0, 1.0, 1.0, 0.8),
-                        0.1,
-                        now,
-                        offset_z=0.05,
-                    )
-                )
-
-        light_marker = self._create_light_marker(now)
-        if light_marker is not None:
-            markers.markers.append(light_marker)
-
         self.debug_markers_pub.publish(markers)
         self._publish_transition_viz(now)
 
@@ -1334,31 +1255,12 @@ class CinematicWaypointGenerator(Node):
         paths = [
             (self.viz_data.get("transition_in", []), "transition_viz_in", (0.8, 0.0, 1.0, 1.0), 0.04, 6000),
             (self.viz_data.get("transition_out", []), "transition_viz_out", (1.0, 0.3, 0.0, 1.0), 0.04, 6010),
-            (
-                self.viz_data.get("suffix_world", []),
-                "transition_viz_suffix",
-                (1.0, 1.0, 0.0, 0.9),
-                0.03,
-                6020,
-            ),
         ]
         for pts, ns, color, width, base_id in paths:
             if not pts:
                 continue
             markers.markers.extend(
                 self._create_path_markers(pts, ns, color, width, stamp, base_id)
-            )
-        suffix = self.viz_data.get("suffix_world") or []
-        for i, wp in enumerate(suffix[:8]):
-            markers.markers.append(
-                self._create_waypoint_sphere(
-                    wp,
-                    6100 + i,
-                    "suffix_viz_points",
-                    (1.0, 1.0, 0.0, 0.8),
-                    self._waypoint_diameter() * 0.3,
-                    stamp,
-                )
             )
         self.transition_viz_pub.publish(markers)
 
@@ -1433,134 +1335,6 @@ class CinematicWaypointGenerator(Node):
         marker.color.a = float(color[3])
         marker.text = text
         return marker
-
-    def _create_light_marker(self, stamp):
-        if not self.light_avoidance_enabled:
-            return None
-        if self.light_vector is None or self.current_pos is None:
-            return None
-        length = max(1.0, (float(self.light_distance) if self.light_distance is not None else 1.0) * 1.2)
-        norm = math.sqrt(self.light_vector[0] * self.light_vector[0] + self.light_vector[1] * self.light_vector[1] + self.light_vector[2] * self.light_vector[2])
-        if norm <= 1e-6:
-            return None
-        direction = tuple(v / norm * length for v in self.light_vector)
-
-        marker = Marker()
-        marker.header.stamp = stamp
-        marker.header.frame_id = self.frame_id
-        marker.ns = "light_vector"
-        marker.id = 999
-        marker.type = Marker.ARROW
-        marker.action = Marker.ADD
-        marker.pose.orientation.w = 1.0
-        marker.scale.x = 0.05
-        marker.scale.y = 0.12
-        marker.scale.z = 0.12
-        marker.color.r = 1.0
-        marker.color.g = 0.2
-        marker.color.b = 0.1
-        marker.color.a = 1.0
-
-        start = Point()
-        start.x = float(self.current_pos[0])
-        start.y = float(self.current_pos[1])
-        start.z = float(self.current_pos[2])
-
-        end = Point()
-        end.x = start.x + direction[0]
-        end.y = start.y + direction[1]
-        end.z = start.z + direction[2]
-
-        marker.points = [start, end]
-        return marker
-
-    def _create_sphere_wireframe(self, center, radius, marker_id, namespace, color, stamp, num_segments=32):
-        marker = Marker()
-        marker.header.stamp = stamp
-        marker.header.frame_id = self.frame_id
-        marker.ns = namespace
-        marker.id = int(marker_id)
-        marker.type = Marker.LINE_LIST
-        marker.action = Marker.ADD
-        marker.scale.x = 0.02
-        marker.color.r = float(color[0])
-        marker.color.g = float(color[1])
-        marker.color.b = float(color[2])
-        marker.color.a = float(color[3])
-        marker.pose.orientation.w = 1.0
-
-        cx, cy, cz = float(center[0]), float(center[1]), float(center[2])
-        r = float(radius)
-
-        for plane in ("xy", "xz", "yz"):
-            for i in range(num_segments):
-                angle1 = 2.0 * math.pi * i / num_segments
-                angle2 = 2.0 * math.pi * (i + 1) / num_segments
-                if plane == "xy":
-                    p1 = Point(x=cx + r * math.cos(angle1), y=cy + r * math.sin(angle1), z=cz)
-                    p2 = Point(x=cx + r * math.cos(angle2), y=cy + r * math.sin(angle2), z=cz)
-                elif plane == "xz":
-                    p1 = Point(x=cx + r * math.cos(angle1), y=cy, z=cz + r * math.sin(angle1))
-                    p2 = Point(x=cx + r * math.cos(angle2), y=cy, z=cz + r * math.sin(angle2))
-                else:
-                    p1 = Point(x=cx, y=cy + r * math.cos(angle1), z=cz + r * math.sin(angle1))
-                    p2 = Point(x=cx, y=cy + r * math.cos(angle2), z=cz + r * math.sin(angle2))
-                marker.points.append(p1)
-                marker.points.append(p2)
-
-        return marker
-
-    def _create_distance_error_markers(self, waypoints, target, desired_distance, stamp):
-        markers = []
-        if not waypoints or target is None:
-            return markers
-
-        tx, ty, tz = float(target[0]), float(target[1]), float(target[2])
-        desired = float(desired_distance)
-        for i, wp in enumerate(waypoints):
-            dist = math.dist(wp, target)
-            error = abs(dist - desired)
-            if error < 0.05:
-                color = (0.0, 1.0, 0.0, 0.8)
-            elif error < 0.1:
-                color = (1.0, 1.0, 0.0, 0.8)
-            else:
-                color = (1.0, 0.0, 0.0, 0.8)
-
-            line = Marker()
-            line.header.stamp = stamp
-            line.header.frame_id = self.frame_id
-            line.ns = "distance_errors"
-            line.id = 1100 + i
-            line.type = Marker.LINE_LIST
-            line.action = Marker.ADD
-            line.scale.x = 0.01
-            line.color.r = float(color[0])
-            line.color.g = float(color[1])
-            line.color.b = float(color[2])
-            line.color.a = 0.3
-            line.pose.orientation.w = 1.0
-            p1 = Point(x=float(wp[0]), y=float(wp[1]), z=float(wp[2]))
-            p2 = Point(x=tx, y=ty, z=tz)
-            line.points.append(p1)
-            line.points.append(p2)
-            markers.append(line)
-
-            if error > 0.05:
-                markers.append(
-                    self._create_text_marker(
-                        wp,
-                        f"Δ{error:.3f}m",
-                        1200 + i,
-                        "error_text",
-                        color,
-                        0.08,
-                        stamp,
-                        offset_z=-0.1,
-                    )
-                )
-
-        return markers
 
     def generate_cinematographic_waypoints(self):
         if self.start_pos is None:
@@ -1814,8 +1588,6 @@ class CinematicWaypointGenerator(Node):
                 + transition_out
                 + suffix
             )
-            self.viz_data["suffix_world"] = suffix
-
             if cinematographic_waypoints:
                 arc_altitudes = [wp[2] for wp in cinematographic_waypoints]
                 self.get_logger().info(

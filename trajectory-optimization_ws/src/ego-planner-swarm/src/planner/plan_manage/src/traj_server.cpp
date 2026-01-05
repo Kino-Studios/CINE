@@ -9,6 +9,7 @@
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/empty.hpp"
 #include "std_msgs/msg/float32.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "cinematography_msgs/msg/cinematography_costs.hpp"
 #include "constants.hpp"
@@ -24,6 +25,8 @@
 
 rclcpp::Publisher<quadrotor_msgs::msg::PositionCommand>::SharedPtr pos_cmd_pub;
 rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr focus_vector_pub;
+rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr control_points_pub;
+rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr knots_pub;
 rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pov_pub;
 rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr light_vector_sub;
 
@@ -283,6 +286,43 @@ void handleBsplineMsg(traj_utils::msg::Bspline::SharedPtr msg)
 
   UniformBspline pos_traj(pos_pts, msg->order, 0.1);
   pos_traj.setKnot(knots);
+
+  if (control_points_pub)
+  {
+    std_msgs::msg::Float64MultiArray points_msg;
+    points_msg.layout.dim.resize(2);
+    points_msg.layout.dim[0].label = "point";
+    points_msg.layout.dim[0].size = static_cast<size_t>(pos_pts.cols());
+    points_msg.layout.dim[0].stride = static_cast<size_t>(pos_pts.cols()) * 3;
+    points_msg.layout.dim[1].label = "coord";
+    points_msg.layout.dim[1].size = 3;
+    points_msg.layout.dim[1].stride = 3;
+    points_msg.layout.data_offset = 0;
+    points_msg.data.reserve(static_cast<size_t>(pos_pts.cols()) * 3);
+    for (Eigen::Index i = 0; i < pos_pts.cols(); ++i)
+    {
+      points_msg.data.push_back(pos_pts(0, i));
+      points_msg.data.push_back(pos_pts(1, i));
+      points_msg.data.push_back(pos_pts(2, i));
+    }
+    control_points_pub->publish(points_msg);
+  }
+
+  if (knots_pub && knots.size() > 0)
+  {
+    std_msgs::msg::Float64MultiArray knots_msg;
+    knots_msg.layout.dim.resize(1);
+    knots_msg.layout.dim[0].label = "knot";
+    knots_msg.layout.dim[0].size = static_cast<size_t>(knots.size());
+    knots_msg.layout.dim[0].stride = static_cast<size_t>(knots.size());
+    knots_msg.layout.data_offset = 0;
+    knots_msg.data.reserve(static_cast<size_t>(knots.size()));
+    for (Eigen::Index i = 0; i < knots.size(); ++i)
+    {
+      knots_msg.data.push_back(knots(i));
+    }
+    knots_pub->publish(knots_msg);
+  }
 
   // parse yaw traj
 
@@ -1125,6 +1165,14 @@ int main(int argc, char **argv)
 
   focus_vector_pub = node->create_publisher<visualization_msgs::msg::Marker>(
       "/cinematography/focus_vector",
+      10);
+
+  control_points_pub = node->create_publisher<std_msgs::msg::Float64MultiArray>(
+      "/cinematography/control_points",
+      10);
+
+  knots_pub = node->create_publisher<std_msgs::msg::Float64MultiArray>(
+      "/cinematography/knots",
       10);
 
   pov_pub = node->create_publisher<geometry_msgs::msg::PoseStamped>(

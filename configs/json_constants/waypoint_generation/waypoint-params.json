@@ -28,7 +28,7 @@
     "waypoint_rate_hz": 15.0,
     "num_initial_waypoints": 40,
     "min_orbit_radius_m": 0.2,
-    "waypoint_radius_m": 0.00005, 
+    "waypoint_radius_m": 0.022, 
     "max_waypoint_jump_m": 3.0,
     "min_waypoint_separation_m": 0.5,
     "bezier_blend_length_m": 0.25,
