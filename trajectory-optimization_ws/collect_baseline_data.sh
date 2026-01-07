@@ -51,6 +51,9 @@ GET_CONFIG="python3 ${REPO_ROOT}/configs/python-constants/get_config.py"
 
 DRONE_ID=$($GET_CONFIG DRONE_ID)
 TRAJECTORY_DATA_DIR="${REPO_ROOT}/$($GET_CONFIG TRAJECTORY_DATA_DIR)"
+TARGET_XYZ="${TARGET_XYZ:-$($GET_CONFIG TARGET_XYZ)}"
+FOCUS_DEPTH_M="${FOCUS_DEPTH_M:-$($GET_CONFIG FOCUS_DEPTH_M)}"
+FRAME_ID="${FRAME_ID:-$($GET_CONFIG FRAME_ID)}"
 
 LOGGING_SEVERITY="${LOGGING_SEVERITY:-$($GET_CONFIG LOGGING_SEVERITY)}"
 LOGGING_SEVERITY="${LOGGING_SEVERITY:-DEBUG}"
@@ -64,6 +67,7 @@ SIM_PID=""
 TAIL_PID=""
 LOGGER_PID=""
 WAYPOINT_PID=""
+SIMULATED_FOCUS_PID=""
 
 if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
   "${SCRIPT_DIR}/start_simulation.sh" baseline > /tmp/ego_planner_baseline.log 2>&1 &
@@ -94,6 +98,15 @@ ros2 run cinematographic_adjustment_agent trajectory_data_logger --mode baseline
 LOGGER_PID=$!
 sleep 2
 
+ros2 run cinematographic_adjustment_agent simulated_focus_publisher --ros-args \
+  -p odom_topic:=${ODOM_TOPIC} \
+  -p frame_id:=${FRAME_ID} \
+  -p target_offset_xyz:="${TARGET_XYZ}" \
+  -p target_xyz:="${TARGET_XYZ}" \
+  -p focus_depth_m:=${FOCUS_DEPTH_M} &
+SIMULATED_FOCUS_PID=$!
+sleep 2
+
 ros2 run cinematographic_adjustment_agent cinematic_waypoint_generator --ros-args -p odom_topic:=${ODOM_TOPIC} &
 WAYPOINT_PID=$!
 
@@ -105,7 +118,7 @@ cleanup() {
     wait "${LOGGER_PID}" 2>/dev/null || true
   fi
 
-  for pid in "${WAYPOINT_PID:-}" "${TAIL_PID:-}" "${SIM_PID:-}"; do
+  for pid in "${WAYPOINT_PID:-}" "${TAIL_PID:-}" "${SIM_PID:-}" "${SIMULATED_FOCUS_PID:-}"; do
     if [ -n "${pid}" ]; then
       kill "${pid}" 2>/dev/null || true
     fi

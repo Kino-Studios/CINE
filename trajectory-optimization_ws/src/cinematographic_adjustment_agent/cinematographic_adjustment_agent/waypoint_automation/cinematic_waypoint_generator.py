@@ -58,6 +58,13 @@ class CinematicWaypointGenerator(Node):
         self.goal_pub = self.create_publisher(PoseStamped, self.output_topic, 10)
         self.odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, 10)
         self.detection_sub = self.create_subscription(Float32MultiArray, self.detections_topic, self.detection_callback, 10)
+        self.anchor_distance_topic = str(
+            self.declare_parameter(
+                "anchor_focus_distance_topic",
+                "/cinematography/anchor_focus_distance",
+            ).value
+        )
+        self.anchor_distance_pub = self.create_publisher(Float32, self.anchor_distance_topic, 10)
         if self.light_avoidance_enabled:
             self.light_sub = self.create_subscription(
                 Vector3Stamped,
@@ -69,6 +76,8 @@ class CinematicWaypointGenerator(Node):
             self.light_sub = None
         self.focus_depth_sub = self.create_subscription(Float32, "/cinematography/focus_depth_m", self.focus_depth_callback, 10)
         self.target_world_sub = self.create_subscription(PointStamped, "/cinematography/target_world", self.target_world_callback, 10)
+        self.target_world_pub = self.create_publisher(PointStamped, "/cinematography/target_world", 10)
+        self.target_world_timer = self.create_timer(0.1, self._publish_target_world)
 
         self.start_pos = None
         self.origin_offset = None
@@ -183,6 +192,7 @@ class CinematicWaypointGenerator(Node):
         self.anchor_source = "none"
         self.anchor_focus_distance = None
         self.framing_active = False
+        self.baseline_framing_active = False
         self.framing_start_idx = None
         self.framing_end_idx = None
 
@@ -200,6 +210,7 @@ class CinematicWaypointGenerator(Node):
         self.anchor_marker_pub = self.create_publisher(MarkerArray, "/cinematography/anchor_markers", 10)
         self.target_marker_pub = self.create_publisher(Marker, "/cinematography/target_marker", 10)
         self.framing_active_pub = self.create_publisher(Bool, "/cinematography/framing_active", 10)
+        self.baseline_framing_pub = self.create_publisher(Bool, "/cinematography/baseline_framing_active", 10)
         self.debug_arc = True
         self.debug_arc_log_period_s = 0.5
         self.debug_arc_marker_scale = 0.04
@@ -233,10 +244,17 @@ class CinematicWaypointGenerator(Node):
         self.focus_depth_m: float | None = None
         self.target_world: tuple[float, float, float] | None = None
         self.last_target_world: tuple[float, float, float] | None = None
+        self._last_published_target_stamp = None
         self.light_vector = None
         self.light_distance = None
         self.cost_calculator = CostCalculator(self)
         self._anchor_marker_seq = 0
+        self.baseline_mode = bool(self.declare_parameter("baseline_mode", False).value)
+        mode_str = "baseline" if self.baseline_mode else "cinematic"
+        self.get_logger().info(f"Waypoint generator running in {mode_str} mode")
+        if self.baseline_mode:
+            self.use_dynamic_waypoints = False
+            self.pending_detection_merge = False
 
     def _build_room_orbit(self):
         radius = max(self.min_orbit_radius_m, 1.0)
@@ -314,6 +332,9 @@ class CinematicWaypointGenerator(Node):
             self.focus_depth_m = None
 
     def target_world_callback(self, msg: PointStamped):
+        if self._is_published_target(msg.header.stamp):
+            self._last_published_target_stamp = None
+            return
         try:
             p = msg.point
             self.target_world = (float(p.x), float(p.y), float(p.z))
@@ -324,6 +345,8 @@ class CinematicWaypointGenerator(Node):
             self.last_target_world = None
 
     def detection_callback(self, msg: Float32MultiArray):
+        if self.baseline_mode:
+            return
         now = self.get_clock().now()
         if self.object_detection_time is not None:
             elapsed = (now - self.object_detection_time).nanoseconds / 1e9
@@ -339,7 +362,17 @@ class CinematicWaypointGenerator(Node):
         self.simulated_detection_active = False
         self.use_dynamic_waypoints = True
         self.pending_detection_merge = True
-        self._set_anchors(target_world=self.target_world, obj_depth=self.detected_object["depth"])
+        obj_depth = float(parsed.get("depth", 0.0))
+        computed = self._compute_object_world(parsed)
+        if computed is not None:
+            target_world_pos, computed_depth = computed
+            if target_world_pos is not None:
+                self.target_world = target_world_pos
+                self.last_target_world = target_world_pos
+            if computed_depth is not None:
+                obj_depth = computed_depth
+        self._publish_target_world()
+        self._set_anchors(target_world=self.target_world, obj_depth=obj_depth)
         self._rebuild_active_with_detection()
 
     def _set_anchors(self, target_world=None, obj_depth=None):
@@ -395,6 +428,7 @@ class CinematicWaypointGenerator(Node):
         self.anchor_end_idx = int(end_idx)
         self.anchors_set = True
         self._publish_anchor_points()
+        self._publish_anchor_focus_distance()
 
     def _rebuild_active_with_detection(self):
         if self.start_pos is None or self.origin_offset is None:
@@ -921,6 +955,26 @@ class CinematicWaypointGenerator(Node):
         self.anchor_end_pub.publish(end_msg)
         self._publish_anchor_markers(start_wp, end_wp, now)
 
+    def _is_published_target(self, stamp):
+        last = self._last_published_target_stamp
+        if last is None:
+            return False
+        return last.sec == stamp.sec and last.nanosec == stamp.nanosec
+
+    def _publish_target_world(self):
+        target = self.target_world or self.last_target_world
+        if target is None:
+            return
+        msg = PointStamped()
+        stamp = self.get_clock().now().to_msg()
+        msg.header.stamp = stamp
+        msg.header.frame_id = self.frame_id
+        msg.point.x = float(target[0])
+        msg.point.y = float(target[1])
+        msg.point.z = float(target[2])
+        self.target_world_pub.publish(msg)
+        self._last_published_target_stamp = stamp
+
     def _publish_anchor_markers(self, start_wp, end_wp, now_msg):
         scale = max(0.01, float(self.anchor_marker_scale_m))
         markers = MarkerArray()
@@ -968,6 +1022,19 @@ class CinematicWaypointGenerator(Node):
         markers.markers.append(end_marker)
 
         self.anchor_marker_pub.publish(markers)
+
+    def _publish_anchor_focus_distance(self):
+        if self.anchor_distance_pub is None or self.anchor_focus_distance is None:
+            return
+        if not math.isfinite(self.anchor_focus_distance) or self.anchor_focus_distance <= 0.0:
+            return
+        self.get_logger().info(
+            f"Publishing anchor focus distance: {self.anchor_focus_distance:.3f} m "
+            f"(source={self.anchor_source} start={self.anchor_start_idx} end={self.anchor_end_idx})"
+        )
+        msg = Float32()
+        msg.data = float(self.anchor_focus_distance)
+        self.anchor_distance_pub.publish(msg)
 
     def _publish_target_marker(self):
         target = self.target_world or self.last_target_world
@@ -1445,8 +1512,9 @@ class CinematicWaypointGenerator(Node):
         anchor_dist_start = math.dist(start_wp, target_world)
         anchor_dist_end = math.dist(end_wp, target_world)
         anchor_distance = max(anchor_dist_start, anchor_dist_end)
-        self.anchor_focus_distance = float(anchor_distance)
         focus_distance = max(float(anchor_distance), float(self.min_orbit_radius_m))
+        self.anchor_focus_distance = float(focus_distance)
+        self._publish_anchor_focus_distance()
         base_z = self._resolve_framing_altitude_from_anchors(
             start_wp,
             end_wp,
@@ -1525,6 +1593,7 @@ class CinematicWaypointGenerator(Node):
         )
         
         has_cinematic_arc = bool(cinematographic_waypoints)
+        self.generated_arc_length = len(cinematographic_waypoints) if has_cinematic_arc else 0
         
         if cinematographic_waypoints:
             self.anchor_start_world = arc_start
@@ -1532,6 +1601,19 @@ class CinematicWaypointGenerator(Node):
 
         self.viz_data["cinematographic_waypoints"] = cinematographic_waypoints
         self._debug_arc(cinematographic_waypoints, target_world, desired)
+
+        actual_focus_distance = focus_distance
+        if cinematographic_waypoints:
+            waypoint_dists = [
+                math.dist(wp, target_world) for wp in cinematographic_waypoints if wp is not None
+            ]
+            if waypoint_dists:
+                max_arc_dist = max(waypoint_dists)
+                if math.isfinite(max_arc_dist):
+                    actual_focus_distance = max(actual_focus_distance, max_arc_dist)
+        if actual_focus_distance != self.anchor_focus_distance:
+            self.anchor_focus_distance = float(actual_focus_distance)
+            self._publish_anchor_focus_distance()
 
         suffix = static_world[end_idx + 1 :]
 
@@ -1707,26 +1789,29 @@ class CinematicWaypointGenerator(Node):
         return waypoints
 
     def _initialize_waypoint_sequence(self):
-        if self.use_dynamic_waypoints and self.dynamic_waypoints is None:
-            if self.detected_object is not None or self.target_world is not None or self.last_target_world is not None:
-                self.get_logger().info("Generating dynamic waypoints for active path")
-                self.generate_cinematographic_waypoints()
-            if self.dynamic_waypoints is None:
-                self.get_logger().warn("Dynamic waypoints unavailable; falling back to static path")
-                self.use_dynamic_waypoints = False
-                if self.detected_object is not None or self.target_world is not None:
-                    self.pending_detection_merge = True
-
-        if self.use_dynamic_waypoints and self.dynamic_waypoints is not None:
-            waypoints_to_send = self.dynamic_waypoints
-        else:
+        if self.baseline_mode:
             waypoints_to_send = self._scaled_static_waypoints()
+        else:
+            if self.use_dynamic_waypoints and self.dynamic_waypoints is None:
+                if self.detected_object is not None or self.target_world is not None or self.last_target_world is not None:
+                    self.get_logger().info("Generating dynamic waypoints for active path")
+                    self.generate_cinematographic_waypoints()
+                if self.dynamic_waypoints is None:
+                    self.get_logger().warn("Dynamic waypoints unavailable; falling back to static path")
+                    self.use_dynamic_waypoints = False
+                    if self.detected_object is not None or self.target_world is not None:
+                        self.pending_detection_merge = True
 
-        if (not self.use_dynamic_waypoints) and self.pending_detection_merge and self.detected_object is not None:
-            waypoints_to_send = self._merge_framing_with_static(waypoints_to_send, self.detected_object)
-            self.pending_detection_merge = False
-        elif self.simulate_object and (not self.use_dynamic_waypoints):
-            waypoints_to_send = self._insert_simulated_object_orbit(waypoints_to_send)
+            if self.use_dynamic_waypoints and self.dynamic_waypoints is not None:
+                waypoints_to_send = self.dynamic_waypoints
+            else:
+                waypoints_to_send = self._scaled_static_waypoints()
+
+            if (not self.use_dynamic_waypoints) and self.pending_detection_merge and self.detected_object is not None:
+                waypoints_to_send = self._merge_framing_with_static(waypoints_to_send, self.detected_object)
+                self.pending_detection_merge = False
+            elif self.simulate_object and (not self.use_dynamic_waypoints):
+                waypoints_to_send = self._insert_simulated_object_orbit(waypoints_to_send)
 
         origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
         waypoints_to_send = self._remove_anchor_points_from_waypoints(
@@ -1748,14 +1833,21 @@ class CinematicWaypointGenerator(Node):
         self.last_progress_dist = None
         self.waypoints_sent = False
         self._update_framing_indices()
-        self._insert_focus_entry_waypoints()
-        self._update_framing_indices()
-        self._publish_framing_active(self._is_framing_idx(self.current_target_index))
+        if not self.baseline_mode:
+            self._insert_focus_entry_waypoints()
+            self._update_framing_indices()
+        framing_active = self._is_framing_idx(self.current_target_index)
+        self._publish_framing_states(framing_active)
 
         if self.current_pos is not None and self.active_waypoints:
             skipped = 0
             min_start_threshold = max(self._current_distance_threshold(), float(self.min_first_waypoint_distance_m))
             while self.current_target_index < len(self.active_waypoints):
+                if (
+                    self.framing_start_idx is not None
+                    and self.current_target_index >= self.framing_start_idx
+                ):
+                    break
                 target_world = self._rel_to_world(self.active_waypoints[self.current_target_index])
                 dist = self._distance_to(target_world)
                 threshold = min_start_threshold
@@ -1767,9 +1859,24 @@ class CinematicWaypointGenerator(Node):
                 skipped += 1
             if skipped > 0:
                 self.last_published_index = self.current_target_index - 1
-                self.get_logger().info(
-                    f"Skipped {skipped} near waypoints at init; starting at "
-                    f"{self.current_target_index} (min_start_threshold={min_start_threshold:.2f})"
+                total_waypoints = len(self.active_waypoints) if self.active_waypoints is not None else 0
+                if (
+                    self.framing_start_idx is not None
+                    and self.framing_end_idx is not None
+                ):
+                    range_desc = f"{self.framing_start_idx}-{self.framing_end_idx}"
+                else:
+                    range_desc = "unset"
+                overshoot_note = ""
+                if (
+                    self.framing_start_idx is not None
+                    and self.current_target_index > self.framing_start_idx
+                ):
+                    overshoot_note = " [warn: skip may have jumped past framing start]"
+                self.get_logger().warn(
+                    f"Skipped {skipped} near waypoints at init; now at {self.current_target_index} "
+                    f"(min_start_threshold={min_start_threshold:.2f}, framing range={range_desc}, total_waypoints={total_waypoints})"
+                    f"{overshoot_note}"
                 )
         self._reset_and_prefill_queue()
 
@@ -2040,6 +2147,25 @@ class CinematicWaypointGenerator(Node):
                 best_idx = i
         return best_idx
 
+    def _find_candidate_indices(self, target_world):
+        if self.active_waypoints is None:
+            return []
+        
+        candidates = []
+        for i, wp in enumerate(self.active_waypoints):
+            rel = self._rel_to_world(wp)
+            dist_sq = (rel[0] - target_world[0]) ** 2 + (rel[1] - target_world[1]) ** 2 + (rel[2] - target_world[2]) ** 2
+            candidates.append((i, dist_sq))
+        
+        candidates.sort(key=lambda x: x[1])
+        if not candidates:
+            return []
+            
+        min_dist_sq = candidates[0][1]
+        threshold_sq = min_dist_sq + 0.25 
+        
+        return [c[0] for c in candidates if c[1] <= threshold_sq]
+
     def _update_framing_indices(self):
         self.framing_start_idx = None
         self.framing_end_idx = None
@@ -2049,14 +2175,41 @@ class CinematicWaypointGenerator(Node):
             return
         if self.anchor_start_world is None or self.anchor_end_world is None:
             return
-        start_idx = self._closest_waypoint_index(self.anchor_start_world)
-        end_idx = self._closest_waypoint_index(self.anchor_end_world)
-        if start_idx is None or end_idx is None:
+
+        start_candidates = self._find_candidate_indices(self.anchor_start_world)
+        end_candidates = self._find_candidate_indices(self.anchor_end_world)
+
+        if not start_candidates or not end_candidates:
             return
-        if end_idx < start_idx:
-            start_idx, end_idx = end_idx, start_idx
-        self.framing_start_idx = start_idx
-        self.framing_end_idx = end_idx
+
+        expected_len = getattr(self, "generated_arc_length", 0)
+        best_pair = None
+        best_cost = float('inf')
+
+        for s in start_candidates:
+            for e in end_candidates:
+                if e > s:
+                    diff = e - s
+                    cost = abs(diff - expected_len)
+                    if cost < best_cost:
+                        best_cost = cost
+                        best_pair = (s, e)
+        
+        if best_pair is not None:
+            self.framing_start_idx, self.framing_end_idx = best_pair
+        else:
+            s = start_candidates[0]
+            e = end_candidates[0]
+            if e < s:
+                s, e = e, s
+            self.framing_start_idx = s
+            self.framing_end_idx = e
+
+        self.get_logger().info(
+            f"Framing indices updated start={self.framing_start_idx} end={self.framing_end_idx} "
+            f"(len={self.framing_end_idx - self.framing_start_idx}, expected={expected_len}, "
+            f"mode={'baseline' if getattr(self, 'baseline_mode', False) else 'cinematic'})"
+        )
 
     def _is_framing_idx(self, idx):
         if self.framing_start_idx is None or self.framing_end_idx is None:
@@ -2107,10 +2260,46 @@ class CinematicWaypointGenerator(Node):
         active = bool(active)
         if self.framing_active == active:
             return
+        prev_idx = getattr(self, "current_target_index", 0) or 0
+        total_waypoints = len(self.active_waypoints) if self.active_waypoints is not None else 0
+        if (
+            self.framing_start_idx is not None
+            and self.framing_end_idx is not None
+        ):
+            range_desc = f"{self.framing_start_idx}-{self.framing_end_idx}"
+        else:
+            range_desc = "unset"
+        if active:
+            self.get_logger().info(
+                f"FRAMING STARTED at waypoint {prev_idx} (range: {range_desc}, total_waypoints: {total_waypoints})"
+            )
+        else:
+            self.get_logger().info(
+                f"FRAMING ENDED at waypoint {prev_idx} (range was: {range_desc}, total_waypoints: {total_waypoints})"
+            )
         msg = Bool()
         msg.data = active
         self.framing_active_pub.publish(msg)
         self.framing_active = active
+    
+    def _publish_baseline_framing_active(self, active):
+        active = bool(active)
+        if self.baseline_framing_active == active:
+            return
+        self.get_logger().info(f"Baseline framing active state changed to {active}")
+        msg = Bool()
+        msg.data = active
+        self.baseline_framing_pub.publish(msg)
+        self.baseline_framing_active = active
+
+    def _publish_framing_states(self, framing_active):
+        if self.baseline_mode:
+            # Baseline mode always keeps cinematic framing topic false
+            self._publish_framing_active(False)
+            self._publish_baseline_framing_active(framing_active)
+        else:
+            self._publish_framing_active(framing_active)
+            self._publish_baseline_framing_active(False)
 
     def _publish_waypoint(self, target_world, idx: int):
         goal = PoseStamped()
@@ -2174,15 +2363,16 @@ class CinematicWaypointGenerator(Node):
 
     def _step_waypoint_sequence(self):
         if self.active_waypoints is None or self.current_pos is None:
-            self._publish_framing_active(False)
+            self._publish_framing_states(False)
             return
 
         if self.current_target_index >= len(self.active_waypoints):
             self.waypoints_sent = True
-            self._publish_framing_active(False)
+            self._publish_framing_states(False)
             return
 
-        self._publish_framing_active(self._is_framing_idx(self.current_target_index))
+        framing_active = self._is_framing_idx(self.current_target_index)
+        self._publish_framing_states(framing_active)
 
         target_world = self._rel_to_world(self.active_waypoints[self.current_target_index])
 
@@ -2218,8 +2408,12 @@ class CinematicWaypointGenerator(Node):
                     return
 
         if dist <= threshold:
+            total_waypoints = len(self.active_waypoints) if self.active_waypoints is not None else 0
+            max_idx = max(total_waypoints - 1, 0)
+            idx_label = f"{self.current_target_index}/{max_idx}"
+            framing_tag = " [FRAMING]" if framing_active else ""
             self.get_logger().info(
-                f"Threshold reached for waypoint {self.current_target_index}: dist={dist:.3f} <= threshold={threshold:.3f}"
+                f"Waypoint {idx_label} reached{framing_tag}: dist={dist:.3f} <= threshold={threshold:.3f}"
             )
             self.current_target_index += 1
             self.last_progress_time = None

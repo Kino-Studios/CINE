@@ -11,6 +11,7 @@
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/float64_multi_array.hpp"
 #include "visualization_msgs/msg/marker.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 #include "cinematography_msgs/msg/cinematography_costs.hpp"
 #include "constants.hpp"
 #include <algorithm>
@@ -25,6 +26,7 @@
 
 rclcpp::Publisher<quadrotor_msgs::msg::PositionCommand>::SharedPtr pos_cmd_pub;
 rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr focus_vector_pub;
+rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr control_point_marker_pub;
 rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr control_points_pub;
 rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr knots_pub;
 rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pov_pub;
@@ -306,6 +308,114 @@ void handleBsplineMsg(traj_utils::msg::Bspline::SharedPtr msg)
       points_msg.data.push_back(pos_pts(2, i));
     }
     control_points_pub->publish(points_msg);
+    if (control_point_marker_pub)
+    {
+      visualization_msgs::msg::MarkerArray array;
+      auto now = rclcpp::Clock(RCL_ROS_TIME).now();
+      int64_t now_ns = now.nanoseconds();
+
+      auto add_marker = [&](visualization_msgs::msg::Marker &marker) {
+        marker.header.stamp.sec = static_cast<int32_t>(now_ns / 1000000000);
+        marker.header.stamp.nanosec = static_cast<uint32_t>(now_ns % 1000000000);
+        marker.header.frame_id = "world";
+        array.markers.push_back(marker);
+      };
+
+      visualization_msgs::msg::Marker line;
+      line.ns = "control_point_line";
+      line.id = 0;
+      line.type = visualization_msgs::msg::Marker::LINE_STRIP;
+      line.action = visualization_msgs::msg::Marker::ADD;
+      line.scale.x = 0.04;
+      line.color.r = 0.0;
+      line.color.g = 0.4;
+      line.color.b = 1.0;
+      line.color.a = 0.6;
+      line.pose.orientation.w = 1.0;
+      line.points.reserve(static_cast<size_t>(pos_pts.cols()));
+      for (Eigen::Index i = 0; i < pos_pts.cols(); ++i)
+      {
+        geometry_msgs::msg::Point point;
+        point.x = pos_pts(0, i);
+        point.y = pos_pts(1, i);
+        point.z = pos_pts(2, i);
+        line.points.push_back(point);
+      }
+      add_marker(line);
+
+      visualization_msgs::msg::Marker spline;
+      spline.ns = "spline_curve";
+      spline.id = 5000;
+      spline.type = visualization_msgs::msg::Marker::LINE_STRIP;
+      spline.action = visualization_msgs::msg::Marker::ADD;
+      spline.scale.x = 0.02;
+      spline.color.r = 0.8;
+      spline.color.g = 0.2;
+      spline.color.b = 0.1;
+      spline.color.a = 0.8;
+      spline.pose.orientation.w = 1.0;
+      const int sample_count = 120;
+      double total_time = pos_traj.getTimeSum();
+      spline.points.reserve(sample_count);
+      for (int s = 0; s <= sample_count; ++s)
+      {
+        double t = total_time * static_cast<double>(s) / sample_count;
+        Eigen::Vector3d sample = pos_traj.evaluateDeBoorT(t);
+        geometry_msgs::msg::Point point;
+        point.x = sample(0);
+        point.y = sample(1);
+        point.z = sample(2);
+        spline.points.push_back(point);
+      }
+      add_marker(spline);
+
+      for (Eigen::Index i = 0; i < pos_pts.cols(); ++i)
+      {
+        visualization_msgs::msg::Marker cp;
+        cp.ns = "control_point_sphere";
+        cp.id = static_cast<int>(i + 1);
+        cp.type = visualization_msgs::msg::Marker::SPHERE;
+        cp.action = visualization_msgs::msg::Marker::ADD;
+        cp.scale.x = 0.08;
+        cp.scale.y = 0.08;
+        cp.scale.z = 0.08;
+        cp.color.r = 0.0;
+        cp.color.g = 0.8;
+        cp.color.b = 1.0;
+        cp.color.a = 0.9;
+        cp.pose.orientation.w = 1.0;
+        cp.pose.position.x = pos_pts(0, i);
+        cp.pose.position.y = pos_pts(1, i);
+        cp.pose.position.z = pos_pts(2, i);
+        add_marker(cp);
+      }
+
+      total_time = pos_traj.getTimeSum();
+      for (Eigen::Index i = 0; i < knots.size(); ++i)
+      {
+        double t = std::clamp(knots(i), 0.0, total_time);
+        Eigen::Vector3d sample = pos_traj.evaluateDeBoorT(t);
+        visualization_msgs::msg::Marker knot;
+        knot.ns = "knot_sphere";
+        knot.id = 1000 + static_cast<int>(i);
+        knot.type = visualization_msgs::msg::Marker::SPHERE;
+        knot.action = visualization_msgs::msg::Marker::ADD;
+        knot.scale.x = 0.06;
+        knot.scale.y = 0.06;
+        knot.scale.z = 0.06;
+        knot.color.r = 1.0;
+        knot.color.g = 0.4;
+        knot.color.b = 0.0;
+        knot.color.a = 0.9;
+        knot.pose.orientation.w = 1.0;
+        knot.pose.position.x = sample(0);
+        knot.pose.position.y = sample(1);
+        knot.pose.position.z = sample(2);
+        add_marker(knot);
+      }
+
+      control_point_marker_pub->publish(array);
+    }
   }
 
   if (knots_pub && knots.size() > 0)
@@ -1165,6 +1275,10 @@ int main(int argc, char **argv)
 
   focus_vector_pub = node->create_publisher<visualization_msgs::msg::Marker>(
       "/cinematography/focus_vector",
+      10);
+
+  control_point_marker_pub = node->create_publisher<visualization_msgs::msg::MarkerArray>(
+      "/cinematography/control_points_marker",
       10);
 
   control_points_pub = node->create_publisher<std_msgs::msg::Float64MultiArray>(

@@ -180,7 +180,7 @@ Visualization Manager:
                 Value: /drone_0_plan_vis/goal_point
               Value: true
             - Class: rviz_default_plugins/Marker
-              Enabled: true
+              Enabled: false
               Name: global_path
               Namespaces:
                 {}
@@ -191,12 +191,12 @@ Visualization Manager:
                 History Policy: Keep Last
                 Reliability Policy: Reliable
                 Value: /drone_0_plan_vis/global_list
-              Value: true
+              Value: false
             - Class: rviz_default_plugins/Marker
               Enabled: true
               Name: optimal_traj
               Namespaces:
-                {}
+                "": true
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
@@ -235,7 +235,7 @@ Visualization Manager:
               Buffer Length: 1
               Class: rviz_default_plugins/Path
               Color: 29; 108; 212
-              Enabled: true
+              Enabled: false
               Head Diameter: 0.30000001192092896
               Head Length: 0.20000000298023224
               Length: 0.30000001192092896
@@ -258,7 +258,7 @@ Visualization Manager:
                 History Policy: Keep Last
                 Reliability Policy: Reliable
                 Value: /drone_0_vis/path
-              Value: true
+              Value: false
           Enabled: true
           Name: Planning
         - Class: rviz_common/Group
@@ -3808,22 +3808,34 @@ Visualization Manager:
         Value: /cinematography/target_world
       Value: true
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
+      Enabled: true
       Name: Anchors
       Namespaces:
-        {}
+        cinematography_anchors: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /cinematography/anchor_markers
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: ComputationalDebug
       Namespaces:
-        {}
+        active_labels: true
+        active_path: true
+        active_targets: true
+        arc_anchors: true
+        arc_labels: true
+        arc_path: true
+        arc_waypoints: true
+        combined_path: true
+        queue_points: true
+        static_path: true
+        transition_in: true
+        transition_out: true
+        waypoint_queue: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -3871,6 +3883,21 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /cinematography/transition_viz
       Value: false
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: ControlPoints
+      Namespaces:
+        control_point_line: true
+        control_point_sphere: true
+        knot_sphere: true
+        spline_curve: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /cinematography/control_points_marker
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255
@@ -3917,25 +3944,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 9.304511070251465
+      Distance: 2.9008655548095703
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -11.863960266113281
-        Y: 2.027339458465576
-        Z: 1.0371025800704956
+        X: -12.813872337341309
+        Y: -0.7392290234565735
+        Z: 6.833004474639893
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7247965931892395
+      Pitch: 1.0647965669631958
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 5.05212926864624
+      Yaw: 4.6803975105285645
     Saved: ~
 Window Geometry:
   Displays:
@@ -3955,7 +3982,7 @@ Window Geometry:
   Views:
     collapsed: true
   Width: 1536
-  X: 0
-  Y: 23
+  X: 8
+  Y: 31
   depth:
     collapsed: false
