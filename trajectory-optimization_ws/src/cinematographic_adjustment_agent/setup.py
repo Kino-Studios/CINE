@@ -18,6 +18,8 @@ ros2_executables = [
     os.path.join('scripts', 'ros2_nodes', 'simulated_object_detector'),
     os.path.join('scripts', 'ros2_nodes', 'simulated_focus_publisher'),
     os.path.join('scripts', 'ros2_nodes', 'simulated_light_publisher'),
+    os.path.join('scripts', 'ros2_nodes', 'baseline_collection'),
+    os.path.join('scripts', 'ros2_nodes', 'cinematic_collection'),
 ]
 
 try:
@@ -79,7 +81,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('lib', package_name), ros2_executables),
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
