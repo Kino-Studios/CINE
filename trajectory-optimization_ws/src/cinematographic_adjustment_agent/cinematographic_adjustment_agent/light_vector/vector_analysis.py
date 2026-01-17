@@ -2,7 +2,6 @@ import sys
 import os
 from pathlib import Path
 
-# Add repo root to sys.path to find 'configs'
 here = Path(__file__).resolve()
 for parent in [here] + list(here.parents):
     if (parent / "configs").is_dir():
@@ -26,12 +25,15 @@ from constants import CinematographyParams
 def _quat_to_rot(q: np.ndarray) -> np.ndarray:
     x, y, z, w = float(q[0]), float(q[1]), float(q[2]), float(q[3])
     n = math.sqrt(x * x + y * y + z * z + w * w)
+
     if n <= 1e-12:
         return np.eye(3, dtype=float)
+
     x /= n
     y /= n
     z /= n
     w /= n
+
     return np.array(
         [
             [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
@@ -114,7 +116,7 @@ class LightVectorAnalysisNode(Node):
             ],
             dtype=float,
         )
-        
+
         cam_vec /= max(1e-12, float(np.linalg.norm(cam_vec)))
 
         rot = _quat_to_rot(self.drone_orientation)
@@ -140,4 +142,3 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-

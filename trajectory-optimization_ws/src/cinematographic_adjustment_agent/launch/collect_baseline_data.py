@@ -1,4 +1,4 @@
-# TODO: make a python script that uses terminal to launch certain commands (needs to be launched here first though). also add proper baseline / cinematic switching and clean codebase
+# TODO: this kind of works but waypoints arent being sent here. figure out the fix here and for the cinematograpihc data collection
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
@@ -17,14 +17,15 @@ from constants import SimulationParams, WaypointParams
 
 def generate_launch_description():
     drone_id = SimulationParams.DRONE_ID
-    odom_topic = f"/drone_{drone_id}_visual_slam/odom"
-    baseline_topic = f"/drone_{drone_id}_planning/bspline"
-    cinematic_topic = f"/drone_{drone_id}_planning/cinematic_bspline"
+    odom_topic = "visual_slam/odom"
+    baseline_topic = "planning/bspline"
+    cinematic_topic = "planning/cinematic_bspline"
 
     baseline_collection = Node(
         package="cinematographic_adjustment_agent",
         executable="baseline_collection",
         name="baseline_collection",
+        namespace=f"drone_{drone_id}",
         output="screen",
         parameters=[
             {
@@ -34,6 +35,8 @@ def generate_launch_description():
                 "frame_id": WaypointParams.FRAME_ID,
                 "target_xyz": SimulationParams.TARGET_XYZ,
                 "focus_depth_m": SimulationParams.FOCUS_DEPTH_M,
+                "waypoints_topic": "",
+                "waypoints_file": "",
             }
         ],
     )

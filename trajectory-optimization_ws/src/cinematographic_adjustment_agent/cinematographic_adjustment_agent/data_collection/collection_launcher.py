@@ -199,10 +199,15 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
     node.declare_parameter("frame_id", None)
     node.declare_parameter("target_xyz", None)
     node.declare_parameter("focus_depth_m", None)
+    node.declare_parameter("waypoints_topic", "")
+    node.declare_parameter("waypoints_file", "")
 
     odom_topic = _resolve_param(node, "odom_topic", default_odom_topic)
     baseline_topic = _resolve_param(node, "baseline_bspline_topic", default_baseline_topic)
     cinematic_topic = _resolve_param(node, "cinematic_bspline_topic", default_cinematic_topic)
+    waypoints_topic = node.get_parameter("waypoints_topic").value or ""
+    waypoints_file = node.get_parameter("waypoints_file").value or ""
+    ns = node.get_namespace()
     frame_id = _resolve_param(node, "frame_id", WaypointParams.FRAME_ID, env_key="FRAME_ID")
     target_xyz = _resolve_param(
         node, "target_xyz", SimulationParams.TARGET_XYZ, env_key="TARGET_XYZ", parser=_parse_target_xyz
@@ -251,6 +256,7 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
             f"baseline_bspline_topic:={baseline_topic}",
             "-p",
             f"cinematic_bspline_topic:={cinematic_topic}",
+            "-r", f"__ns:={ns}",
         ],
         "trajectory_data_logger",
     )
@@ -273,6 +279,7 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
             f"target_xyz:={_format_ros_value(target_xyz)}",
             "-p",
             f"focus_depth_m:={focus_depth_m}",
+            "-r", f"__ns:={ns}",
         ],
         "simulated_focus_publisher",
     )
@@ -285,8 +292,10 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
             "cinematographic_adjustment_agent",
             "cinematic_waypoint_generator",
             "--ros-args",
-            "-p",
-            f"odom_topic:={odom_topic}",
+            "-p", f"odom_topic:={odom_topic}",
+            "-p", f"waypoints_topic:={waypoints_topic}",
+            "-p", f"waypoints_file:={waypoints_file}",
+            "-r", f"__ns:={ns}",
         ],
         "cinematic_waypoint_generator",
     )
@@ -359,10 +368,15 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
     node.declare_parameter("focus_depth_m", None)
     node.declare_parameter("use_simulated_focus", None)
     node.declare_parameter("use_simulated_light", None)
+    node.declare_parameter("waypoints_topic", "")
+    node.declare_parameter("waypoints_file", "")
 
     odom_topic = _resolve_param(node, "odom_topic", default_odom_topic)
     baseline_topic = _resolve_param(node, "baseline_bspline_topic", default_baseline_topic)
     cinematic_topic = _resolve_param(node, "cinematic_bspline_topic", default_cinematic_topic)
+    waypoints_topic = node.get_parameter("waypoints_topic").value or ""
+    waypoints_file = node.get_parameter("waypoints_file").value or ""
+    ns = node.get_namespace()
     frame_id = _resolve_param(node, "frame_id", WaypointParams.FRAME_ID, env_key="FRAME_ID")
     target_xyz = _resolve_param(
         node, "target_xyz", SimulationParams.TARGET_XYZ, env_key="TARGET_XYZ", parser=_parse_target_xyz
@@ -411,7 +425,10 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
         print("simulation initialized successfully!")
 
     filter_proc = _start_process(
-        ["ros2", "run", "cinematographic_adjustment_agent", "cinematic_bspline_filter"],
+        [
+            "ros2", "run", "cinematographic_adjustment_agent", "cinematic_bspline_filter",
+            "--ros-args", "-r", f"__ns:={ns}",
+        ],
         "cinematic_bspline_filter",
     )
     time.sleep(2)
@@ -437,15 +454,19 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
                 f"target_xyz:={_format_ros_value(target_xyz)}",
                 "-p",
                 f"focus_depth_m:={focus_depth_m}",
+                "-r", f"__ns:={ns}",
             ],
             "simulated_focus_publisher",
         )
         time.sleep(2)
     else:
         detector_proc = _start_process(
-            ["ros2", "run", "cinematographic_adjustment_agent", "simulated_object_detector"],
-            "simulated_object_detector",
-        )
+             [
+                 "ros2", "run", "cinematographic_adjustment_agent", "simulated_object_detector",
+                 "--ros-args", "-r", f"__ns:={ns}",
+             ],
+             "simulated_object_detector",
+         )
         time.sleep(2)
 
         costs_proc = _start_process(
@@ -459,6 +480,7 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
                 f"odom_topic:={odom_topic}",
                 "-p",
                 f"frame_id:={frame_id}",
+                "-r", f"__ns:={ns}",
             ],
             "cost_function_calculator",
         )
@@ -475,6 +497,7 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
                 "--ros-args",
                 "-p",
                 "frame_id:=map",
+                "-r", f"__ns:={ns}",
             ],
             "simulated_light_publisher",
         )
@@ -495,6 +518,7 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
             f"baseline_bspline_topic:={baseline_topic}",
             "-p",
             f"cinematic_bspline_topic:={cinematic_topic}",
+            "-r", f"__ns:={ns}",
         ],
         "trajectory_data_logger",
     )
@@ -511,6 +535,9 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
             f"odom_topic:={odom_topic}",
             "-p",
             f"frame_id:={frame_id}",
+            "-p", f"waypoints_topic:={waypoints_topic}",
+            "-p", f"waypoints_file:={waypoints_file}",
+            "-r", f"__ns:={ns}",
         ],
         "cinematic_waypoint_generator",
     )

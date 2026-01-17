@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-"""Resample each dataset onto a uniform time grid and average the runs."""
-
 from __future__ import annotations
 
 import argparse

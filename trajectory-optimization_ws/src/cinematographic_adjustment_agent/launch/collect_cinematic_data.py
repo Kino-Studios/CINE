@@ -17,14 +17,15 @@ from constants import SimulationParams, WaypointParams
 
 def generate_launch_description():
     drone_id = SimulationParams.DRONE_ID
-    odom_topic = f"/drone_{drone_id}_visual_slam/odom"
-    baseline_topic = f"/drone_{drone_id}_planning/bspline"
-    cinematic_topic = f"/drone_{drone_id}_planning/cinematic_bspline"
+    odom_topic = "visual_slam/odom"
+    baseline_topic = "planning/bspline"
+    cinematic_topic = "planning/cinematic_bspline"
 
     cinematic_collection = Node(
         package="cinematographic_adjustment_agent",
         executable="cinematic_collection",
         name="cinematic_collection",
+        namespace=f"drone_{drone_id}",
         output="screen",
         parameters=[
             {
@@ -36,6 +37,8 @@ def generate_launch_description():
                 "focus_depth_m": SimulationParams.FOCUS_DEPTH_M,
                 "use_simulated_focus": SimulationParams.USE_SIMULATED_FOCUS,
                 "use_simulated_light": SimulationParams.USE_SIMULATED_LIGHT,
+                "waypoints_topic": "",
+                "waypoints_file": "",
             }
         ],
     )

@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 set -euo pipefail
 : "${AMENT_TRACE_SETUP_FILES=}"
 : "${AMENT_PYTHON_EXECUTABLE:=python3}"
