@@ -2,7 +2,6 @@ import sys
 import os
 from pathlib import Path
 
-# Add repo root to sys.path to find 'configs'
 here = Path(__file__).resolve()
 for parent in [here] + list(here.parents):
     if (parent / "configs").is_dir():
@@ -24,7 +23,6 @@ from traj_utils.msg import Bspline
 
 from constants import UserRequestedParams, CinematicConstraints, BsplineFilterParams, CinematographyParams
 from .bspline_utils import msg_to_arrays, arrays_to_msg
-
 
 class CinematicBsplineFilter(Node):
     def __init__(self):
@@ -73,7 +71,7 @@ class CinematicBsplineFilter(Node):
             self.cost_callback,
             10,
         )
-        
+
         self.detections_sub = self.create_subscription(
             Float32MultiArray,
             'object_detections',
@@ -120,15 +118,15 @@ class CinematicBsplineFilter(Node):
 
     def target_world_callback(self, msg: PointStamped):
         self.target_world = np.array([msg.point.x, msg.point.y, msg.point.z], dtype=float)
-    
+
     def detections_callback(self, msg: Float32MultiArray):
         if len(msg.data) < 1:
             self.has_focus = False
             return
-        
+
         num_objects = int(msg.data[0])
         self.has_focus = num_objects > 0
-        
+
         if self.has_focus and num_objects > 0:
             if not hasattr(self, '_detection_logged'):
                 self._detection_logged = True
@@ -152,7 +150,7 @@ class CinematicBsplineFilter(Node):
             alpha
             * (1.0 + 0.05 * smooth_cost),
         )
-        
+
         if pos_pts.shape[0] > 2 and alpha > 0.0:
             smoothed = pos_pts.copy()
             for i in range(1, pos_pts.shape[0] - 1):
@@ -260,7 +258,7 @@ class CinematicBsplineFilter(Node):
                 new_vec[:2] = horiz_vec * horiz_scale
                 out[i] = self.target_world + new_vec
                 out[i, 2] = max(out[i, 2], self.params.MIN_ALTITUDE_M)
-                
+
         return out
 
     def _estimate_dt(self, knots: np.ndarray) -> float:

@@ -1,3 +1,5 @@
+# TODO: this kind of works but waypoints arent being sent here. figure out the fix here and for the cinematograpihc data collection
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
@@ -16,23 +18,16 @@ for parent in [here] + list(here.parents):
 from constants import SimulationParams, WaypointParams
 
 def generate_launch_description():
-    drone_id_arg = DeclareLaunchArgument(
-        "drone_id",
-        default_value=str(SimulationParams.DRONE_ID),
-        description="Drone ID for namespacing"
-    )
-
-    drone_id = LaunchConfiguration("drone_id")
-
-    # Topic construction using substitutions
-    odom_topic = ["/drone_", drone_id, "/visual_slam/odom"]
-    baseline_topic = ["/drone_", drone_id, "/planning/bspline"]
-    cinematic_topic = ["/drone_", drone_id, "/planning/cinematic_bspline"]
+    drone_id = SimulationParams.DRONE_ID
+    odom_topic = "visual_slam/odom"
+    baseline_topic = "planning/bspline"
+    cinematic_topic = "planning/cinematic_bspline"
 
     baseline_collection = Node(
         package="cinematographic_adjustment_agent",
         executable="baseline_collection",
         name="baseline_collection",
+        namespace=f"drone_{drone_id}",
         output="screen",
         parameters=[
             {
@@ -42,6 +37,8 @@ def generate_launch_description():
                 "frame_id": WaypointParams.FRAME_ID,
                 "target_xyz": SimulationParams.TARGET_XYZ,
                 "focus_depth_m": SimulationParams.FOCUS_DEPTH_M,
+                "waypoints_topic": "",
+                "waypoints_file": "",
             }
         ],
     )

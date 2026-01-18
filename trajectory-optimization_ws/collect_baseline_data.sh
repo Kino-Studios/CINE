@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 set -euo pipefail
 
 export ROS_DOMAIN_ID=0

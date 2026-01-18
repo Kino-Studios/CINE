@@ -1,10 +1,11 @@
+# note: this file is purely for physical simulation. this should NOT be applied to real pipelines.
+
 import copy
 import math
 import random
 import sys
 from pathlib import Path
 
-# Add repo root to sys.path to find 'configs'
 here = Path(__file__).resolve()
 for parent in [here] + list(here.parents):
     if (parent / "configs").is_dir():

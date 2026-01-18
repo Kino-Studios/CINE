@@ -1,6 +1,5 @@
 import os
 
-
 def repo_root_from(file_path: str, max_levels_up: int = 12) -> str:
     cur = os.path.abspath(os.path.dirname(file_path))
 
@@ -15,10 +14,9 @@ def repo_root_from(file_path: str, max_levels_up: int = 12) -> str:
 
         if parent == cur:
             break
-        
+
         cur = parent
     return os.path.abspath(os.path.dirname(file_path))
-
 
 def workspace_root_from(file_path: str, levels_up: int = 6) -> str:
     return repo_root_from(file_path, max_levels_up=max(1, int(levels_up) + 6))

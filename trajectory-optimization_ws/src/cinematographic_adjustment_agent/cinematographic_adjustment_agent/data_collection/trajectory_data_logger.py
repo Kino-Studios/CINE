@@ -16,7 +16,6 @@ from datetime import datetime
 import signal
 import sys
 
-# Add repo root to sys.path to find 'configs'
 here = Path(__file__).resolve()
 for parent in [here] + list(here.parents):
     if (parent / "configs").is_dir():
@@ -146,11 +145,11 @@ class TrajectoryDataLogger(Node):
             "within_count": 0,
         }
         self._framing_target_distance: float | None = None
-        
+
         # Separate tracking for cinematic and baseline framing
         self._cinematic_framing_active = False
         self._framing_active = False
-        
+
         self._anchor_start_world: tuple[float, float, float] | None = None
         self._anchor_end_world: tuple[float, float, float] | None = None
         self._expected_target_distance: float | None = None
@@ -419,13 +418,13 @@ class TrajectoryDataLogger(Node):
         active = bool(msg.data)
         if active == self._cinematic_framing_active:
             return
-        
+
         self.get_logger().info(f"Cinematic framing: {self._cinematic_framing_active} -> {active}")
-        
+
         prev_overall = self._framing_active
         self._cinematic_framing_active = active
         self._update_framing_state(prev_overall)
-    
+
     def anchor_start_callback(self, msg: PointStamped):
         self._anchor_start_world = (
             float(msg.point.x),
@@ -446,10 +445,10 @@ class TrajectoryDataLogger(Node):
         distance = float(msg.data)
         if not math.isfinite(distance) or distance <= 0.0:
             return
-        
+
         self.get_logger().info(f"Received anchor focus distance: {distance:.3f}m")
         self._expected_target_distance = distance
-        
+
         # Update framing target distance if currently framing
         if self._framing_active:
             if self._framing_target_distance is None:
@@ -459,7 +458,7 @@ class TrajectoryDataLogger(Node):
     def _update_framing_state(self, prev_overall):
         """Update overall framing state based on cinematic framing status"""
         current_overall = self._cinematic_framing_active
-        
+
         # Entering framing
         if current_overall and not prev_overall:
             self._framing_target_distance = self._expected_target_distance
@@ -467,13 +466,13 @@ class TrajectoryDataLogger(Node):
             self.get_logger().info(
                 f"ENTERING FRAMING ({framing_type}) - target distance: {self._framing_target_distance}"
             )
-        
+
         # Exiting framing
         elif not current_overall and prev_overall:
             framing_type = 'cinematic'
             self.get_logger().info(f"EXITING FRAMING ({framing_type})")
             # Don't clear _framing_target_distance - keep it for next framing segment
-        
+
         self._framing_active = current_overall
 
     def _recompute_expected_target_distance(self):
@@ -495,9 +494,9 @@ class TrajectoryDataLogger(Node):
                     f"Computed expected distance from anchors: {expected:.3f}m "
                     f"(start={start_dist:.3f}m, end={end_dist:.3f}m)"
                 )
-        
+
         self._expected_target_distance = expected
-        
+
         # Update framing distance if actively framing
         if self._framing_active and expected is not None:
             if self._framing_target_distance is None:
@@ -507,12 +506,12 @@ class TrajectoryDataLogger(Node):
         """Record a distance measurement during framing"""
         if self.target_world is None:
             return
-        
+
         dx = drone_pos[0] - self.target_world[0]
         dy = drone_pos[1] - self.target_world[1]
         dz = drone_pos[2] - self.target_world[2]
         distance = math.sqrt(dx * dx + dy * dy + dz * dz)
-        
+
         target_distance = self._framing_target_distance
         if target_distance is None:
             # First sample - use current distance as target
@@ -521,11 +520,11 @@ class TrajectoryDataLogger(Node):
             self.get_logger().info(
                 f"Initialized framing target distance to current: {target_distance:.3f}m"
             )
-        
+
         error = distance - target_distance
         abs_error = abs(error)
         within = abs_error <= self.distance_tolerance_m
-        
+
         self._distance_rows.append([
             framing_mode,  # 'cinematic' or 'baseline'
             f"{time_value:.9f}",
@@ -541,7 +540,7 @@ class TrajectoryDataLogger(Node):
             f"{abs_error:.9f}",
             '1' if within else '0',
         ])
-        
+
         stats = self._distance_stats
         stats["count"] += 1
         stats["abs_error_sum"] += abs_error
@@ -553,7 +552,7 @@ class TrajectoryDataLogger(Node):
     def _write_distance_csv(self):
         if not self._distance_rows:
             return
-        
+
         fieldnames = [
             "framing_mode",  # 'cinematic' or 'baseline'
             "time",
@@ -569,13 +568,13 @@ class TrajectoryDataLogger(Node):
             "abs_error",
             "within_tolerance",
         ]
-        
+
         self.distance_output_path.parent.mkdir(parents=True, exist_ok=True)
         with self.distance_output_path.open("w", newline="") as handle:
             writer = csv.writer(handle)
             writer.writerow(fieldnames)
             writer.writerows(self._distance_rows)
-        
+
         # Only log summary if this is the final save
         if self._saved_once:
             self._log_distance_summary()
@@ -585,12 +584,12 @@ class TrajectoryDataLogger(Node):
         if stats["count"] == 0:
             self.get_logger().info("No distance data recorded during framing")
             return
-        
+
         avg_abs = stats["abs_error_sum"] / stats["count"]
         within_pct = stats["within_count"] / stats["count"] * 100.0
         outside_pct = 100.0 - within_pct
         max_violation = stats["max_tolerance_violation"]
-        
+
         self.get_logger().info(
             f"\n{'='*70}\n"
             f"DISTANCE ANALYSIS SUMMARY (mode={self.mode})\n"
@@ -645,7 +644,7 @@ class TrajectoryDataLogger(Node):
             constrained_path = self.output_dir / f'constrained_sim_{self.timestamp}.csv'
             self._write_csv(constrained_path, self.constrained_data)
             self.get_logger().info(f'Saved {len(self.constrained_data)} constrained data points to: {constrained_path}')
-        
+
         self._write_distance_csv()
 
     def _autosave(self):
