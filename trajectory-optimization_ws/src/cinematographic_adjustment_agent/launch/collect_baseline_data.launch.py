@@ -1,6 +1,6 @@
-# TODO: make a python script that uses terminal to launch certain commands (needs to be launched here first though). also add proper baseline / cinematic switching and clean codebase
-
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 import sys
 from pathlib import Path
@@ -16,10 +16,18 @@ for parent in [here] + list(here.parents):
 from constants import SimulationParams, WaypointParams
 
 def generate_launch_description():
-    drone_id = SimulationParams.DRONE_ID
-    odom_topic = f"/drone_{drone_id}_visual_slam/odom"
-    baseline_topic = f"/drone_{drone_id}_planning/bspline"
-    cinematic_topic = f"/drone_{drone_id}_planning/cinematic_bspline"
+    drone_id_arg = DeclareLaunchArgument(
+        "drone_id",
+        default_value=str(SimulationParams.DRONE_ID),
+        description="Drone ID for namespacing"
+    )
+
+    drone_id = LaunchConfiguration("drone_id")
+
+    # Topic construction using substitutions
+    odom_topic = ["/drone_", drone_id, "/visual_slam/odom"]
+    baseline_topic = ["/drone_", drone_id, "/planning/bspline"]
+    cinematic_topic = ["/drone_", drone_id, "/planning/cinematic_bspline"]
 
     baseline_collection = Node(
         package="cinematographic_adjustment_agent",
@@ -40,6 +48,7 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
+            drone_id_arg,
             baseline_collection,
         ]
     )

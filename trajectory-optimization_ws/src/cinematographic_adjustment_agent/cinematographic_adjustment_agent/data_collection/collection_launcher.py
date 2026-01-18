@@ -193,12 +193,12 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
     default_baseline_topic = f"/drone_{drone_id}_planning/bspline"
     default_cinematic_topic = f"/drone_{drone_id}_planning/cinematic_bspline"
 
-    node.declare_parameter("odom_topic", None)
-    node.declare_parameter("baseline_bspline_topic", None)
-    node.declare_parameter("cinematic_bspline_topic", None)
-    node.declare_parameter("frame_id", None)
-    node.declare_parameter("target_xyz", None)
-    node.declare_parameter("focus_depth_m", None)
+    node.declare_parameter("odom_topic", "")
+    node.declare_parameter("baseline_bspline_topic", "")
+    node.declare_parameter("cinematic_bspline_topic", "")
+    node.declare_parameter("frame_id", "world")
+    node.declare_parameter("target_xyz", [0.0, 0.0, 0.0])
+    node.declare_parameter("focus_depth_m", 1.5)
 
     odom_topic = _resolve_param(node, "odom_topic", default_odom_topic)
     baseline_topic = _resolve_param(node, "baseline_bspline_topic", default_baseline_topic)
@@ -351,14 +351,14 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
     default_baseline_topic = f"/drone_{drone_id}_planning/bspline"
     default_cinematic_topic = f"/drone_{drone_id}_planning/cinematic_bspline"
 
-    node.declare_parameter("odom_topic", None)
-    node.declare_parameter("baseline_bspline_topic", None)
-    node.declare_parameter("cinematic_bspline_topic", None)
-    node.declare_parameter("frame_id", None)
-    node.declare_parameter("target_xyz", None)
-    node.declare_parameter("focus_depth_m", None)
-    node.declare_parameter("use_simulated_focus", None)
-    node.declare_parameter("use_simulated_light", None)
+    node.declare_parameter("odom_topic", "")
+    node.declare_parameter("baseline_bspline_topic", "")
+    node.declare_parameter("cinematic_bspline_topic", "")
+    node.declare_parameter("frame_id", "world")
+    node.declare_parameter("target_xyz", [0.0, 0.0, 0.0])
+    node.declare_parameter("focus_depth_m", 1.5)
+    node.declare_parameter("use_simulated_focus", True)
+    node.declare_parameter("use_simulated_light", False)
 
     odom_topic = _resolve_param(node, "odom_topic", default_odom_topic)
     baseline_topic = _resolve_param(node, "baseline_bspline_topic", default_baseline_topic)

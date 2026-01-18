@@ -27,20 +27,20 @@ def generate_launch_description():
     # 定义参数的 LaunchConfiguration
     obj_num = LaunchConfiguration('obj_num', default=10)
     drone_id = LaunchConfiguration('drone_id', default=0)
-    
+
     map_size_x = LaunchConfiguration('map_size_x', default = 50.0)
     map_size_y = LaunchConfiguration('map_size_y', default = 25.0)
     map_size_z = LaunchConfiguration('map_size_z', default = 5.0)
-    
+
     odom_topic = LaunchConfiguration('odom_topic', default = 'visual_slam/odom')
     depth_topic = LaunchConfiguration('depth_topic', default = 'depth/image_raw')
     camera_pose_topic = LaunchConfiguration('camera_pose_topic', default = 'camera_pose')
     cloud_topic = LaunchConfiguration('cloud_topic', default = '/map_generator/global_cloud')
-    
+
     # 声明全局参数
     obj_num_cmd = DeclareLaunchArgument('obj_num', default_value=obj_num, description='Number of objects')
     drone_id_cmd = DeclareLaunchArgument('drone_id', default_value=drone_id, description='Drone ID')
-    
+
     map_size_x_cmd = DeclareLaunchArgument('map_size_x', default_value=map_size_x, description='Map size along x')
     map_size_y_cmd = DeclareLaunchArgument('map_size_y', default_value=map_size_y, description='Map size along y')
     map_size_z_cmd = DeclareLaunchArgument('map_size_z', default_value=map_size_z, description='Map size along z')
@@ -50,13 +50,13 @@ def generate_launch_description():
     cloud_topic_cmd = DeclareLaunchArgument('cloud_topic', default_value=cloud_topic, description='Point cloud topic for obstacles')
 
     # 地图属性以及是否使用动力学仿真
-    use_mockamap = LaunchConfiguration('use_mockamap', default=False) # map_generator or mockamap 
-    
+    use_mockamap = LaunchConfiguration('use_mockamap', default=False) # map_generator or mockamap
+
     use_mockamap_cmd = DeclareLaunchArgument('use_mockamap', default_value=use_mockamap, description='Choose map type, map_generator or mockamap')
-    
-    use_dynamic = LaunchConfiguration('use_dynamic', default=True)  
+
+    use_dynamic = LaunchConfiguration('use_dynamic', default=True)
     use_dynamic_cmd = DeclareLaunchArgument('use_dynamic', default_value=use_dynamic, description='Use Drone Simulation Considering Dynamics or Not')
-    
+
     use_cinematic_bspline = LaunchConfiguration('use_cinematic_bspline', default=True)
     use_cinematic_intent = LaunchConfiguration('use_cinematic_intent', default='true')
     use_cinematic_bspline_cmd = DeclareLaunchArgument('use_cinematic_bspline', default_value='true', description='Use cinematographic B-spline filter')
@@ -154,12 +154,12 @@ def generate_launch_description():
             {'map/z_size': map_size_z},
             {'map/resolution': 0.1},
             {'ObstacleShape/seed': 1.0},
-            {'map/obs_num': 50},
+            {'map/obs_num': 75},
             {'ObstacleShape/lower_rad': 0.5},
             {'ObstacleShape/upper_rad': 0.7},
             {'ObstacleShape/lower_hei': 0.0},
             {'ObstacleShape/upper_hei': 3.0},
-            {'map/circle_num': 50},
+            {'map/circle_num': 75},
             {'ObstacleShape/radius_l': 0.7},
             {'ObstacleShape/radius_h': 0.5},
             {'ObstacleShape/z_l': 0.7},
@@ -194,7 +194,7 @@ def generate_launch_description():
         ],
         condition = IfCondition(use_mockamap)
     )
-    
+
     advanced_param_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('ego_planner'), 'launch', 'advanced_param.launch.py')),
@@ -205,11 +205,11 @@ def generate_launch_description():
             'map_size_z_': map_size_z,
             'odometry_topic': odom_topic,
             'obj_num_set': obj_num,
-            
+
             'camera_pose_topic': camera_pose_topic,
             'depth_topic': depth_topic,
             'cloud_topic': cloud_topic,
-            
+
             'cx': str(321.04638671875),
             'cy': str(243.44969177246094),
             'fx': str(387.229248046875),
@@ -223,25 +223,25 @@ def generate_launch_description():
             'point0_x': str(15.0),
             'point0_y': str(0.0),
             'point0_z': str(1.0),
-            
+
             'point1_x': str(-15.0),
             'point1_y': str(0.0),
             'point1_z': str(1.0),
-            
+
             'point2_x': str(15.0),
             'point2_y': str(0.0),
             'point2_z': str(1.0),
-            
+
             'point3_x': str(-15.0),
             'point3_y': str(0.0),
             'point3_z': str(1.0),
-            
+
             'point4_x': str(15.0),
             'point4_y': str(0.0),
             'point4_z': str(1.0),
         }.items()
     )
-    
+
     traj_server_node = Node(
         package='ego_planner',
         executable='traj_server',
@@ -354,7 +354,7 @@ def generate_launch_description():
             {'publish_costs': True},
         ],
     )
-    
+
     simulator_include = IncludeLaunchDescription(PythonLaunchDescriptionSource(
         os.path.join(get_package_share_directory('ego_planner'), 'launch', 'simulator.launch.py')),
         launch_arguments={
@@ -369,9 +369,9 @@ def generate_launch_description():
             'odometry_topic': odom_topic
         }.items()
     )
-    
+
     ld = LaunchDescription()
-        
+
     ld.add_action(map_size_x_cmd)
     ld.add_action(map_size_y_cmd)
     ld.add_action(map_size_z_cmd)

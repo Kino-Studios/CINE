@@ -3,7 +3,7 @@ set -euo pipefail
 
 MODE="${1:-}"
 
-export ROS_DOMAIN_ID=0
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export DISPLAY="${DISPLAY:-:0}"
 
