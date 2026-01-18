@@ -19,54 +19,55 @@ def generate_launch_description():
     drone_id_arg = DeclareLaunchArgument(
         "drone_id",
         default_value=str(SimulationParams.DRONE_ID),
-        description="Drone ID for namespacing"
+        description="Drone ID for namespacing",
     )
-
-    use_sim_focus_arg = DeclareLaunchArgument(
-        "use_simulated_focus",
-        default_value=str(SimulationParams.USE_SIMULATED_FOCUS),
-        description="Whether to use simulated focus"
+    waypoints_topic_arg = DeclareLaunchArgument(
+        "waypoints_topic",
+        default_value="",
+        description="Optional PoseArray topic to override default waypoints",
     )
-
-    use_sim_light_arg = DeclareLaunchArgument(
-        "use_simulated_light",
-        default_value=str(SimulationParams.USE_SIMULATED_LIGHT),
-        description="Whether to use simulated light"
+    waypoints_file_arg = DeclareLaunchArgument(
+        "waypoints_file",
+        default_value="",
+        description="Optional CSV file path for static waypoints",
     )
 
     drone_id = LaunchConfiguration("drone_id")
-    use_simulated_focus = LaunchConfiguration("use_simulated_focus")
-    use_simulated_light = LaunchConfiguration("use_simulated_light")
-
-    # Topic construction
+    waypoints_topic = LaunchConfiguration("waypoints_topic")
+    waypoints_file = LaunchConfiguration("waypoints_file")
     odom_topic = ["/drone_", drone_id, "/visual_slam/odom"]
     baseline_topic = ["/drone_", drone_id, "/planning/bspline"]
     cinematic_topic = ["/drone_", drone_id, "/planning/cinematic_bspline"]
 
     cinematic_collection = Node(
-        package="cinematographic_adjustment_agent",
-        executable="cinematic_collection",
-        name="cinematic_collection",
-        output="screen",
-        parameters=[
-            {
-                "odom_topic": odom_topic,
-                "baseline_bspline_topic": baseline_topic,
-                "cinematic_bspline_topic": cinematic_topic,
-                "frame_id": WaypointParams.FRAME_ID,
-                "target_xyz": SimulationParams.TARGET_XYZ,
-                "focus_depth_m": SimulationParams.FOCUS_DEPTH_M,
-                "use_simulated_focus": use_simulated_focus,
-                "use_simulated_light": use_simulated_light,
-            }
-        ],
+         package="cinematographic_adjustment_agent",
+         executable="cinematic_collection",
+         name="cinematic_collection",
+         namespace=["drone_", drone_id],
+         output="screen",
+         parameters=[
+             {
+                 "odom_topic": odom_topic,
+                 "cinematic_bspline_topic": cinematic_topic,
+                 "frame_id": WaypointParams.FRAME_ID,
+                 "target_xyz": SimulationParams.TARGET_XYZ,
+                 "focus_depth_m": SimulationParams.FOCUS_DEPTH_M,
+                 "use_simulated_focus": SimulationParams.USE_SIMULATED_FOCUS,
+                 "use_simulated_light": SimulationParams.USE_SIMULATED_LIGHT,
+                 "waypoints_topic": waypoints_topic,
+                 "waypoints_file": waypoints_file,
+                 "cinematic_waypoints_topic": cinematic_topic,
+                 "cinematic_waypoints_file": cinematic_topic,
+                 "cinematic_waypoints_rate": cinematic_topic,
+             }
+         ],
     )
 
     return LaunchDescription(
         [
             drone_id_arg,
-            use_sim_focus_arg,
-            use_sim_light_arg,
+            waypoints_topic_arg,
+            waypoints_file_arg,
             cinematic_collection,
-        ]
+         ]
     )

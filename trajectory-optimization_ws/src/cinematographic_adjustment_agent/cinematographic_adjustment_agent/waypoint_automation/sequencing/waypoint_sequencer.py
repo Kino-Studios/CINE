@@ -99,6 +99,11 @@ class WaypointSequencerMixin:
         self.active_waypoints = self._limit_consecutive_waypoint_jumps(
             waypoints_to_send
         )
+        
+        self.viz_data["static_world"] = [
+            self._rel_to_world(wp) for wp in self.active_waypoints
+        ]
+
         self.current_target_index = 0
         self.last_published_index = -1
         self.last_progress_time = None
@@ -407,6 +412,7 @@ class WaypointSequencerMixin:
         goal.pose.orientation.w = qw
         goal.pose.orientation.z = qz
         self.goal_pub.publish(goal)
+        self.sent_waypoints_history.append(target_world)
 
         if idx == self.current_target_index:
             self.last_progress_time = self.get_clock().now()

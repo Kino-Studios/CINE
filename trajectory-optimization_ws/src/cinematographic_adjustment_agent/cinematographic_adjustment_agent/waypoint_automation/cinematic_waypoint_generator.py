@@ -423,7 +423,14 @@ class CinematicWaypointGenerator(
         ]
 
         if self.waypoints_file:
+            self.get_logger().info(
+                f"Loading base waypoints from file: {self.waypoints_file}"
+            )
             self._load_waypoints_from_file(self.waypoints_file)
+        else:
+            self.get_logger().info(
+                f"Using default static waypoints (count: {len(self.static_waypoints)})"
+            )
 
         self.dynamic_waypoints = None
         self.detected_object = None
@@ -487,6 +494,10 @@ class CinematicWaypointGenerator(
         self.baseline_framing_pub = self.create_publisher(
             Bool, "/cinematography/baseline_framing_active", 10
         )
+        self.sent_waypoints_viz_pub = self.create_publisher(
+            MarkerArray, "/cinematography/sent_waypoints_viz", 10
+        )
+        self.sent_waypoints_history = []
         self.debug_arc = True
         self.debug_arc_log_period_s = 0.5
         self.debug_arc_marker_scale = 0.04
@@ -507,6 +518,7 @@ class CinematicWaypointGenerator(
             MarkerArray, "/cinematography/debug_markers", 10
         )
         self.debug_viz_timer = self.create_timer(0.2, self._publish_debug_visualization)
+        self.sent_waypoints_timer = self.create_timer(0.1, self._publish_sent_waypoints_dots)
         self.viz_data = {
             "static_world": None,
             "arc_start": None,
@@ -518,7 +530,7 @@ class CinematicWaypointGenerator(
             "start_idx": None,
             "end_idx": None,
         }
-        
+
         self.last_cinematic_waypoints: list | None = None
         self.anchor_timer = self.create_timer(1.0, self._publish_anchor_points)
         self.target_marker_timer = self.create_timer(0.5, self._publish_target_marker)

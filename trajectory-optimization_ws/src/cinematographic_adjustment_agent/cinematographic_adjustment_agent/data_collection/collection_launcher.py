@@ -156,31 +156,80 @@ def _ros2_node_list() -> list[str]:
             env=os.environ,
             check=False,
         )
-    except FileNotFoundError:
+        if result.returncode != 0:
+            if result.stderr:
+                print(f"\n[collection] ros2 node list error: {result.stderr.strip()}")
+            return []
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    except Exception as e:
+        print(f"\n[collection] failed to run ros2 node list: {e}")
         return []
-    if result.returncode != 0:
-        return []
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
-def _wait_for_node(node_name: str, timeout_s: int) -> bool:
-    for _ in range(timeout_s):
-        if node_name in _ros2_node_list():
+def _wait_for_node(node_name: str, timeout_s: float = 30.0) -> bool:
+    start_time = time.time()
+    # Normalize node name to have a leading slash for comparison with ros2 node list
+    canonical_name = node_name if node_name.startswith("/") else "/" + node_name
+    while time.time() - start_time < timeout_s:
+        nodes = _ros2_node_list()
+        if canonical_name in nodes or node_name in nodes:
             return True
         print(".", end="", flush=True)
-        time.sleep(1)
-    print("")
+        time.sleep(1.0)
+    print()
     return False
 
 
 def _start_process(cmd: Iterable[str], label: str) -> subprocess.Popen:
     print(f"[collection] launching {label}: {' '.join(cmd)}")
-    return subprocess.Popen(list(cmd), env=os.environ)
+    return subprocess.Popen(list(cmd), env=os.environ, start_new_session=True)
+
+
+def _cleanup_procs(procs: list[subprocess.Popen | None]) -> None:
+    for proc in procs:
+        if proc is None or proc.poll() is not None:
+            continue
+        try:
+            # Kill the entire process group
+            pgid = os.getpgid(proc.pid)
+            os.killpg(pgid, signal.SIGINT)
+            proc.wait(timeout=3)
+        except (ProcessLookupError, subprocess.TimeoutExpired):
+            try:
+                pgid = os.getpgid(proc.pid)
+                os.killpg(pgid, signal.SIGTERM)
+                proc.wait(timeout=3)
+            except (ProcessLookupError, subprocess.TimeoutExpired):
+                try:
+                    pgid = os.getpgid(proc.pid)
+                    os.killpg(pgid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+
+def _safety_cleanup() -> None:
+    print("[collection] performing final safety cleanup...")
+
+    targets = [
+        "trajectory_data_logger",
+        "simulated_focus_publisher",
+        "cinematic_waypoint_generator",
+        "cinematic_bspline_filter",
+        "simulated_light_publisher",
+        "cost_function_calculator",
+        "simulated_object_detector",
+        "traj_server",
+        "ego_planner_node",
+        "so3_quadrotor_simulator",
+        "pcl_render_node",
+        "random_forest",
+    ]
+
+    for target in targets:
+        subprocess.run(["pkill", "-f", target], capture_output=True)
 
 
 def run_baseline_collection(args: Optional[list[str]] = None) -> None:
-    rclpy.init(args=args)
-    node = Node("baseline_collection")
     workspace_root = _find_workspace_root(Path(__file__).resolve())
 
     logging_severity = os.environ.get("LOGGING_SEVERITY") or SimulationParams.LOGGING_SEVERITY or "DEBUG"
@@ -188,26 +237,30 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
     _cleanup_cyclonedds()
     time.sleep(2)
 
-    drone_id = SimulationParams.DRONE_ID
-    default_odom_topic = f"/drone_{drone_id}_visual_slam/odom"
-    default_baseline_topic = f"/drone_{drone_id}_planning/bspline"
-    default_cinematic_topic = f"/drone_{drone_id}_planning/cinematic_bspline"
+    rclpy.init(args=args)
+    node = Node("baseline_collection")
 
-    node.declare_parameter("odom_topic", None)
-    node.declare_parameter("baseline_bspline_topic", None)
-    node.declare_parameter("cinematic_bspline_topic", None)
-    node.declare_parameter("frame_id", None)
-    node.declare_parameter("target_xyz", None)
-    node.declare_parameter("focus_depth_m", None)
+    drone_id = SimulationParams.DRONE_ID
+    drone_ns = f"/drone_{drone_id}"
+    default_odom_topic = f"{drone_ns}_visual_slam/odom"
+    default_baseline_topic = f"{drone_ns}_planning/bspline"
+    default_cinematic_topic = f"{drone_ns}_planning/cinematic_bspline"
+
+    node.declare_parameter("odom_topic", default_odom_topic)
+    node.declare_parameter("baseline_bspline_topic", default_baseline_topic)
+    node.declare_parameter("cinematic_bspline_topic", default_cinematic_topic)
+    node.declare_parameter("frame_id", "world")
+    node.declare_parameter("target_xyz", [0.0, 0.0, 0.0])
+    node.declare_parameter("focus_depth_m", 1.0)
     node.declare_parameter("waypoints_topic", "")
     node.declare_parameter("waypoints_file", "")
+    node.declare_parameter("baseline_mode", True)
 
     odom_topic = _resolve_param(node, "odom_topic", default_odom_topic)
     baseline_topic = _resolve_param(node, "baseline_bspline_topic", default_baseline_topic)
     cinematic_topic = _resolve_param(node, "cinematic_bspline_topic", default_cinematic_topic)
     waypoints_topic = node.get_parameter("waypoints_topic").value or ""
     waypoints_file = node.get_parameter("waypoints_file").value or ""
-    ns = node.get_namespace()
     frame_id = _resolve_param(node, "frame_id", WaypointParams.FRAME_ID, env_key="FRAME_ID")
     target_xyz = _resolve_param(
         node, "target_xyz", SimulationParams.TARGET_XYZ, env_key="TARGET_XYZ", parser=_parse_target_xyz
@@ -250,13 +303,10 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
             "--mode",
             "baseline",
             "--ros-args",
-            "-p",
-            f"odom_topic:={odom_topic}",
-            "-p",
-            f"baseline_bspline_topic:={baseline_topic}",
-            "-p",
-            f"cinematic_bspline_topic:={cinematic_topic}",
-            "-r", f"__ns:={ns}",
+            "-p", f"odom_topic:={odom_topic}",
+            "-p", f"baseline_bspline_topic:={baseline_topic}",
+            "-p", f"cinematic_bspline_topic:={cinematic_topic}",
+            "-r", f"__ns:={drone_ns}",
         ],
         "trajectory_data_logger",
     )
@@ -269,36 +319,33 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
             "cinematographic_adjustment_agent",
             "simulated_focus_publisher",
             "--ros-args",
-            "-p",
-            f"odom_topic:={odom_topic}",
-            "-p",
-            f"frame_id:={frame_id}",
-            "-p",
-            f"target_offset_xyz:={_format_ros_value(target_xyz)}",
-            "-p",
-            f"target_xyz:={_format_ros_value(target_xyz)}",
-            "-p",
-            f"focus_depth_m:={focus_depth_m}",
-            "-r", f"__ns:={ns}",
+            "-p", f"odom_topic:={odom_topic}",
+            "-p", f"frame_id:={frame_id}",
+            "-p", f"target_offset_xyz:={_format_ros_value(target_xyz)}",
+            "-p", f"target_xyz:={_format_ros_value(target_xyz)}",
+            "-p", f"focus_depth_m:={focus_depth_m}",
+            "-r", f"__ns:={drone_ns}",
         ],
         "simulated_focus_publisher",
     )
     time.sleep(2)
 
-    waypoint_proc = _start_process(
-        [
-            "ros2",
-            "run",
-            "cinematographic_adjustment_agent",
-            "cinematic_waypoint_generator",
-            "--ros-args",
-            "-p", f"odom_topic:={odom_topic}",
-            "-p", f"waypoints_topic:={waypoints_topic}",
-            "-p", f"waypoints_file:={waypoints_file}",
-            "-r", f"__ns:={ns}",
-        ],
+    waypoint_cmd = [
+        "ros2",
+        "run",
+        "cinematographic_adjustment_agent",
         "cinematic_waypoint_generator",
-    )
+        "--ros-args",
+        "-p", f"odom_topic:={odom_topic}",
+        "-p", "baseline_mode:=True",
+        "-r", f"__ns:={drone_ns}",
+    ]
+    if waypoints_topic:
+        waypoint_cmd.extend(["-p", f"waypoints_topic:={waypoints_topic}"])
+    if waypoints_file:
+        waypoint_cmd.extend(["-p", f"waypoints_file:={waypoints_file}"])
+
+    waypoint_proc = _start_process(waypoint_cmd, "cinematic_waypoint_generator")
 
     stop_event = Event()
 
@@ -317,19 +364,7 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
             time.sleep(0.5)
     finally:
         print("stopping data collection.")
-        if logger_proc.poll() is None:
-            logger_proc.send_signal(signal.SIGINT)
-            try:
-                logger_proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                logger_proc.terminate()
-
-        for proc in [waypoint_proc, focus_proc]:
-            if proc.poll() is None:
-                proc.terminate()
-
-        if sim_proc and sim_proc.poll() is None:
-            sim_proc.terminate()
+        _cleanup_procs([logger_proc, focus_proc, waypoint_proc, sim_proc])
 
         if sim_log_handle:
             sim_log_handle.close()
@@ -338,10 +373,10 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
         if rclpy.ok():
             rclpy.shutdown()
 
+        _safety_cleanup()
+
 
 def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
-    rclpy.init(args=args)
-    node = Node("cinematic_collection")
     workspace_root = _find_workspace_root(Path(__file__).resolve())
 
     env_file = workspace_root / "collect_constrained_data.env"
@@ -355,19 +390,23 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
     _cleanup_cyclonedds()
     time.sleep(2)
 
-    drone_id = SimulationParams.DRONE_ID
-    default_odom_topic = f"/drone_{drone_id}_visual_slam/odom"
-    default_baseline_topic = f"/drone_{drone_id}_planning/bspline"
-    default_cinematic_topic = f"/drone_{drone_id}_planning/cinematic_bspline"
+    rclpy.init(args=args)
+    node = Node("cinematic_collection")
 
-    node.declare_parameter("odom_topic", None)
-    node.declare_parameter("baseline_bspline_topic", None)
-    node.declare_parameter("cinematic_bspline_topic", None)
-    node.declare_parameter("frame_id", None)
-    node.declare_parameter("target_xyz", None)
-    node.declare_parameter("focus_depth_m", None)
-    node.declare_parameter("use_simulated_focus", None)
-    node.declare_parameter("use_simulated_light", None)
+    drone_id = SimulationParams.DRONE_ID
+    drone_ns = f"/drone_{drone_id}"
+    default_odom_topic = f"{drone_ns}_visual_slam/odom"
+    default_baseline_topic = f"{drone_ns}_planning/bspline"
+    default_cinematic_topic = f"{drone_ns}_planning/cinematic_bspline"
+
+    node.declare_parameter("odom_topic", default_odom_topic)
+    node.declare_parameter("baseline_bspline_topic", default_baseline_topic)
+    node.declare_parameter("cinematic_bspline_topic", default_cinematic_topic)
+    node.declare_parameter("frame_id", "world")
+    node.declare_parameter("target_xyz", [0.0, 0.0, 0.0])
+    node.declare_parameter("focus_depth_m", 1.0)
+    node.declare_parameter("use_simulated_focus", True)
+    node.declare_parameter("use_simulated_light", True)
     node.declare_parameter("waypoints_topic", "")
     node.declare_parameter("waypoints_file", "")
 
@@ -376,7 +415,6 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
     cinematic_topic = _resolve_param(node, "cinematic_bspline_topic", default_cinematic_topic)
     waypoints_topic = node.get_parameter("waypoints_topic").value or ""
     waypoints_file = node.get_parameter("waypoints_file").value or ""
-    ns = node.get_namespace()
     frame_id = _resolve_param(node, "frame_id", WaypointParams.FRAME_ID, env_key="FRAME_ID")
     target_xyz = _resolve_param(
         node, "target_xyz", SimulationParams.TARGET_XYZ, env_key="TARGET_XYZ", parser=_parse_target_xyz
@@ -427,7 +465,7 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
     filter_proc = _start_process(
         [
             "ros2", "run", "cinematographic_adjustment_agent", "cinematic_bspline_filter",
-            "--ros-args", "-r", f"__ns:={ns}",
+            "--ros-args", "-r", f"__ns:={drone_ns}",
         ],
         "cinematic_bspline_filter",
     )
@@ -444,17 +482,12 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
                 "cinematographic_adjustment_agent",
                 "simulated_focus_publisher",
                 "--ros-args",
-                "-p",
-                f"odom_topic:={odom_topic}",
-                "-p",
-                f"frame_id:={frame_id}",
-                "-p",
-                f"target_offset_xyz:={_format_ros_value(target_xyz)}",
-                "-p",
-                f"target_xyz:={_format_ros_value(target_xyz)}",
-                "-p",
-                f"focus_depth_m:={focus_depth_m}",
-                "-r", f"__ns:={ns}",
+                "-p", f"odom_topic:={odom_topic}",
+                "-p", f"frame_id:={frame_id}",
+                "-p", f"target_offset_xyz:={_format_ros_value(target_xyz)}",
+                "-p", f"target_xyz:={_format_ros_value(target_xyz)}",
+                "-p", f"focus_depth_m:={focus_depth_m}",
+                "-r", f"__ns:={drone_ns}",
             ],
             "simulated_focus_publisher",
         )
@@ -463,7 +496,7 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
         detector_proc = _start_process(
              [
                  "ros2", "run", "cinematographic_adjustment_agent", "simulated_object_detector",
-                 "--ros-args", "-r", f"__ns:={ns}",
+                 "--ros-args", "-r", f"__ns:={drone_ns}",
              ],
              "simulated_object_detector",
          )
@@ -476,11 +509,9 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
                 "cinematographic_adjustment_agent",
                 "cost_function_calculator",
                 "--ros-args",
-                "-p",
-                f"odom_topic:={odom_topic}",
-                "-p",
-                f"frame_id:={frame_id}",
-                "-r", f"__ns:={ns}",
+                "-p", f"odom_topic:={odom_topic}",
+                "-p", f"frame_id:={frame_id}",
+                "-r", f"__ns:={drone_ns}",
             ],
             "cost_function_calculator",
         )
@@ -495,9 +526,8 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
                 "cinematographic_adjustment_agent",
                 "simulated_light_publisher",
                 "--ros-args",
-                "-p",
-                "frame_id:=map",
-                "-r", f"__ns:={ns}",
+                "-p", f"frame_id:={frame_id}",
+                "-r", f"__ns:={drone_ns}",
             ],
             "simulated_light_publisher",
         )
@@ -512,35 +542,31 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
             "--mode",
             "constrained",
             "--ros-args",
-            "-p",
-            f"odom_topic:={odom_topic}",
-            "-p",
-            f"baseline_bspline_topic:={baseline_topic}",
-            "-p",
-            f"cinematic_bspline_topic:={cinematic_topic}",
-            "-r", f"__ns:={ns}",
+            "-p", f"odom_topic:={odom_topic}",
+            "-p", f"baseline_bspline_topic:={baseline_topic}",
+            "-p", f"cinematic_bspline_topic:={cinematic_topic}",
+            "-r", f"__ns:={drone_ns}",
         ],
         "trajectory_data_logger",
     )
     time.sleep(2)
 
-    waypoint_proc = _start_process(
-        [
-            "ros2",
-            "run",
-            "cinematographic_adjustment_agent",
-            "cinematic_waypoint_generator",
-            "--ros-args",
-            "-p",
-            f"odom_topic:={odom_topic}",
-            "-p",
-            f"frame_id:={frame_id}",
-            "-p", f"waypoints_topic:={waypoints_topic}",
-            "-p", f"waypoints_file:={waypoints_file}",
-            "-r", f"__ns:={ns}",
-        ],
+    waypoint_cmd = [
+        "ros2",
+        "run",
+        "cinematographic_adjustment_agent",
         "cinematic_waypoint_generator",
-    )
+        "--ros-args",
+        "-p", f"odom_topic:={odom_topic}",
+        "-p", f"frame_id:={frame_id}",
+        "-r", f"__ns:={drone_ns}",
+    ]
+    if waypoints_topic:
+        waypoint_cmd.extend(["-p", f"waypoints_topic:={waypoints_topic}"])
+    if waypoints_file:
+        waypoint_cmd.extend(["-p", f"waypoints_file:={waypoints_file}"])
+
+    waypoint_proc = _start_process(waypoint_cmd, "cinematic_waypoint_generator")
 
     stop_event = Event()
 
@@ -568,12 +594,7 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
             time.sleep(0.5)
     finally:
         print("stopping data collection.")
-        for proc in procs:
-            if proc is not None and proc.poll() is None:
-                proc.terminate()
-
-        if sim_proc and sim_proc.poll() is None:
-            sim_proc.terminate()
+        _cleanup_procs(procs + [sim_proc])
 
         if sim_log_handle:
             sim_log_handle.close()
@@ -581,3 +602,5 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+
+        _safety_cleanup()

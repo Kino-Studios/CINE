@@ -97,16 +97,28 @@ class VisualizationMixin:
         now = self.get_clock().now().to_msg()
 
         if self.viz_static_path and self.viz_data["static_world"] is not None:
+            static_pts = self.viz_data["static_world"]
             markers.markers.extend(
                 self._create_path_markers(
-                    self.viz_data["static_world"],
+                    static_pts,
                     "static_path",
-                    (0.5, 0.5, 0.5, 0.4),
+                    (0.5, 0.5, 0.5, 0.6),
                     0.02,
                     now,
                     0,
                 )
             )
+            for i, wp in enumerate(static_pts):
+                markers.markers.append(
+                    self._create_waypoint_sphere(
+                        wp,
+                        10 + i,
+                        "static_waypoints_dots",
+                        (0.0, 1.0, 1.0, 0.8),
+                        0.15,
+                        now,
+                    )
+                )
 
         if self.viz_arc_only and self.viz_data["cinematographic_waypoints"] is not None:
             arc_pts = self.viz_data["cinematographic_waypoints"]
@@ -380,6 +392,42 @@ class VisualizationMixin:
         marker.color.b = float(color[2])
         marker.color.a = float(color[3])
         return marker
+
+    def _publish_sent_waypoints_dots(self):
+        if not hasattr(self, "sent_waypoints_history") or not self.sent_waypoints_history:
+            return
+
+        markers = MarkerArray()
+        now = self.get_clock().now().to_msg()
+
+        # We'll use a larger sphere for these to make them "big enough to see"
+        scale = 0.2  # 20cm dots
+
+        for i, wp in enumerate(self.sent_waypoints_history):
+            marker = Marker()
+            marker.header.stamp = now
+            marker.header.frame_id = self.frame_id
+            marker.ns = "sent_waypoints_dots"
+            marker.id = i
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD
+            marker.pose.position.x = float(wp[0])
+            marker.pose.position.y = float(wp[1])
+            marker.pose.position.z = float(wp[2])
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = scale
+            marker.scale.y = scale
+            marker.scale.z = scale
+
+            # Bright yellow for visibility
+            marker.color.r = 1.0
+            marker.color.g = 1.0
+            marker.color.b = 0.0
+            marker.color.a = 1.0
+
+            markers.markers.append(marker)
+
+        self.sent_waypoints_viz_pub.publish(markers)
 
     def _create_text_marker(
         self, position, text, marker_id, namespace, color, scale, stamp, offset_z=0.2

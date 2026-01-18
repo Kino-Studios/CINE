@@ -90,9 +90,10 @@ if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
   fi
 fi
 
-ros2 run cinematographic_adjustment_agent trajectory_data_logger --mode baseline --ros-args \
+ros2 run cinematographic_adjustment_agent trajectory_data_logger --ros-args \
   -p odom_topic:=${ODOM_TOPIC} \
   -p baseline_bspline_topic:=${BASELINE_TOPIC} \
+  -p baseline_mode:=true \
   -p cinematic_bspline_topic:=${CINEMATIC_TOPIC} &
 LOGGER_PID=$!
 sleep 2
@@ -106,7 +107,7 @@ ros2 run cinematographic_adjustment_agent simulated_focus_publisher --ros-args \
 SIMULATED_FOCUS_PID=$!
 sleep 2
 
-ros2 run cinematographic_adjustment_agent cinematic_waypoint_generator --ros-args -p odom_topic:=${ODOM_TOPIC} &
+ros2 run cinematographic_adjustment_agent cinematic_waypoint_generator --ros-args -p odom_topic:=${ODOM_TOPIC} -p baseline_mode:=true &
 WAYPOINT_PID=$!
 
 cleanup() {
