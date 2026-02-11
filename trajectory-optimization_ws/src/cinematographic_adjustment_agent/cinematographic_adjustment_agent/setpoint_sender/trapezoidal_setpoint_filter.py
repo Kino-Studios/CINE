@@ -1,5 +1,4 @@
 import sys
-import os
 from pathlib import Path
 
 # Add repo root to sys.path to find 'configs'
@@ -26,10 +25,10 @@ class TrapezoidalProfile:
     def __init__(self, max_velocity: float, max_acceleration: float):
         self.max_velocity = max_velocity
         self.max_acceleration = max_acceleration
-    
-    def compute_profile(self, start_pos: np.ndarray, target_pos: np.ndarray, 
+
+    def compute_profile(self, start_pos: np.ndarray, target_pos: np.ndarray,
                        current_vel: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
-                       
+
         displacement = target_pos - start_pos
         distance = np.linalg.norm(displacement)
         if distance < 1e-6:
@@ -62,7 +61,7 @@ class TrapezoidalProfile:
         return next_pos, next_vel
 
 class TrapezoidalSetpointFilter:
-    def __init__(self, node: Node, 
+    def __init__(self, node: Node,
                  input_topic: str = "/position_cmd",
                  output_topic: str = "/position_cmd_smooth",
                  max_velocity: Optional[float] = None,
@@ -99,7 +98,7 @@ class TrapezoidalSetpointFilter:
         self.publish_rate = 50.0
         self.timer = node.create_timer(1.0 / self.publish_rate, self.timer_callback)
         self.target_cmd: Optional[PoseStamped] = None
-    
+
     def odom_callback(self, msg: Odometry):
         self.current_pos = np.array([
             msg.pose.pose.position.x,
@@ -112,13 +111,13 @@ class TrapezoidalSetpointFilter:
             msg.twist.twist.linear.z
         ])
         self.has_odom = True
-    
+
     def position_cmd_callback(self, msg: PoseStamped):
-        if not (math.isnan(msg.pose.position.x) or 
-                math.isnan(msg.pose.position.y) or 
+        if not (math.isnan(msg.pose.position.x) or
+                math.isnan(msg.pose.position.y) or
                 math.isnan(msg.pose.position.z)):
             self.target_cmd = msg
-    
+
     def timer_callback(self):
         if not self.has_odom or self.target_cmd is None:
             return

@@ -1,5 +1,4 @@
 import sys
-import os
 from pathlib import Path
 
 # Add repo root to sys.path to find 'configs'
@@ -46,6 +45,7 @@ from cinematographic_adjustment_agent.sensor_noise.noisy_odometry import NoisyOd
 
 class CinematographicPlannerNode(Node):
     def __init__(self):
+
         super().__init__("cinematographic_planner_node")
         self.params = CinematographyParams()
         self.constraints = CinematicConstraints()
@@ -54,11 +54,11 @@ class CinematographicPlannerNode(Node):
         self.center_uv = None
         self.bounding_box = None
         self.has_focus = False
-        
+
         self.drone_position = np.array([0.0, 0.0, 0.0])
         self.drone_orientation = np.array([0.0, 0.0, 0.0, 0.0])
         self.has_odom = False
-        
+
         self.light_avoidance_enabled = bool(
             self.declare_parameter(
                 "light_avoidance_enabled", LightAvoidanceParams.ENABLED
@@ -159,7 +159,7 @@ class CinematographicPlannerNode(Node):
             self.dimensions_callback,
             10,
         )
-        
+
         self.odom_sub = self.create_subscription(
             Odometry,
             self.params.ODOM_TOPIC,
@@ -191,9 +191,9 @@ class CinematographicPlannerNode(Node):
         )
 
         self.waypoint_pub_node = WaypointPublisher(self, self.params.WAYPOINTS_TOPIC)
-        
+
         self.use_cost_optimization = True
-        self.optimization_frequency = 2.0 
+        self.optimization_frequency = 2.0
         self.last_optimization_time = 0.0
         self.optimized_center = None
         self.optimized_radius = None
@@ -255,7 +255,7 @@ class CinematographicPlannerNode(Node):
             msg.pose.pose.position.y,
             msg.pose.pose.position.z
         ])
-        
+
         self.drone_orientation = np.array([
             msg.pose.pose.orientation.x,
             msg.pose.pose.orientation.y,
@@ -270,7 +270,7 @@ class CinematographicPlannerNode(Node):
         if not self.light_avoidance_enabled:
             return
         self.cost_calculator.update_light_vector(msg)
-    
+
     def image_callback(self, msg: Image):
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
@@ -281,7 +281,7 @@ class CinematographicPlannerNode(Node):
                 self.cost_calculator.update_bgr_image(cv_image)
             except Exception as e:
                 self.get_logger().warn(f'Image callback error: {e}')
-    
+
     def depth_callback(self, msg: Image):
         try:
             depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding="32FC1")
@@ -414,14 +414,14 @@ class CinematographicPlannerNode(Node):
     def compute_target_xy(self) -> Optional[Tuple[float, float, float]]:
         if self.center_uv is None:
             return None
-        
+
         median_depth = self.cost_calculator.get_median_depth_roi()
 
         if median_depth is not None:
             smoothed_depth = median_depth
         else:
             smoothed_depth = self.tracker.get_smoothed_depth()
-        
+
         preferred_depth = clamp_depth_to_preference(
             smoothed_depth,
             self.params.TARGET_FOCUS_DISTANCE_M,
@@ -438,19 +438,19 @@ class CinematographicPlannerNode(Node):
             self.params.CAMERA_CX,
             self.params.CAMERA_CY,
         )
-        
+
         return x_cam, y_cam, preferred_depth
-    
+
     def compute_target_world_position(self) -> Optional[np.ndarray]:
         target_cam = self.compute_target_xy()
 
         if target_cam is None or not self.has_odom:
             return None
-        
+
         x_cam, y_cam, z_cam = target_cam
-        
+
         target_world = self.drone_position + np.array([z_cam, -x_cam, -y_cam])
-        
+
         return target_world
 
     def build_initial_waypoints(self) -> List[Tuple[float, float, float, float]]:
@@ -458,16 +458,16 @@ class CinematographicPlannerNode(Node):
 
         if target_world is None:
             return []
-        
+
         tx, ty, tz = target_world[0], target_world[1], target_world[2]
-        
+
         if self.optimized_center is not None and self.optimized_radius is not None:
             center_xy = self.optimized_center
             radius = self.optimized_radius
         else:
             center_xy = (tx, ty)
             radius = self.params.ORBIT_RADIUS_M
-        
+
         def cost_function(x: float, y: float, z: float) -> Optional[float]:
             return self.cost_calculator.estimate_position_cost_at_position(
                 x,
@@ -480,9 +480,9 @@ class CinematographicPlannerNode(Node):
                 reference_drone_y=float(self.drone_position[1]),
                 reference_drone_z=float(self.drone_position[2]),
             )
-        
+
         z = self.params.CONSTANT_ALTITUDE_M
-        
+
         if self.use_cost_optimization:
             try:
                 orbit = generate_cost_optimized_orbit_waypoints(
@@ -499,7 +499,7 @@ class CinematographicPlannerNode(Node):
                 return orbit
             except Exception as e:
                 self.get_logger().warn(f'Optimization cost failed: {e}')
-        
+
         orbit = generate_orbit_waypoints_xy(
             center_xy_m=center_xy,
             radius_m=radius,
@@ -508,7 +508,7 @@ class CinematographicPlannerNode(Node):
             waypoint_rate_hz=self.params.WAYPOINT_RATE_HZ,
             altitude_m=z,
         )
-        
+
         return orbit
 
     def tick(self):
@@ -516,9 +516,9 @@ class CinematographicPlannerNode(Node):
 
         if self.tracker.should_switch_target():
             self.tracker.rotate_to_next_target()
-        
+
         cost_result = self.cost_calculator.calculate_cost()
-        
+
         if cost_result is not None and isinstance(cost_result, dict):
             total_cost = cost_result.get('total_cost', 0.0)
             msg = CinematographyCosts()
@@ -530,18 +530,18 @@ class CinematographicPlannerNode(Node):
             msg.distance_cost = float(cost_result.get('distance_cost', 0.0))
             msg.total_cost = float(total_cost)
             self.cost_pub.publish(msg)
-        
+
         now = self.get_clock().now()
         current_time = now.nanoseconds / 1e9
 
-        if (self.use_cost_optimization and 
+        if (self.use_cost_optimization and
             (current_time - self.last_optimization_time) >= self.optimization_frequency):
-            
+
             target_world = self.compute_target_world_position()
 
             if target_world is not None:
                 tx, ty, tz = target_world[0], target_world[1], target_world[2]
-                
+
                 def cost_function(x: float, y: float, z: float) -> Optional[float]:
                     return self.cost_calculator.estimate_position_cost_at_position(
                         x,
@@ -554,7 +554,7 @@ class CinematographicPlannerNode(Node):
                         reference_drone_y=float(self.drone_position[1]),
                         reference_drone_z=float(self.drone_position[2]),
                     )
-                
+
                 try:
                     initial_center = (tx, ty)
                     optimized_center, optimized_radius = optimize_orbit_center_and_radius(

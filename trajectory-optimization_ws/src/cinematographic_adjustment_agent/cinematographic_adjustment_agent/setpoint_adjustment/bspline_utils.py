@@ -13,10 +13,12 @@ def arrays_to_msg(original: Bspline, pos_pts: np.ndarray, knots: np.ndarray | No
     out.order = original.order
     out.traj_id = original.traj_id
     out.start_time = original.start_time
+
     if knots is None:
         out.knots = list(original.knots)
     else:
         out.knots = [float(k) for k in knots]
+        
     out.yaw_pts = list(original.yaw_pts)
     out.yaw_dt = original.yaw_dt
     out.pos_pts = []
@@ -25,5 +27,5 @@ def arrays_to_msg(original: Bspline, pos_pts: np.ndarray, knots: np.ndarray | No
         pt = Point()
         pt.x, pt.y, pt.z = float(row[0]), float(row[1]), float(row[2])
         out.pos_pts.append(pt)
-        
+
     return out

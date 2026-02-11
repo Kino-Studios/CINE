@@ -4,8 +4,8 @@
   <name>cinematographic_adjustment_agent</name>
   <version>0.0.1</version>
   <description>Cinematographic adjustment agent for trajectory optimization</description>
-  <maintainer email="your_email@example.com">vtsyp</maintainer>
-  <license>MIT</license>
+  <maintainer email="dkosukhintech@gmail.com">vtsyp</maintainer>
+  <license>GPL-3.0-only</license>
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>

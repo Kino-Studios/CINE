@@ -1,3 +1,4 @@
+# Build artifacts
 devel/
 logs/
 build/
@@ -5,15 +6,28 @@ bin/
 lib/
 msg_gen/
 srv_gen/
+install/
+build_isolated/
+devel_isolated/
+
+# ROS 2 workspace artifacts
 trajectory-optimization_ws/log/
 trajectory-optimization_ws/build/
 trajectory-optimization_ws/install/
 
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE / OS generated
 .vscode/
+.DS_Store
 *.db
 *.db-shm
 *.db-wal
 
+# ROS message generation
 msg/*Action.msg
 msg/*ActionFeedback.msg
 msg/*ActionGoal.msg
@@ -22,8 +36,6 @@ msg/*Feedback.msg
 msg/*Goal.msg
 msg/*Result.msg
 msg/_*.py
-build_isolated/
-devel_isolated/
 
 # Environment files
 .env
@@ -55,13 +67,21 @@ CMakeLists.txt.user
 
 srv/_*.py
 *.pcd
-*.pyc
 qtcreator-*
 *.user
 
 /planning/cfg
 /planning/docs
 /planning/src
+
+# Temporary / generated files
+temp_demo_photos/
+ros_logs/
+context-text
+bashrc
+
+# Empty external deps
+Depth-Anything/
 
 *~
 

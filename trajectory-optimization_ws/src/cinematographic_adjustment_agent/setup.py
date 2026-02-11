@@ -14,7 +14,7 @@ ros2_executables = [
     os.path.join('scripts', 'ros2_nodes', 'trajectory_data_logger'),
     os.path.join('scripts', 'ros2_nodes', 'noisy_odometry_node'),
     os.path.join('scripts', 'ros2_nodes', 'cinematic_waypoint_generator'),
-    # os.path.join('scripts', 'ros2_nodes', 'room_waypoint_sender'),
+
     os.path.join('scripts', 'ros2_nodes', 'simulated_object_detector'),
     os.path.join('scripts', 'ros2_nodes', 'simulated_focus_publisher'),
     os.path.join('scripts', 'ros2_nodes', 'simulated_light_publisher'),
@@ -86,9 +86,9 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='vtsyp',
-    maintainer_email='your_email@example.com',
+    maintainer_email='dkosukhintech@gmail.com',
     description='Cinematographic adjustment agent for trajectory optimization',
-    license='MIT',
+    license='GPL-3.0',
     tests_require=['pytest'],
     cmdclass=cmdclass,
 )

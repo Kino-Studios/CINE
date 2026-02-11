@@ -1,5 +1,4 @@
 import sys
-import os
 from pathlib import Path
 
 here = Path(__file__).resolve()
@@ -196,7 +195,7 @@ class CostCalculator:
             max_range = 0.0
         if max_range <= 0.0:
             return 1.0
-        
+
         normalized = min(self.light_distance, max_range) / max_range
 
         favor_close = bool(
@@ -267,12 +266,12 @@ class CostCalculator:
         if self.orientation is None:
             return None
         x, y, z, w = self.orientation
-        
+
         norm = math.sqrt(x * x + y * y + z * z + w * w)
 
         if norm == 0:
             return None
-        
+
         x /= norm
         y /= norm
         z /= norm
