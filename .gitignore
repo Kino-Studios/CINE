@@ -1,6 +1,6 @@
 # Build artifacts
 devel/
-logs/
+log/
 build/
 bin/
 lib/
@@ -10,10 +10,10 @@ install/
 build_isolated/
 devel_isolated/
 
-# ROS 2 workspace artifacts
-trajectory-optimization_ws/log/
-trajectory-optimization_ws/build/
-trajectory-optimization_ws/install/
+# Colcon build artifacts (catch nested workspaces too)
+**/build/
+**/install/
+**/log/
 
 # Python bytecode
 __pycache__/
@@ -23,6 +23,7 @@ __pycache__/
 # IDE / OS generated
 .vscode/
 .DS_Store
+**/.DS_Store
 *.db
 *.db-shm
 *.db-wal
