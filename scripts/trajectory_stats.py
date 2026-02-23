@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Summarize baseline and cinematic trajectory files with descriptive statistics."""
+"""Summarize baseline and cinematic trajectory files with statistics."""
 
 from __future__ import annotations
 
 import argparse
 import csv
 import math
-import statistics
 import sys
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable
+from typing import Iterable
+
+import pandas as pd
 
 
 @dataclass(frozen=True)
@@ -24,68 +25,60 @@ class ColumnSummary:
     median: float
 
 
-class ColumnAccumulator:
-    """Keep running aggregates so we can emit summary statistics later."""
-
-    def __init__(self) -> None:
-        self.count = 0
-        self.sum = 0.0
-        self.sum_sq = 0.0
-        self.min = math.inf
-        self.max = -math.inf
-        self.values: list[float] = []
-
-    def add(self, value: float) -> None:
-        self.count += 1
-        self.sum += value
-        self.sum_sq += value * value
-        self.values.append(value)
-        if value < self.min:
-            self.min = value
-        if value > self.max:
-            self.max = value
-
-    def summary(self) -> ColumnSummary:
-        if self.count == 0:
-            nan = float("nan")
-            return ColumnSummary(count=0, mean=nan, std=nan, min=nan, max=nan, median=nan)
-        mean = self.sum / self.count
-        variance = max(self.sum_sq / self.count - mean * mean, 0.0)
-        std = math.sqrt(variance)
-        median = statistics.median(self.values)
-        return ColumnSummary(
-            count=self.count,
-            mean=mean,
-            std=std,
-            min=self.min,
-            max=self.max,
-            median=median,
-        )
-
-
-def collect_statistics(files: Iterable[Path]) -> OrderedDict[str, ColumnSummary]:
-    accumulators: "OrderedDict[str, ColumnAccumulator]" = OrderedDict()
+def collect_statistics(
+    files: Iterable[Path]
+) -> OrderedDict[str, ColumnSummary]:
+    dfs = []
     for csv_path in sorted(files):
-        with csv_path.open(newline="") as handle:
-            reader = csv.DictReader(handle)
-            headers = reader.fieldnames or []
-            for header in headers:
-                if header not in accumulators:
-                    accumulators[header] = ColumnAccumulator()
-            for row in reader:
-                for header in headers:
-                    raw = row.get(header)
-                    if raw is None:
-                        continue
-                    value = raw.strip()
-                    if not value:
-                        continue
-                    try:
-                        numeric = float(value)
-                    except ValueError:
-                        continue
-                    accumulators[header].add(numeric)
-    return OrderedDict((name, accumulator.summary()) for name, accumulator in accumulators.items())
+        try:
+            # Read CSV, let pandas infer types.
+            # We will coerce to numeric later.
+            df = pd.read_csv(csv_path)
+            dfs.append(df)
+        except pd.errors.EmptyDataError:
+            # Matches original behavior where empty files are ignored
+            pass
+
+    if not dfs:
+        return OrderedDict()
+
+    # Concatenate all dataframes, preserving column order from files
+    full_df = pd.concat(dfs, axis=0, ignore_index=True, sort=False)
+
+    stats = OrderedDict()
+    for col in full_df.columns:
+        # Convert column to numeric, coercing errors to NaN
+        # This mimics the try-except ValueError block in the original code
+        numeric_series = pd.to_numeric(full_df[col], errors='coerce')
+
+        # Drop NaNs (originally: if raw is None/empty or ValueError)
+        numeric_series = numeric_series.dropna()
+
+        count = len(numeric_series)
+        if count == 0:
+            nan = float("nan")
+            stats[col] = ColumnSummary(
+                count=0, mean=nan, std=nan, min=nan, max=nan, median=nan
+            )
+        else:
+            # Calculate statistics
+            # Original uses population variance (divide by N)
+            std = numeric_series.std(ddof=0)
+            mean = numeric_series.mean()
+            min_val = float(numeric_series.min())
+            max_val = float(numeric_series.max())
+            median = float(numeric_series.median())
+
+            stats[col] = ColumnSummary(
+                count=count,
+                mean=mean,
+                std=std,
+                min=min_val,
+                max=max_val,
+                median=median,
+            )
+
+    return stats
 
 
 def format_float(value: float) -> str:
@@ -94,11 +87,15 @@ def format_float(value: float) -> str:
     return f"{value:.6e}"
 
 
-def emit_csv(output_path: Path, summary: "OrderedDict[str, ColumnSummary]") -> None:
+def emit_csv(
+    output_path: Path, summary: "OrderedDict[str, ColumnSummary]"
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["column", "count", "mean", "std", "min", "max", "median"])
+        writer.writerow(
+            ["column", "count", "mean", "std", "min", "max", "median"]
+        )
         for column, stats in summary.items():
             writer.writerow(
                 [
@@ -122,7 +119,10 @@ def summarize_dataset(dataset_path: Path) -> OrderedDict[str, ColumnSummary]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Compute dataset-level statistics for each trajectory CSV directory."
+        description=(
+            "Compute dataset-level statistics for each "
+            "trajectory CSV directory."
+        )
     )
     parser.add_argument(
         "--trajectory-root",
@@ -140,7 +140,9 @@ def main() -> int:
         "--output-dir",
         type=Path,
         default=None,
-        help="Where to write the summary CSVs (defaults to the trajectory root).",
+        help=(
+            "Where to write the summary CSVs (default: trajectory root)."
+        ),
     )
     args = parser.parse_args()
 
@@ -150,7 +152,10 @@ def main() -> int:
     for dataset in args.datasets:
         dataset_path = root / dataset
         if not dataset_path.is_dir():
-            print(f"Skipping {dataset}: {dataset_path} is not a directory", file=sys.stderr)
+            print(
+                f"Skipping {dataset}: {dataset_path} is not a directory",
+                file=sys.stderr
+            )
             status = 1
             continue
         try:
