@@ -136,6 +136,13 @@ class CostCalculator:
         self._declare_parameter(
             "framing_vertical_weight", CostParams.FRAMING_VERTICAL_WEIGHT
         )
+
+        self._declare_parameter("camera_fx", self.ImageParams.CAMERA_FX)
+        self._declare_parameter("camera_fy", self.ImageParams.CAMERA_FY)
+        self._declare_parameter("camera_cx", self.ImageParams.CAMERA_CX)
+        self._declare_parameter("camera_cy", self.ImageParams.CAMERA_CY)
+        self._declare_parameter("collision_depth_margin_m", 0.5)
+
         self._last_framing_log_time = 0.0
 
     def _declare_parameter(self, name: str, default):
@@ -1012,6 +1019,74 @@ class CostCalculator:
         )
         return float(depth_cost + lighting_cost + smoothness_cost)
 
+    def _is_waypoint_occluded(
+        self,
+        target_world_x: float,
+        target_world_y: float,
+        target_world_z: float,
+    ) -> bool:
+
+        if self.depth_image is None or self.orientation is None or self.position is None:
+            return False
+
+        try:
+            fx = float(self.node.get_parameter("camera_fx").value)
+            fy = float(self.node.get_parameter("camera_fy").value)
+            cx = float(self.node.get_parameter("camera_cx").value)
+            cy = float(self.node.get_parameter("camera_cy").value)
+            margin = float(self.node.get_parameter("collision_depth_margin_m").value)
+        except Exception:
+            return False
+
+        h, w = self.depth_image.shape[:2]
+
+        tx, ty, tz, tw = self.orientation
+
+        rx = target_world_x - self.position[0]
+        ry = target_world_y - self.position[1]
+        rz = target_world_z - self.position[2]
+
+        norm = math.sqrt(tx*tx + ty*ty + tz*tz + tw*tw)
+        if norm > 0:
+            tx /= norm
+            ty /= norm
+            tz /= norm
+            tw /= norm
+
+        r00 = 1 - 2 * (ty * ty + tz * tz)
+        r01 = 2 * (tx * ty - tz * tw)
+        r02 = 2 * (tx * tz + ty * tw)
+
+        r10 = 2 * (tx * ty + tz * tw)
+        r11 = 1 - 2 * (tx * tx + tz * tz)
+        r12 = 2 * (ty * tz - tx * tw)
+
+        r20 = 2 * (tx * tz - ty * tw)
+        r21 = 2 * (ty * tz + tx * tw)
+        r22 = 1 - 2 * (tx * tx + ty * ty)
+
+        cam_x = r00 * rx + r10 * ry + r20 * rz
+        cam_y = r01 * rx + r11 * ry + r21 * rz
+        cam_z = r02 * rx + r12 * ry + r22 * rz
+
+        if cam_z <= 0.1:
+            return False
+
+        u = int(round((cam_x * fx) / cam_z + cx))
+        v = int(round((cam_y * fy) / cam_z + cy))
+
+        if u < 0 or u >= w or v < 0 or v >= h:
+            return False
+
+        depth_val = self.depth_image[v, u]
+        if np.isnan(depth_val) or depth_val <= 0:
+            return False
+
+        if cam_z > (depth_val - margin):
+            return True
+
+        return False
+
     def _compute_cost_components(
         self,
         drone_x: float,
@@ -1026,6 +1101,10 @@ class CostCalculator:
         include_framing: bool,
         include_lighting: bool,
     ) -> tuple[float, float, float, float]:
+
+        if self._is_waypoint_occluded(target_world_x, target_world_y, target_world_z):
+            return (float("inf"), 0.0, 0.0, 0.0)
+
         dx = target_world_x - drone_x
         dy = target_world_y - drone_y
         dz = target_world_z - drone_z
