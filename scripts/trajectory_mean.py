@@ -85,24 +85,20 @@ def build_time_grid(min_time: float, max_time: float, step: float) -> list[float
 
 def resample_run(
     series: dict[str, tuple[list[float], list[float]]], grid: list[float]
-) -> dict[str, list[float]]:
-    resampled: dict[str, list[float]] = {}
+) -> dict[str, np.ndarray]:
+    resampled: dict[str, np.ndarray] = {}
     for column, (times, values) in series.items():
         if not times:
             continue
         if len(times) == 1:
-            single_time = times[0]
-            single_value = values[0]
-            data = []
-            for t in grid:
-                if math.isclose(t, single_time, rel_tol=1e-9, abs_tol=1e-12):
-                    data.append(single_value)
-                else:
-                    data.append(math.nan)
+            # Use np.isclose to vectorize comparison against single time-point
+            mask = np.isclose(grid, times[0], rtol=1e-9, atol=1e-12)
+            data = np.full(len(grid), np.nan)
+            data[mask] = values[0]
             resampled[column] = data
             continue
         interpolated = np.interp(grid, times, values, left=np.nan, right=np.nan)
-        resampled[column] = list(interpolated)
+        resampled[column] = interpolated
     return resampled
 
 
@@ -110,29 +106,32 @@ def aggregate_runs(
     runs: list[dict[str, tuple[list[float], list[float]]]],
     grid: list[float],
     columns_order: OrderedDict[str, None],
-) -> dict[str, list[list[float]]]:
+) -> dict[str, np.ndarray]:
     grid_len = len(grid)
-    column_stats: dict[str, list[list[float]]] = {
-        column: [[0.0, 0.0, 0] for _ in range(grid_len)] for column in columns_order
+    # Initialize column statistics using 2D numpy arrays for vectorization [sum, sum_sq, count]
+    column_stats: dict[str, np.ndarray] = {
+        column: np.zeros((grid_len, 3)) for column in columns_order
     }
     for run in runs:
         resampled = resample_run(run, grid)
         for column, values in resampled.items():
             stats = column_stats.setdefault(
-                column, [[0.0, 0.0, 0] for _ in range(grid_len)]
+                column, np.zeros((grid_len, 3))
             )
-            for idx, value in enumerate(values):
-                if math.isnan(value):
-                    continue
-                stats[idx][0] += value
-                stats[idx][1] += value * value
-                stats[idx][2] += 1
+            # Use vectorized operations with masking for NaN values
+            mask = ~np.isnan(values)
+            if not np.any(mask):
+                continue
+            v = values[mask]
+            stats[mask, 0] += v
+            stats[mask, 1] += v * v
+            stats[mask, 2] += 1
     return column_stats
 
 
 def compute_mean(
     csv_files: Sequence[Path], time_step: float
-) -> Tuple[list[float], OrderedDict[str, None], dict[str, list[list[float]]]]:
+) -> Tuple[list[float], OrderedDict[str, None], dict[str, np.ndarray]]:
     if not csv_files:
         raise FileNotFoundError("No CSV files provided for averaging.")
     runs, columns_order, min_time, max_time = load_runs(csv_files)
@@ -149,7 +148,7 @@ def write_mean_std_csv(
     output_path: Path,
     grid: list[float],
     columns_order: OrderedDict[str, None],
-    column_stats: dict[str, list[list[float]]],
+    column_stats: dict[str, np.ndarray],
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     columns = ["time", *(f"{col}_mean" for col in columns_order), *(f"{col}_std" for col in columns_order)]
