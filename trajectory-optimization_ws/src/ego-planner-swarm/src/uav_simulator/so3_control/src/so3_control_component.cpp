@@ -15,7 +15,7 @@ class SO3ControlComponent : public rclcpp::Node
 {
 public:
     SO3ControlComponent(const rclcpp::NodeOptions &options)
-        : Node("SO3ControlComponent", options), position_cmd_updated_(false), position_cmd_init_(false), des_yaw_(0), des_yaw_dot_(0), current_yaw_(0), enable_motors_(true), // FIXME
+        : Node("SO3ControlComponent", options), position_cmd_updated_(false), position_cmd_init_(false), des_yaw_(0), des_yaw_dot_(0), current_yaw_(0), enable_motors_(false),
           use_external_yaw_(false)
     {
         onInit();
@@ -204,6 +204,7 @@ void SO3ControlComponent::onInit(void)
     declare_parameter("mass", 0.5);
 
     declare_parameter("use_external_yaw", true);
+    declare_parameter("enable_motors", false);
 
     declare_parameter("gains/rot/x", 1.5);
     declare_parameter("gains/rot/y", 1.5);
@@ -235,6 +236,7 @@ void SO3ControlComponent::onInit(void)
     controller_.setMass(mass);
 
     get_parameter("use_external_yaw", use_external_yaw_);
+    get_parameter("enable_motors", enable_motors_);
 
     get_parameter("gains/rot/x", kR_[0]);
     get_parameter("gains/rot/y", kR_[1]);

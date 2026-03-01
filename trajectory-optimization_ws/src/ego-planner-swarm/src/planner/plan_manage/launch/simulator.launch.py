@@ -140,6 +140,7 @@ def generate_launch_description():
                 {'mass': 0.98},
                 {'use_angle_corrections': False},
                 {'use_external_yaw': False},
+                {'enable_motors': True},
                 {'gains/rot/z': 1.0},
                 {'gains/ang/z': 0.1},
                 gains_file,
