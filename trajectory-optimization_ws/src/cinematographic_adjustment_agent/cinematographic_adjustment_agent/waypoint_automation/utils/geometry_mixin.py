@@ -28,7 +28,7 @@ class GeometryMixin:
             if abs(z - original_z) > 1e-6:
                 self.get_logger().debug(f"Z clamped from {original_z:.2f} to {z:.2f}")
         else:
-            # Only enforce minimum altitude to avoid ground collisions.
+
             z = max(self.world_bounds_min[2], max(self.min_altitude_m, float(z)))
         return (x, y, z)
 

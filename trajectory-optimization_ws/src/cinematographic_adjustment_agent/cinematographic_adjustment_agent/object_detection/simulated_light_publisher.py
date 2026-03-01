@@ -47,7 +47,7 @@ class SimulatedLightPublisher(Node):
         point.header.frame_id = self.frame_id
 
         if self.start_position is None:
-            # fallback to static offset before receiving odom
+
             lx, ly, lz = self.light_vector_xyz
             ln = math.sqrt(lx * lx + ly * ly + lz * lz)
             scale = self.light_distance_m / ln if ln > 1e-6 and self.light_distance_m > 0.0 else 1.0

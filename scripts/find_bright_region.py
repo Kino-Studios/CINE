@@ -53,8 +53,8 @@ def find_bright_region(image_path, output_path, blur_size=(11, 11), threshold_ra
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Find the brightest region in an image.")
-    parser.add_argument("--input", default="/home/vtsyp/CINE/light.png", help="Path to input image")
-    parser.add_argument("--output", default="/home/vtsyp/CINE/bright_region_output.png", help="Path to output image")
+    parser.add_argument("--input", required=True, help="Path to input image")
+    parser.add_argument("--output", default="bright_region_output.png", help="Path to output image")
     parser.add_argument("--threshold", type=float, default=0.9, help="Threshold ratio (0.0 to 1.0) of max brightness")
 
     args = parser.parse_args()

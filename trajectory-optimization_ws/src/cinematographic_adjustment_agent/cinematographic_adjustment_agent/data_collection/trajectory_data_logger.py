@@ -14,51 +14,34 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 import signal
-import sys
 
-here = Path(__file__).resolve()
-for parent in [here] + list(here.parents):
-    if (parent / "configs").is_dir():
-        python_constants_path = parent / "configs" / "python-constants"
-        if str(python_constants_path) not in sys.path:
-            sys.path.insert(0, str(python_constants_path))
-        break
+from cinematographic_adjustment_agent.utils.paths import add_config_path
+
+add_config_path()
 
 from constants import CinematicConstraints, SimulationParams, WaypointParams
 
 
 class UniformBspline:
-    """Python implementation of ego_planner's UniformBspline using de Boor's algorithm"""
 
     def __init__(self, control_points, order, knots):
-        """
-        Args:
-            control_points: np.array of shape (N, 3) - control points
-            order: int - B-spline order (degree + 1)
-            knots: np.array - knot vector
-        """
-        self.control_points = control_points  # (N, 3)
-        self.p = order  # order
-        self.u = knots  # knot vector
+        self.control_points = control_points
+        self.p = order
+        self.u = knots
         self.n = len(control_points) - 1
         self.m = self.n + self.p + 1
 
     def evaluateDeBoor(self, u):
-        """
-        Evaluate B-spline at parameter u using de Boor's algorithm.
-        Direct translation of ego_planner's UniformBspline::evaluateDeBoor()
-        """
-        # Clamp u to valid range
         ub = np.clip(u, self.u[self.p], self.u[self.m - self.p])
 
-        # Determine which knot span [u_k, u_{k+1}] contains ub
+
         k = self.p
         while k < len(self.u) - 1:
             if self.u[k + 1] >= ub:
                 break
             k += 1
 
-        # Initialize de Boor points with relevant control points
+
         d = []
         for i in range(self.p + 1):
             idx = k - self.p + i
@@ -67,7 +50,7 @@ class UniformBspline:
             else:
                 d.append(np.zeros(3))
 
-        # de Boor's recursion
+
         for r in range(1, self.p + 1):
             for i in range(self.p, r - 1, -1):
                 knot_idx_1 = i + k - self.p
@@ -82,14 +65,11 @@ class UniformBspline:
         return d[self.p]
 
     def evaluateDeBoorT(self, t):
-        """
-        Evaluate B-spline at time t.
-        Direct translation of ego_planner's evaluateDeBoorT(t) = evaluateDeBoor(t + u[p])
-        """
+
         return self.evaluateDeBoor(t + self.u[self.p])
 
     def getTimeSum(self):
-        """Get total duration of the B-spline trajectory"""
+
         return self.u[self.m - self.p] - self.u[self.p]
 
     def getDerivative(self):
@@ -105,8 +85,8 @@ class UniformBspline:
             else:
                 derivative_control_points[i] = np.zeros(3)
 
-        # Derivative B-spline has order p-1 and uses inner knots
-        derivative_knots = self.u[1:-1]  # Remove first and last knot
+
+        derivative_knots = self.u[1:-1]
 
         return UniformBspline(derivative_control_points, self.p - 1, derivative_knots)
 
@@ -123,9 +103,9 @@ class TrajectoryDataLogger(Node):
         self.current_constrained_bspline = None
         self.current_odom = None
         self.logging_active = False
-        self.global_start_time = None  # Global time when logging started
+        self.global_start_time = None
         self._global_start_ros_time: rclpy.time.Time | None = None
-        self.start_position = None  # Store first position as origin for relative coordinates
+        self.start_position = None
 
         self.mode = mode
         self.run_number = run_number
@@ -146,7 +126,7 @@ class TrajectoryDataLogger(Node):
         }
         self._framing_target_distance: float | None = None
 
-        # Separate tracking for cinematic and baseline framing
+
         self._cinematic_framing_active = False
         self._framing_active = False
 
@@ -201,7 +181,7 @@ class TrajectoryDataLogger(Node):
             10,
         )
 
-        # Subscribe to BOTH framing active topics
+
         self.cinematic_framing_sub = self.create_subscription(
             Bool,
             "/cinematography/framing_active",
@@ -355,7 +335,7 @@ class TrajectoryDataLogger(Node):
         }
         self.baseline_data.append(odom_entry)
 
-        # Record distance when ANY framing is active
+
         if self._framing_active and self.target_world is not None:
             framing_mode = 'cinematic' if self._cinematic_framing_active else 'baseline'
             self._record_distance_entry(global_elapsed, pos, framing_mode)
@@ -379,23 +359,23 @@ class TrajectoryDataLogger(Node):
             if len(control_points) == 0:
                 return None, None
 
-            # Compute time since this B-spline's start_time
+
             bspline_start = rclpy.time.Time.from_msg(bspline_msg.start_time)
             time_offset = (current_ros_time - bspline_start).nanoseconds / 1e9
 
-            # Create position B-spline
+
             pos_bspline = UniformBspline(control_points, order, knots)
 
-            # Get valid time range
+
             time_sum = pos_bspline.getTimeSum()
             if time_offset < 0 or time_offset > time_sum:
-                # Outside valid range - trajectory not active yet or expired
+
                 return None, None
 
-            # Evaluate position
+
             position = pos_bspline.evaluateDeBoorT(time_offset)
 
-            # Get derivative B-spline for velocity
+
             vel_bspline = pos_bspline.getDerivative()
             velocity = vel_bspline.evaluateDeBoorT(time_offset)
 
@@ -449,7 +429,7 @@ class TrajectoryDataLogger(Node):
         self.get_logger().info(f"Received anchor focus distance: {distance:.3f}m")
         self._expected_target_distance = distance
 
-        # Update framing target distance if currently framing
+
         if self._framing_active:
             if self._framing_target_distance is None:
                 self._framing_target_distance = distance
@@ -459,7 +439,7 @@ class TrajectoryDataLogger(Node):
         """Update overall framing state based on cinematic framing status"""
         current_overall = self._cinematic_framing_active
 
-        # Entering framing
+
         if current_overall and not prev_overall:
             self._framing_target_distance = self._expected_target_distance
             framing_type = 'cinematic'
@@ -467,11 +447,11 @@ class TrajectoryDataLogger(Node):
                 f"ENTERING FRAMING ({framing_type}) - target distance: {self._framing_target_distance}"
             )
 
-        # Exiting framing
+
         elif not current_overall and prev_overall:
             framing_type = 'cinematic'
             self.get_logger().info(f"EXITING FRAMING ({framing_type})")
-            # Don't clear _framing_target_distance - keep it for next framing segment
+
 
         self._framing_active = current_overall
 
@@ -497,7 +477,7 @@ class TrajectoryDataLogger(Node):
 
         self._expected_target_distance = expected
 
-        # Update framing distance if actively framing
+
         if self._framing_active and expected is not None:
             if self._framing_target_distance is None:
                 self._framing_target_distance = expected
@@ -514,7 +494,7 @@ class TrajectoryDataLogger(Node):
 
         target_distance = self._framing_target_distance
         if target_distance is None:
-            # First sample - use current distance as target
+
             target_distance = distance
             self._framing_target_distance = target_distance
             self.get_logger().info(
@@ -575,7 +555,7 @@ class TrajectoryDataLogger(Node):
             writer.writerow(fieldnames)
             writer.writerows(self._distance_rows)
 
-        # Only log summary if this is the final save
+
         if self._saved_once:
             self._log_distance_summary()
 
@@ -605,7 +585,7 @@ class TrajectoryDataLogger(Node):
         )
 
     def save_data(self):
-        # Constrained runs should emit a single cinematic file (no extra constrained_* output).
+
         if self.mode == 'constrained':
             if len(self.constrained_data) == 0 and len(self.baseline_data) == 0:
                 self.get_logger().warn('No data to save')
@@ -629,7 +609,7 @@ class TrajectoryDataLogger(Node):
             self._write_distance_csv()
             return
 
-        # Determine filename based on mode (baseline / sim)
+
         if self.mode == 'baseline' and self.run_number is not None:
             filename = f'baseline_replay_run{self.run_number}_{self.timestamp}.csv'
         else:
@@ -639,7 +619,7 @@ class TrajectoryDataLogger(Node):
         self._write_csv(baseline_path, self.baseline_data)
         self.get_logger().info(f'Saved {len(self.baseline_data)} baseline data points to: {baseline_path}')
 
-        # Only save constrained data in non-constrained mode for comparison
+
         if len(self.constrained_data) > 0:
             constrained_path = self.output_dir / f'constrained_sim_{self.timestamp}.csv'
             self._write_csv(constrained_path, self.constrained_data)
@@ -678,7 +658,7 @@ class TrajectoryDataLogger(Node):
 def main(args=None):
     import argparse
 
-    # Parse command line arguments
+
     parser = argparse.ArgumentParser(description='Log trajectory data')
     parser.add_argument('--mode', type=str, default='sim',
                        choices=['sim', 'baseline', 'constrained'],
@@ -690,7 +670,7 @@ def main(args=None):
     rclpy.init(args=ros_args)
     logger = TrajectoryDataLogger(mode=parsed_args.mode, run_number=parsed_args.run_number)
 
-    # Set up signal handler for graceful shutdown
+
     def signal_handler(sig, frame):
         logger.get_logger().info('Received shutdown signal...')
         logger._save_on_exit(f"signal {sig}")

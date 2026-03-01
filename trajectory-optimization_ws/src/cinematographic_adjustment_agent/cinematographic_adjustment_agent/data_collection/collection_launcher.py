@@ -7,7 +7,9 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Event
 from typing import Any, Callable, Iterable, Optional
@@ -30,6 +32,36 @@ def _add_config_path() -> None:
 
 _add_config_path()
 from constants import SimulationParams, WaypointParams  # noqa: E402
+
+_ROS_PACKAGE = "cinematographic_adjustment_agent"
+
+_SAFETY_CLEANUP_TARGETS = [
+    "trajectory_data_logger",
+    "simulated_focus_publisher",
+    "cinematic_waypoint_generator",
+    "cinematic_bspline_filter",
+    "simulated_light_publisher",
+    "cost_function_calculator",
+    "simulated_object_detector",
+    "traj_server",
+    "ego_planner_node",
+    "so3_quadrotor_simulator",
+    "pcl_render_node",
+    "random_forest",
+]
+
+
+@dataclass
+class CollectionParams:
+    odom_topic: str = ""
+    baseline_topic: str = ""
+    cinematic_topic: str = ""
+    frame_id: str = "world"
+    target_xyz: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    focus_depth_m: float = 1.0
+    waypoints_topic: str = ""
+    waypoints_file: str = ""
+    drone_ns: str = ""
 
 
 def _find_workspace_root(start: Path) -> Path:
@@ -168,7 +200,6 @@ def _ros2_node_list() -> list[str]:
 
 def _wait_for_node(node_name: str, timeout_s: float = 30.0) -> bool:
     start_time = time.time()
-    # Normalize node name to have a leading slash for comparison with ros2 node list
     canonical_name = node_name if node_name.startswith("/") else "/" + node_name
     while time.time() - start_time < timeout_s:
         nodes = _ros2_node_list()
@@ -190,7 +221,6 @@ def _cleanup_procs(procs: list[subprocess.Popen | None]) -> None:
         if proc is None or proc.poll() is not None:
             continue
         try:
-            # Kill the entire process group
             pgid = os.getpgid(proc.pid)
             os.killpg(pgid, signal.SIGINT)
             proc.wait(timeout=3)
@@ -209,144 +239,122 @@ def _cleanup_procs(procs: list[subprocess.Popen | None]) -> None:
 
 def _safety_cleanup() -> None:
     print("[collection] performing final safety cleanup...")
-
-    targets = [
-        "trajectory_data_logger",
-        "simulated_focus_publisher",
-        "cinematic_waypoint_generator",
-        "cinematic_bspline_filter",
-        "simulated_light_publisher",
-        "cost_function_calculator",
-        "simulated_object_detector",
-        "traj_server",
-        "ego_planner_node",
-        "so3_quadrotor_simulator",
-        "pcl_render_node",
-        "random_forest",
-    ]
-
-    for target in targets:
+    for target in _SAFETY_CLEANUP_TARGETS:
         subprocess.run(["pkill", "-f", target], capture_output=True)
 
 
-def run_baseline_collection(args: Optional[list[str]] = None) -> None:
-    workspace_root = _find_workspace_root(Path(__file__).resolve())
+def _ros2_run_cmd(executable: str, drone_ns: str, extra_params: Optional[dict[str, str]] = None) -> list[str]:
+    cmd = ["ros2", "run", _ROS_PACKAGE, executable, "--ros-args"]
+    for key, val in (extra_params or {}).items():
+        cmd.extend(["-p", f"{key}:={val}"])
+    cmd.extend(["-r", f"__ns:={drone_ns}"])
+    return cmd
 
-    logging_severity = os.environ.get("LOGGING_SEVERITY") or SimulationParams.LOGGING_SEVERITY or "DEBUG"
-    _prepare_environment(logging_severity)
-    _cleanup_cyclonedds()
-    time.sleep(2)
 
-    rclpy.init(args=args)
-    node = Node("baseline_collection")
+def _declare_common_params(node: Node, defaults: dict[str, Any]) -> None:
+    for name, default_value in defaults.items():
+        node.declare_parameter(name, default_value)
 
-    drone_id = SimulationParams.DRONE_ID
-    drone_ns = f"/drone_{drone_id}"
-    default_odom_topic = f"{drone_ns}_visual_slam/odom"
-    default_baseline_topic = f"{drone_ns}_planning/bspline"
-    default_cinematic_topic = f"{drone_ns}_planning/cinematic_bspline"
 
-    node.declare_parameter("odom_topic", default_odom_topic)
-    node.declare_parameter("baseline_bspline_topic", default_baseline_topic)
-    node.declare_parameter("cinematic_bspline_topic", default_cinematic_topic)
-    node.declare_parameter("frame_id", "world")
-    node.declare_parameter("target_xyz", [0.0, 0.0, 0.0])
-    node.declare_parameter("focus_depth_m", 1.0)
-    node.declare_parameter("waypoints_topic", "")
-    node.declare_parameter("waypoints_file", "")
-    node.declare_parameter("baseline_mode", True)
-
-    odom_topic = _resolve_param(node, "odom_topic", default_odom_topic)
-    baseline_topic = _resolve_param(node, "baseline_bspline_topic", default_baseline_topic)
-    cinematic_topic = _resolve_param(node, "cinematic_bspline_topic", default_cinematic_topic)
-    waypoints_topic = node.get_parameter("waypoints_topic").value or ""
-    waypoints_file = node.get_parameter("waypoints_file").value or ""
-    frame_id = _resolve_param(node, "frame_id", WaypointParams.FRAME_ID, env_key="FRAME_ID")
-    target_xyz = _resolve_param(
-        node, "target_xyz", SimulationParams.TARGET_XYZ, env_key="TARGET_XYZ", parser=_parse_target_xyz
-    )
-    focus_depth_m = float(
-        _resolve_param(node, "focus_depth_m", SimulationParams.FOCUS_DEPTH_M, env_key="FOCUS_DEPTH_M")
+def _resolve_common_params(node: Node, drone_ns: str, default_topics: dict[str, str]) -> CollectionParams:
+    return CollectionParams(
+        odom_topic=_resolve_param(node, "odom_topic", default_topics["odom"]),
+        baseline_topic=_resolve_param(node, "baseline_bspline_topic", default_topics["baseline"]),
+        cinematic_topic=_resolve_param(node, "cinematic_bspline_topic", default_topics["cinematic"]),
+        frame_id=_resolve_param(node, "frame_id", WaypointParams.FRAME_ID, env_key="FRAME_ID"),
+        target_xyz=_resolve_param(
+            node, "target_xyz", SimulationParams.TARGET_XYZ, env_key="TARGET_XYZ", parser=_parse_target_xyz
+        ),
+        focus_depth_m=float(
+            _resolve_param(node, "focus_depth_m", SimulationParams.FOCUS_DEPTH_M, env_key="FOCUS_DEPTH_M")
+        ),
+        waypoints_topic=node.get_parameter("waypoints_topic").value or "",
+        waypoints_file=node.get_parameter("waypoints_file").value or "",
+        drone_ns=drone_ns,
     )
 
-    sim_proc: Optional[subprocess.Popen] = None
-    sim_log_handle: Optional[Any] = None
+
+def _make_default_topics(drone_ns: str) -> dict[str, str]:
+    return {
+        "odom": f"{drone_ns}_visual_slam/odom",
+        "baseline": f"{drone_ns}_planning/bspline",
+        "cinematic": f"{drone_ns}_planning/cinematic_bspline",
+    }
+
+
+def _launch_simulation(
+    workspace_root: Path, drone_id: int, mode_label: str
+) -> tuple[Optional[subprocess.Popen], Optional[Any], bool]:
     ego_node_name = f"drone_{drone_id}_ego_planner_node"
-    if ego_node_name not in _ros2_node_list():
-        start_script = workspace_root / "start_simulation.sh"
-        sim_log_path = Path("/tmp/ego_planner_baseline.log")
-        sim_log_handle = sim_log_path.open("w")
-        sim_proc = subprocess.Popen(
-            [str(start_script), "baseline"],
-            stdout=sim_log_handle,
-            stderr=subprocess.STDOUT,
-            env=os.environ,
-        )
-        print("starting simulation...")
-        if not _wait_for_node(ego_node_name, timeout_s=30):
-            print("simulation failed to start; check /tmp/ego_planner_baseline.log")
-            if sim_proc:
-                sim_proc.terminate()
-            if sim_log_handle:
-                sim_log_handle.close()
-            node.destroy_node()
-            rclpy.shutdown()
-            return
-        print("simulation initialized successfully!")
+    if ego_node_name in _ros2_node_list():
+        return None, None, True
 
-    logger_proc = _start_process(
-        [
-            "ros2",
-            "run",
-            "cinematographic_adjustment_agent",
-            "trajectory_data_logger",
-            "--mode",
-            "baseline",
-            "--ros-args",
-            "-p", f"odom_topic:={odom_topic}",
-            "-p", f"baseline_bspline_topic:={baseline_topic}",
-            "-p", f"cinematic_bspline_topic:={cinematic_topic}",
-            "-r", f"__ns:={drone_ns}",
-        ],
-        "trajectory_data_logger",
+    start_script = workspace_root / "start_simulation.sh"
+    log_handle = tempfile.NamedTemporaryFile(
+        mode="w", prefix=f"ego_planner_{mode_label}_", suffix=".log", delete=False
     )
-    time.sleep(2)
+    log_path = Path(log_handle.name)
+    sim_proc = subprocess.Popen(
+        [str(start_script), mode_label],
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+        env=os.environ,
+    )
+    print("starting simulation...")
 
-    focus_proc = _start_process(
-        [
-            "ros2",
-            "run",
-            "cinematographic_adjustment_agent",
+    if not _wait_for_node(ego_node_name, timeout_s=30):
+        print(f"simulation failed to start; check {log_path}")
+        sim_proc.terminate()
+        log_handle.close()
+        return sim_proc, log_handle, False
+
+    print(f"simulation initialized successfully! log: {log_path}")
+    return sim_proc, log_handle, True
+
+
+def _launch_focus_publisher(params: CollectionParams) -> subprocess.Popen:
+    return _start_process(
+        _ros2_run_cmd(
             "simulated_focus_publisher",
-            "--ros-args",
-            "-p", f"odom_topic:={odom_topic}",
-            "-p", f"frame_id:={frame_id}",
-            "-p", f"target_offset_xyz:={_format_ros_value(target_xyz)}",
-            "-p", f"target_xyz:={_format_ros_value(target_xyz)}",
-            "-p", f"focus_depth_m:={focus_depth_m}",
-            "-r", f"__ns:={drone_ns}",
-        ],
+            params.drone_ns,
+            {
+                "odom_topic": params.odom_topic,
+                "frame_id": params.frame_id,
+                "target_offset_xyz": _format_ros_value(params.target_xyz),
+                "target_xyz": _format_ros_value(params.target_xyz),
+                "focus_depth_m": str(params.focus_depth_m),
+            },
+        ),
         "simulated_focus_publisher",
     )
-    time.sleep(2)
 
-    waypoint_cmd = [
-        "ros2",
-        "run",
-        "cinematographic_adjustment_agent",
-        "cinematic_waypoint_generator",
+
+def _launch_logger(params: CollectionParams, mode: str) -> subprocess.Popen:
+    cmd = [
+        "ros2", "run", _ROS_PACKAGE, "trajectory_data_logger",
+        "--mode", mode,
         "--ros-args",
-        "-p", f"odom_topic:={odom_topic}",
-        "-p", "baseline_mode:=True",
-        "-r", f"__ns:={drone_ns}",
+        "-p", f"odom_topic:={params.odom_topic}",
+        "-p", f"baseline_bspline_topic:={params.baseline_topic}",
+        "-p", f"cinematic_bspline_topic:={params.cinematic_topic}",
+        "-r", f"__ns:={params.drone_ns}",
     ]
-    if waypoints_topic:
-        waypoint_cmd.extend(["-p", f"waypoints_topic:={waypoints_topic}"])
-    if waypoints_file:
-        waypoint_cmd.extend(["-p", f"waypoints_file:={waypoints_file}"])
+    return _start_process(cmd, "trajectory_data_logger")
 
-    waypoint_proc = _start_process(waypoint_cmd, "cinematic_waypoint_generator")
 
+def _launch_waypoint_generator(params: CollectionParams, extra_params: Optional[dict[str, str]] = None) -> subprocess.Popen:
+    ros_params = {"odom_topic": params.odom_topic}
+    if extra_params:
+        ros_params.update(extra_params)
+    cmd = _ros2_run_cmd("cinematic_waypoint_generator", params.drone_ns, ros_params)
+    if params.waypoints_topic:
+        cmd.extend(["-p", f"waypoints_topic:={params.waypoints_topic}"])
+    if params.waypoints_file:
+        cmd.extend(["-p", f"waypoints_file:={params.waypoints_file}"])
+    return _start_process(cmd, "cinematic_waypoint_generator")
+
+
+def _run_event_loop(procs: list[subprocess.Popen | None]) -> None:
     stop_event = Event()
 
     def _handle_signal(signum, frame) -> None:
@@ -355,252 +363,173 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
-    try:
-        while not stop_event.is_set():
-            for proc in [logger_proc, focus_proc, waypoint_proc]:
-                if proc.poll() is not None:
-                    stop_event.set()
-                    break
-            time.sleep(0.5)
-    finally:
-        print("stopping data collection.")
-        _cleanup_procs([logger_proc, focus_proc, waypoint_proc, sim_proc])
-
-        if sim_log_handle:
-            sim_log_handle.close()
-
-        node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
-
-        _safety_cleanup()
+    while not stop_event.is_set():
+        for proc in procs:
+            if proc is not None and proc.poll() is not None:
+                stop_event.set()
+                break
+        time.sleep(0.5)
 
 
-def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
+def _run_collection(
+    node_name: str,
+    mode_label: str,
+    extra_node_params: Optional[dict[str, Any]] = None,
+    env_file: Optional[Path] = None,
+    ros_log_dir: Optional[Path] = None,
+    build_procs_fn: Optional[Callable[[CollectionParams, Node], list[subprocess.Popen | None]]] = None,
+    args: Optional[list[str]] = None,
+) -> None:
     workspace_root = _find_workspace_root(Path(__file__).resolve())
 
-    env_file = workspace_root / "collect_constrained_data.env"
-    if env_file.is_file():
+    if env_file and env_file.is_file():
         _parse_env_file(env_file)
 
     logging_severity = os.environ.get("LOGGING_SEVERITY") or SimulationParams.LOGGING_SEVERITY or "DEBUG"
-    ros_log_dir = workspace_root.parent / "ros_logs"
-    ros_log_dir.mkdir(parents=True, exist_ok=True)
     _prepare_environment(logging_severity, ros_log_dir)
     _cleanup_cyclonedds()
     time.sleep(2)
 
     rclpy.init(args=args)
-    node = Node("cinematic_collection")
+    node = Node(node_name)
 
     drone_id = SimulationParams.DRONE_ID
     drone_ns = f"/drone_{drone_id}"
-    default_odom_topic = f"{drone_ns}_visual_slam/odom"
-    default_baseline_topic = f"{drone_ns}_planning/bspline"
-    default_cinematic_topic = f"{drone_ns}_planning/cinematic_bspline"
+    default_topics = _make_default_topics(drone_ns)
 
-    node.declare_parameter("odom_topic", default_odom_topic)
-    node.declare_parameter("baseline_bspline_topic", default_baseline_topic)
-    node.declare_parameter("cinematic_bspline_topic", default_cinematic_topic)
-    node.declare_parameter("frame_id", "world")
-    node.declare_parameter("target_xyz", [0.0, 0.0, 0.0])
-    node.declare_parameter("focus_depth_m", 1.0)
-    node.declare_parameter("use_simulated_focus", True)
-    node.declare_parameter("use_simulated_light", True)
-    node.declare_parameter("waypoints_topic", "")
-    node.declare_parameter("waypoints_file", "")
+    base_params: dict[str, Any] = {
+        "odom_topic": default_topics["odom"],
+        "baseline_bspline_topic": default_topics["baseline"],
+        "cinematic_bspline_topic": default_topics["cinematic"],
+        "frame_id": "world",
+        "target_xyz": [0.0, 0.0, 0.0],
+        "focus_depth_m": 1.0,
+        "waypoints_topic": "",
+        "waypoints_file": "",
+    }
+    if extra_node_params:
+        base_params.update(extra_node_params)
+    _declare_common_params(node, base_params)
 
-    odom_topic = _resolve_param(node, "odom_topic", default_odom_topic)
-    baseline_topic = _resolve_param(node, "baseline_bspline_topic", default_baseline_topic)
-    cinematic_topic = _resolve_param(node, "cinematic_bspline_topic", default_cinematic_topic)
-    waypoints_topic = node.get_parameter("waypoints_topic").value or ""
-    waypoints_file = node.get_parameter("waypoints_file").value or ""
-    frame_id = _resolve_param(node, "frame_id", WaypointParams.FRAME_ID, env_key="FRAME_ID")
-    target_xyz = _resolve_param(
-        node, "target_xyz", SimulationParams.TARGET_XYZ, env_key="TARGET_XYZ", parser=_parse_target_xyz
-    )
-    focus_depth_m = float(
-        _resolve_param(node, "focus_depth_m", SimulationParams.FOCUS_DEPTH_M, env_key="FOCUS_DEPTH_M")
-    )
-    use_simulated_focus = _resolve_param(
-        node,
-        "use_simulated_focus",
-        SimulationParams.USE_SIMULATED_FOCUS,
-        env_key="USE_SIMULATED_FOCUS",
-        parser=_parse_bool,
-    )
-    use_simulated_light = _resolve_param(
-        node,
-        "use_simulated_light",
-        SimulationParams.USE_SIMULATED_LIGHT,
-        env_key="USE_SIMULATED_LIGHT",
-        parser=_parse_bool,
-    )
+    params = _resolve_common_params(node, drone_ns, default_topics)
 
-    sim_proc: Optional[subprocess.Popen] = None
-    sim_log_handle: Optional[Any] = None
-    ego_node_name = f"drone_{drone_id}_ego_planner_node"
-    if ego_node_name not in _ros2_node_list():
-        start_script = workspace_root / "start_simulation.sh"
-        sim_log_path = Path("/tmp/ego_planner_constrained.log")
-        sim_log_handle = sim_log_path.open("w")
-        sim_proc = subprocess.Popen(
-            [str(start_script), "constrained"],
-            stdout=sim_log_handle,
-            stderr=subprocess.STDOUT,
-            env=os.environ,
-        )
-        print("starting simulation...")
-        if not _wait_for_node(ego_node_name, timeout_s=30):
-            print("simulation failed to start; check /tmp/ego_planner_constrained.log")
-            if sim_proc:
-                sim_proc.terminate()
-            if sim_log_handle:
-                sim_log_handle.close()
-            node.destroy_node()
-            rclpy.shutdown()
-            return
-        print("simulation initialized successfully!")
+    sim_proc, sim_log_handle, sim_ok = _launch_simulation(workspace_root, drone_id, mode_label)
+    if not sim_ok:
+        node.destroy_node()
+        rclpy.shutdown()
+        return
 
-    filter_proc = _start_process(
-        [
-            "ros2", "run", "cinematographic_adjustment_agent", "cinematic_bspline_filter",
-            "--ros-args", "-r", f"__ns:={drone_ns}",
-        ],
-        "cinematic_bspline_filter",
-    )
-    time.sleep(2)
+    child_procs: list[subprocess.Popen | None] = []
+    if build_procs_fn:
+        child_procs = build_procs_fn(params, node)
 
-    detector_proc: Optional[subprocess.Popen] = None
-    costs_proc: Optional[subprocess.Popen] = None
-    focus_proc: Optional[subprocess.Popen] = None
-    if use_simulated_focus:
-        focus_proc = _start_process(
-            [
-                "ros2",
-                "run",
-                "cinematographic_adjustment_agent",
-                "simulated_focus_publisher",
-                "--ros-args",
-                "-p", f"odom_topic:={odom_topic}",
-                "-p", f"frame_id:={frame_id}",
-                "-p", f"target_offset_xyz:={_format_ros_value(target_xyz)}",
-                "-p", f"target_xyz:={_format_ros_value(target_xyz)}",
-                "-p", f"focus_depth_m:={focus_depth_m}",
-                "-r", f"__ns:={drone_ns}",
-            ],
-            "simulated_focus_publisher",
-        )
-        time.sleep(2)
-    else:
-        detector_proc = _start_process(
-             [
-                 "ros2", "run", "cinematographic_adjustment_agent", "simulated_object_detector",
-                 "--ros-args", "-r", f"__ns:={drone_ns}",
-             ],
-             "simulated_object_detector",
-         )
-        time.sleep(2)
-
-        costs_proc = _start_process(
-            [
-                "ros2",
-                "run",
-                "cinematographic_adjustment_agent",
-                "cost_function_calculator",
-                "--ros-args",
-                "-p", f"odom_topic:={odom_topic}",
-                "-p", f"frame_id:={frame_id}",
-                "-r", f"__ns:={drone_ns}",
-            ],
-            "cost_function_calculator",
-        )
-        time.sleep(2)
-
-    light_proc: Optional[subprocess.Popen] = None
-    if use_simulated_light:
-        light_proc = _start_process(
-            [
-                "ros2",
-                "run",
-                "cinematographic_adjustment_agent",
-                "simulated_light_publisher",
-                "--ros-args",
-                "-p", f"frame_id:={frame_id}",
-                "-r", f"__ns:={drone_ns}",
-            ],
-            "simulated_light_publisher",
-        )
-        time.sleep(1)
-
-    logger_proc = _start_process(
-        [
-            "ros2",
-            "run",
-            "cinematographic_adjustment_agent",
-            "trajectory_data_logger",
-            "--mode",
-            "constrained",
-            "--ros-args",
-            "-p", f"odom_topic:={odom_topic}",
-            "-p", f"baseline_bspline_topic:={baseline_topic}",
-            "-p", f"cinematic_bspline_topic:={cinematic_topic}",
-            "-r", f"__ns:={drone_ns}",
-        ],
-        "trajectory_data_logger",
-    )
-    time.sleep(2)
-
-    waypoint_cmd = [
-        "ros2",
-        "run",
-        "cinematographic_adjustment_agent",
-        "cinematic_waypoint_generator",
-        "--ros-args",
-        "-p", f"odom_topic:={odom_topic}",
-        "-p", f"frame_id:={frame_id}",
-        "-r", f"__ns:={drone_ns}",
-    ]
-    if waypoints_topic:
-        waypoint_cmd.extend(["-p", f"waypoints_topic:={waypoints_topic}"])
-    if waypoints_file:
-        waypoint_cmd.extend(["-p", f"waypoints_file:={waypoints_file}"])
-
-    waypoint_proc = _start_process(waypoint_cmd, "cinematic_waypoint_generator")
-
-    stop_event = Event()
-
-    def _handle_signal(signum, frame) -> None:
-        stop_event.set()
-
-    signal.signal(signal.SIGINT, _handle_signal)
-    signal.signal(signal.SIGTERM, _handle_signal)
-
-    procs = [
-        logger_proc,
-        waypoint_proc,
-        filter_proc,
-        focus_proc,
-        detector_proc,
-        costs_proc,
-        light_proc,
-    ]
     try:
-        while not stop_event.is_set():
-            for proc in procs:
-                if proc is not None and proc.poll() is not None:
-                    stop_event.set()
-                    break
-            time.sleep(0.5)
+        _run_event_loop(child_procs)
     finally:
         print("stopping data collection.")
-        _cleanup_procs(procs + [sim_proc])
-
+        _cleanup_procs(child_procs + [sim_proc])
         if sim_log_handle:
             sim_log_handle.close()
-
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
-
         _safety_cleanup()
+
+
+def run_baseline_collection(args: Optional[list[str]] = None) -> None:
+    def _build_procs(params: CollectionParams, node: Node) -> list[subprocess.Popen | None]:
+        logger = _launch_logger(params, "baseline")
+        time.sleep(2)
+        focus = _launch_focus_publisher(params)
+        time.sleep(2)
+        waypoints = _launch_waypoint_generator(params, extra_params={"baseline_mode": "True"})
+        return [logger, focus, waypoints]
+
+    _run_collection(
+        node_name="baseline_collection",
+        mode_label="baseline",
+        extra_node_params={"baseline_mode": True},
+        build_procs_fn=_build_procs,
+        args=args,
+    )
+
+
+def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
+    workspace_root = _find_workspace_root(Path(__file__).resolve())
+    env_file = workspace_root / "collect_constrained_data.env"
+    ros_log_dir = workspace_root.parent / "ros_logs"
+    ros_log_dir.mkdir(parents=True, exist_ok=True)
+
+    def _build_procs(params: CollectionParams, node: Node) -> list[subprocess.Popen | None]:
+        use_simulated_focus = _resolve_param(
+            node, "use_simulated_focus",
+            SimulationParams.USE_SIMULATED_FOCUS, env_key="USE_SIMULATED_FOCUS", parser=_parse_bool,
+        )
+        use_simulated_light = _resolve_param(
+            node, "use_simulated_light",
+            SimulationParams.USE_SIMULATED_LIGHT, env_key="USE_SIMULATED_LIGHT", parser=_parse_bool,
+        )
+
+        procs: list[subprocess.Popen | None] = []
+
+        filter_proc = _start_process(
+            _ros2_run_cmd("cinematic_bspline_filter", params.drone_ns),
+            "cinematic_bspline_filter",
+        )
+        procs.append(filter_proc)
+        time.sleep(2)
+
+        if use_simulated_focus:
+            procs.append(_launch_focus_publisher(params))
+            time.sleep(2)
+        else:
+            detector = _start_process(
+                _ros2_run_cmd("simulated_object_detector", params.drone_ns),
+                "simulated_object_detector",
+            )
+            procs.append(detector)
+            time.sleep(2)
+
+            costs = _start_process(
+                _ros2_run_cmd(
+                    "cost_function_calculator",
+                    params.drone_ns,
+                    {"odom_topic": params.odom_topic, "frame_id": params.frame_id},
+                ),
+                "cost_function_calculator",
+            )
+            procs.append(costs)
+            time.sleep(2)
+
+        if use_simulated_light:
+            light = _start_process(
+                _ros2_run_cmd(
+                    "simulated_light_publisher",
+                    params.drone_ns,
+                    {"frame_id": params.frame_id},
+                ),
+                "simulated_light_publisher",
+            )
+            procs.append(light)
+            time.sleep(1)
+
+        procs.append(_launch_logger(params, "constrained"))
+        time.sleep(2)
+
+        procs.append(
+            _launch_waypoint_generator(params, extra_params={"frame_id": params.frame_id})
+        )
+        return procs
+
+    _run_collection(
+        node_name="cinematic_collection",
+        mode_label="constrained",
+        extra_node_params={
+            "use_simulated_focus": True,
+            "use_simulated_light": True,
+        },
+        env_file=env_file,
+        ros_log_dir=ros_log_dir,
+        build_procs_fn=_build_procs,
+        args=args,
+    )

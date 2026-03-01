@@ -134,12 +134,12 @@ class PathBuilderMixin:
         p1 = (
             p0[0] + alpha * v0_dir[0],
             p0[1] + alpha * v0_dir[1],
-            p0[2],  # keep z aligned with the start waypoint
+            p0[2],
         )
         p2 = (
             p3[0] - beta * v3_dir[0],
             p3[1] - beta * v3_dir[1],
-            p3[2],  # keep z aligned with the end waypoint
+            p3[2],
         )
         transition = self._sample_cubic_bezier(
             p0, p1, p2, p3, self.bezier_transition_points
@@ -359,7 +359,7 @@ class PathBuilderMixin:
             if target_world is None:
                 return
 
-        if self.detected_object is None:  # Add this condition check
+        if self.detected_object is None:
             depth = (
                 float(self.focus_depth_m)
                 if self.focus_depth_m is not None
@@ -659,7 +659,7 @@ class PathBuilderMixin:
             self.viz_data["transition_out"] = transition_out
             self.viz_data["combined_world"] = combined_world
 
-        # Store as relative to the recorded origin so publishing always does origin + relative.
+
         origin = (
             self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
         )
@@ -761,8 +761,8 @@ class PathBuilderMixin:
             return rel_waypoints
         self.last_target_world = center_world
 
-        # Anchor at the point on the nominal path closest to the detected object (world XY),
-        # so the inserted orbit actually wraps the object rather than a fixed "max Y" heuristic.
+
+
         idx_anchor = min(
             range(len(wps_world)),
             key=lambda i: (wps_world[i][0] - center_world[0]) ** 2
@@ -800,20 +800,15 @@ class PathBuilderMixin:
     def _build_framing_arc(
         self, obj_world, anchor_wp, radius, prev_wp=None, next_wp=None
     ):
-        """
-        Build the shortest circular arc between incoming and outgoing directions
-        around the object, with no fixed span. The arc bends toward the object
-        side and follows the minimal angle between the two headings.
-        """
         cx, cy, _ = obj_world
         ax, ay, az = anchor_wp
-        # Choose a radius that stays well inside the object->anchor line so we don't bulge outward.
+
         dist_oa = math.hypot(ax - cx, ay - cy)
         desired_r = min(radius, 0.4 * dist_oa) if dist_oa > 1e-3 else radius
         radius = max(self.min_orbit_radius_m, desired_r)
         z = max(self.min_altitude_m, min(self.max_altitude_m, az))
 
-        # Incoming/outgoing headings to bias the turn direction.
+
         def _dir_from(a, b):
             return (a[0] - b[0], a[1] - b[1])
 
@@ -826,20 +821,20 @@ class PathBuilderMixin:
         approach_ang = _angle(approach) if approach else None
         depart_ang = _angle(depart) if depart else approach_ang
 
-        # Determine start/end angles around the object; default to anchor direction if missing.
+
         start_angle = math.atan2(ay - cy, ax - cx)
         end_angle = start_angle
         if next_wp is not None:
             end_angle = math.atan2(next_wp[1] - cy, next_wp[0] - cx)
-        # Pick shortest angular direction.
+
         delta = (end_angle - start_angle + math.pi) % (2 * math.pi) - math.pi
-        # If we have approach vector, ensure we bend toward the object side of it.
+
         if approach is not None:
             obj_vec = (cx - ax, cy - ay)
             cross = approach[0] * obj_vec[1] - approach[1] * obj_vec[0]
             turn_sign = 1.0 if cross > 0.0 else -1.0
             if delta * turn_sign < 0:
-                # Flip to go the other way around the circle.
+
                 delta = delta - math.copysign(2 * math.pi, delta)
         num_pts = 7
 

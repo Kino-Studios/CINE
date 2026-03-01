@@ -69,10 +69,11 @@ WAYPOINT_PID=""
 SIMULATED_FOCUS_PID=""
 
 if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
-  "${SCRIPT_DIR}/start_simulation.sh" baseline > /tmp/ego_planner_baseline.log 2>&1 &
+  SIM_LOG=$(mktemp /tmp/ego_planner_baseline.XXXXXX)
+  "${SCRIPT_DIR}/start_simulation.sh" baseline > "$SIM_LOG" 2>&1 &
   SIM_PID=$!
 
-  tail -f /tmp/ego_planner_baseline.log &
+  tail -f "$SIM_LOG" &
   TAIL_PID=$!
 
   for _ in {1..30}; do
@@ -85,6 +86,7 @@ if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
   done
 
   if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
+    echo "Simulation failed to start; check $LOG_FILE"
     kill $SIM_PID $TAIL_PID 2>/dev/null
     exit 1
   fi
