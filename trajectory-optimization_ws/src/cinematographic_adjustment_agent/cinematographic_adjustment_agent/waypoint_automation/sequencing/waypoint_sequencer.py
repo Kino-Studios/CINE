@@ -99,7 +99,7 @@ class WaypointSequencerMixin:
         self.active_waypoints = self._limit_consecutive_waypoint_jumps(
             waypoints_to_send
         )
-        
+
         self.viz_data["static_world"] = [
             self._rel_to_world(wp) for wp in self.active_waypoints
         ]
@@ -314,7 +314,7 @@ class WaypointSequencerMixin:
         dx, dy = float(self.light_vector[0]), float(self.light_vector[1])
         if abs(dx) < 1e-6 and abs(dy) < 1e-6:
             return None
-        # Look opposite the light horizontal projection.
+
         return math.atan2(-dy, -dx)
 
     def _blend_angles(self, base: float, target: float, weight: float) -> float:
@@ -372,7 +372,7 @@ class WaypointSequencerMixin:
 
     def _publish_framing_states(self, framing_active):
         if self.baseline_mode:
-            # Baseline mode always keeps cinematic framing topic false
+
             self._publish_framing_active(False)
             self._publish_baseline_framing_active(framing_active)
         else:

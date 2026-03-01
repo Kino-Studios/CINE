@@ -400,8 +400,8 @@ class VisualizationMixin:
         markers = MarkerArray()
         now = self.get_clock().now().to_msg()
 
-        # We'll use a larger sphere for these to make them "big enough to see"
-        scale = 0.2  # 20cm dots
+
+        scale = 0.2
 
         for i, wp in enumerate(self.sent_waypoints_history):
             marker = Marker()
@@ -419,7 +419,7 @@ class VisualizationMixin:
             marker.scale.y = scale
             marker.scale.z = scale
 
-            # Bright yellow for visibility
+
             marker.color.r = 1.0
             marker.color.g = 1.0
             marker.color.b = 0.0

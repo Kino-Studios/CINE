@@ -69,11 +69,11 @@ WAYPOINT_PID=""
 SIMULATED_FOCUS_PID=""
 
 if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
-  LOG_FILE=$(mktemp --suffix=.log /tmp/ego_planner_baseline.XXXXXX)
-  "${SCRIPT_DIR}/start_simulation.sh" baseline > "$LOG_FILE" 2>&1 &
+  SIM_LOG=$(mktemp /tmp/ego_planner_baseline.XXXXXX)
+  "${SCRIPT_DIR}/start_simulation.sh" baseline > "$SIM_LOG" 2>&1 &
   SIM_PID=$!
 
-  tail -f "$LOG_FILE" &
+  tail -f "$SIM_LOG" &
   TAIL_PID=$!
 
   for _ in {1..30}; do

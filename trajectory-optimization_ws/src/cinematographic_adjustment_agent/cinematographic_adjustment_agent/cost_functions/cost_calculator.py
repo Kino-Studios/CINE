@@ -1,13 +1,6 @@
-import sys
-from pathlib import Path
+from cinematographic_adjustment_agent.utils.paths import add_config_path
 
-here = Path(__file__).resolve()
-for parent in [here] + list(here.parents):
-    if (parent / "configs").is_dir():
-        python_constants_path = parent / "configs" / "python-constants"
-        if str(python_constants_path) not in sys.path:
-            sys.path.insert(0, str(python_constants_path))
-        break
+add_config_path()
 
 import math
 from typing import Dict, Optional
@@ -296,7 +289,7 @@ class CostCalculator:
 
         forward = np.array(
             [r02, r12, r22], dtype=float
-        )  # z forward, components --> coordinates
+        )
         norm_f = np.linalg.norm(forward)
         return forward / norm_f if norm_f > 0 else None
 

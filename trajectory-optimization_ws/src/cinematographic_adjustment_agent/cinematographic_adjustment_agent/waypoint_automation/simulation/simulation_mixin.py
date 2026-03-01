@@ -51,10 +51,10 @@ class SimulationMixin:
         """
         base_x, base_y, base_z = anchor_wp
         yaw = self.current_yaw
-        # Right-hand side offset relative to heading
+
         dx_side = math.sin(yaw) * self.simulated_object_side_offset_m
         dy_side = -math.cos(yaw) * self.simulated_object_side_offset_m
-        # Outward along Y (same sign as anchor Y) to keep it outside the path and force an inward curve.
+
         sign_y = 1.0 if base_y >= 0.0 else -1.0
         dy_out = sign_y * self.simulated_object_outward_offset_m
 
@@ -74,7 +74,7 @@ class SimulationMixin:
         if not waypoints:
             return waypoints
 
-        # Pick the waypoint with the largest Y (outer-most on Y-axis).
+
         idx_max_y = max(range(len(waypoints)), key=lambda i: waypoints[i][1])
         anchor_wp = waypoints[idx_max_y]
         obj_world = self._compute_simulated_object_position(anchor_wp)
