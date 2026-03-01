@@ -108,10 +108,11 @@ stop_collection() {
 trap stop_collection INT TERM
 
 if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
-  "${SCRIPT_DIR}/start_simulation.sh" constrained > /tmp/ego_planner_constrained.log 2>&1 &
+  LOG_FILE=$(mktemp --suffix=.log /tmp/ego_planner_constrained.XXXXXX)
+  "${SCRIPT_DIR}/start_simulation.sh" constrained > "$LOG_FILE" 2>&1 &
   SIM_PID=$!
 
-  tail -f /tmp/ego_planner_constrained.log &
+  tail -f "$LOG_FILE" &
   TAIL_PID=$!
 
   for _ in {1..30}; do
@@ -126,7 +127,7 @@ if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
   if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
     echo ""
     echo "[ERROR]: Simulation failed to start"
-    echo "detail written to /tmp/ego_planner_constrained.log"
+    echo "detail written to $LOG_FILE"
     kill $SIM_PID $TAIL_PID 2>/dev/null
     exit 1
   fi

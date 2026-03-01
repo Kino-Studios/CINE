@@ -7,6 +7,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from threading import Event
@@ -274,8 +275,11 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
     ego_node_name = f"drone_{drone_id}_ego_planner_node"
     if ego_node_name not in _ros2_node_list():
         start_script = workspace_root / "start_simulation.sh"
-        sim_log_path = Path("/tmp/ego_planner_baseline.log")
-        sim_log_handle = sim_log_path.open("w")
+        sim_log_file = tempfile.NamedTemporaryFile(
+            delete=False, mode="w", prefix="ego_planner_baseline_", suffix=".log"
+        )
+        sim_log_path = Path(sim_log_file.name)
+        sim_log_handle = sim_log_file
         sim_proc = subprocess.Popen(
             [str(start_script), "baseline"],
             stdout=sim_log_handle,
@@ -284,7 +288,7 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
         )
         print("starting simulation...")
         if not _wait_for_node(ego_node_name, timeout_s=30):
-            print("simulation failed to start; check /tmp/ego_planner_baseline.log")
+            print(f"simulation failed to start; check {sim_log_path}")
             if sim_proc:
                 sim_proc.terminate()
             if sim_log_handle:
@@ -292,7 +296,7 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
             node.destroy_node()
             rclpy.shutdown()
             return
-        print("simulation initialized successfully!")
+        print(f"simulation initialized successfully! log: {sim_log_path}")
 
     logger_proc = _start_process(
         [
@@ -442,8 +446,11 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
     ego_node_name = f"drone_{drone_id}_ego_planner_node"
     if ego_node_name not in _ros2_node_list():
         start_script = workspace_root / "start_simulation.sh"
-        sim_log_path = Path("/tmp/ego_planner_constrained.log")
-        sim_log_handle = sim_log_path.open("w")
+        sim_log_file = tempfile.NamedTemporaryFile(
+            delete=False, mode="w", prefix="ego_planner_constrained_", suffix=".log"
+        )
+        sim_log_path = Path(sim_log_file.name)
+        sim_log_handle = sim_log_file
         sim_proc = subprocess.Popen(
             [str(start_script), "constrained"],
             stdout=sim_log_handle,
@@ -452,7 +459,7 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
         )
         print("starting simulation...")
         if not _wait_for_node(ego_node_name, timeout_s=30):
-            print("simulation failed to start; check /tmp/ego_planner_constrained.log")
+            print(f"simulation failed to start; check {sim_log_path}")
             if sim_proc:
                 sim_proc.terminate()
             if sim_log_handle:
@@ -460,7 +467,7 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
             node.destroy_node()
             rclpy.shutdown()
             return
-        print("simulation initialized successfully!")
+        print(f"simulation initialized successfully! log: {sim_log_path}")
 
     filter_proc = _start_process(
         [
