@@ -99,3 +99,4 @@ sim_output.log
 
 # MLP training directory (managed separately, copy to target repo)
 mlp/training/
+mlp/weights
