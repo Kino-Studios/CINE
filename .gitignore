@@ -10,6 +10,8 @@ install/
 build_isolated/
 devel_isolated/
 docs/
+venv/
+.venv/
 
 # Colcon build artifacts (catch nested workspaces too)
 **/build/
@@ -94,3 +96,6 @@ Depth-Anything/
 CATKIN_IGNORE
 sim_output.log
 *.log
+
+# MLP training directory (managed separately, copy to target repo)
+mlp/training/
