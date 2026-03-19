@@ -223,6 +223,14 @@ class LightOrientationParams:
     PLANAR_NORM_THRESHOLD = config.get("light", "light_smoothing", "light_planar_norm_threshold")
 
 
+class MLPParams:
+    USE_MLP_CORRECTION: bool = config.get("mlp", "mlp", "use_mlp_correction", False)
+    MLP_WEIGHTS_PATH: str = config.get("mlp", "mlp", "mlp_weights_path", "")
+    BSPLINE_IN_TOPIC: str = config.get("mlp", "mlp", "bspline_in_topic", "/drone_0_planning/cinematic_bspline")
+    CORRECTED_BSPLINE_TOPIC: str = config.get("mlp", "mlp", "corrected_bspline_topic", "/mlp/corrected_bspline")
+    CORRECTION_DELTA_TOPIC: str = config.get("mlp", "mlp", "correction_delta_topic", "/mlp/correction_delta")
+
+
 class LightAvoidanceParams:
     ENABLED = config.get("light", "light_avoidance", "light_avoidance_enabled")
 

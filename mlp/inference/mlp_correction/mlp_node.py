@@ -1,40 +1,78 @@
-# TODO: Implement ROS2 interceptor node for MLP setpoint correction.
-#
-# Node name: mlp_correction_node
-#
-# Subscriptions:
-#   /drone_0_planning/cinematic_bspline  (traj_utils/Bspline)
-#       — output of CinematicBsplineFilter
-#
-# Publications:
-#   /mlp/corrected_bspline               (traj_utils/Bspline)
-#       — Bspline with corrected control points (pos_pts + Δpos)
-#   /mlp/correction_delta                (geometry_msgs/Vector3Stamped)
-#       — mean(Δpos) across all control points; frame_id = "odom_world"
-#       — publishes zero vector in passthrough mode (ONNX not loaded)
-#
-# Parameters:
-#   mlp_weights_path (string): path to mlp/weights/ directory
-#
-# Startup:
-#   1. Read mlp_weights_path parameter
-#   2. Instantiate MLPLoader(mlp_weights_path) — loads ONNX + scaler
-#   3. If ONNX missing: log warning, run in passthrough mode
-#
-# Callback (on each Bspline message):
-#   1. Extract control points pos_pts and knots from msg
-#   2. Compute dt via median of positive knot diffs (same as _estimate_dt in bspline filter)
-#   3. corrected_pts = loader.correct(pos_pts, dt)
-#   4. Rebuild Bspline msg with corrected_pts, publish on /mlp/corrected_bspline
-#   5. Compute mean_delta = mean(corrected_pts - pos_pts, axis=0)
-#      Publish as Vector3Stamped on /mlp/correction_delta
-#
-# Phase 1 (dark launch): no downstream node subscribes to /mlp/corrected_bspline.
-# Phase 2 (live):        reconfigure downstream Bspline-to-PoseStamped converter
-#                        to subscribe to /mlp/corrected_bspline instead of
-#                        /drone_0_planning/cinematic_bspline (one launch param change).
+import numpy as np
+import rclpy
+from geometry_msgs.msg import Point, Vector3Stamped
+from rclpy.executors import ExternalShutdownException
+from rclpy.node import Node
+from traj_utils.msg import Bspline
+
+from .mlp_loader import MLPLoader
+
+try:
+    from constants import MLPParams
+    _BSPLINE_IN_TOPIC = MLPParams.BSPLINE_IN_TOPIC
+    _CORRECTED_BSPLINE_TOPIC = MLPParams.CORRECTED_BSPLINE_TOPIC
+    _CORRECTION_DELTA_TOPIC = MLPParams.CORRECTION_DELTA_TOPIC
+except ImportError:
+    _BSPLINE_IN_TOPIC = "/drone_0_planning/cinematic_bspline"
+    _CORRECTED_BSPLINE_TOPIC = "/mlp/corrected_bspline"
+    _CORRECTION_DELTA_TOPIC = "/mlp/correction_delta"
+
+
+class MLPNode(Node):
+    def __init__(self):
+        super().__init__("mlp_correction_node")
+
+        self.declare_parameter("mlp_weights_path", "")
+        self.mlp_weights_path = self.get_parameter("mlp_weights_path").value
+
+        self.loader = MLPLoader(self.mlp_weights_path)
+
+        self.subscription = self.create_subscription(
+            Bspline,
+            _BSPLINE_IN_TOPIC,
+            self.listener_callback,
+            10,
+        )
+
+        self.publisher = self.create_publisher(Bspline, _CORRECTED_BSPLINE_TOPIC, 10)
+
+        self.correction_publisher = self.create_publisher(
+            Vector3Stamped, _CORRECTION_DELTA_TOPIC, 10
+        )
+
+    def listener_callback(self, msg: Bspline) -> None:
+        pos_pts = np.array([[p.x, p.y, p.z] for p in msg.pos_pts], dtype=np.float64)
+
+        knots = np.array(msg.knots, dtype=np.float64)
+        diffs = np.diff(knots)
+        positive_diffs = diffs[diffs > 0]
+        dt = float(np.median(positive_diffs)) if len(positive_diffs) > 0 else 0.1
+
+        corrected_pts = self.loader.correct(pos_pts, dt)
+
+        msg.pos_pts = [Point(x=float(p[0]), y=float(p[1]), z=float(p[2])) for p in corrected_pts]
+        self.publisher.publish(msg)
+
+        mean_delta = np.mean(corrected_pts - pos_pts, axis=0)
+        delta_msg = Vector3Stamped()
+        delta_msg.header.stamp = self.get_clock().now().to_msg()
+        delta_msg.header.frame_id = "odom_world"
+        delta_msg.vector.x = float(mean_delta[0])
+        delta_msg.vector.y = float(mean_delta[1])
+        delta_msg.vector.z = float(mean_delta[2])
+        self.correction_publisher.publish(delta_msg)
 
 
 def main(args=None):
-    # TODO: implement
-    pass
+    rclpy.init(args=args)
+    node = MLPNode()
+
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    except ExternalShutdownException:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()

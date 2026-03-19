@@ -26,6 +26,7 @@ class ConfigLoader:
             "camera": "camera/camera-params.json",
             "costs": "cost_functions/cost-params.json",
             "light": "light_avoidance/orientation-params.json",
+            "mlp": "mlp/mlp-params.json",
             "topics": "topics/topic-params.json",
             "defaults": "trajectory_constraints/defaults.json",
             "focus": "trajectory_constraints/focus.json",

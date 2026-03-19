@@ -1,35 +1,55 @@
-# TODO: Implement ONNX model loader for MLP setpoint correction.
-#
-# This module loads mlp_correction.onnx and scaler.json from a weights directory
-# and exposes a single inference function.
-#
-# Public interface:
-#
-#   class MLPLoader:
-#       def __init__(self, weights_dir: str) -> None:
-#           """Load ONNX model and scaler from weights_dir.
-#           weights_dir must contain:
-#             - mlp_correction.onnx
-#             - scaler.json  (keys: mean[6], std[6], feature_names[6])
-#           """
-#
-#       def correct(self, pos_pts: np.ndarray, dt: float) -> np.ndarray:
-#           """Apply MLP correction to B-spline control points.
-#
-#           Args:
-#               pos_pts: (N, 3) control points in odom_world frame.
-#               dt:      estimated knot interval in seconds (from Bspline message).
-#
-#           Returns:
-#               (N, 3) corrected control points (pos_pts + Δpos).
-#
-#           Input construction (per control point i):
-#               pos = pos_pts[i]                                   # [x, y, z]
-#               vel = (pos_pts[i+1] - pos_pts[i-1]) / (2 * dt)   # central diff
-#               vel at i=0:   forward diff  (pos_pts[1]   - pos_pts[0])   / dt
-#               vel at i=N-1: backward diff (pos_pts[N-1] - pos_pts[N-2]) / dt
-#               input_6d = normalize([pos, vel], scaler)
-#
-#           Batch call: all N rows fed as (N, 6) to ONNX in one session.run().
-#           Passthrough: if model not loaded, return pos_pts unchanged.
-#           """
+import json
+import logging
+import os
+
+import numpy as np
+import onnxruntime as ort
+
+logger = logging.getLogger(__name__)
+
+
+class MLPLoader:
+    def __init__(self, weights_dir: str) -> None:
+        self._session = None
+        self._input_name = None
+        self._scaler_mean = None
+        self._scaler_std = None
+
+        onnx_path = os.path.join(weights_dir, "mlp_correction.onnx")
+        scaler_path = os.path.join(weights_dir, "scaler.json")
+
+        if not os.path.isfile(onnx_path):
+            logger.warning("ONNX model not found at %s, switching to passthrough", onnx_path)
+            return
+
+        with open(scaler_path) as f:
+            scaler = json.load(f)
+
+        self._scaler_mean = np.array(scaler["mean"], dtype=np.float32)
+        self._scaler_std = np.array(scaler["std"], dtype=np.float32)
+
+        self._session = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
+        self._input_name = self._session.get_inputs()[0].name
+        logger.info("Loaded model from %s", onnx_path)
+
+    def correct(self, pos_pts: np.ndarray, dt: float) -> np.ndarray:
+        if self._session is None:
+            return pos_pts
+
+        pos_pts = np.asarray(pos_pts, dtype=np.float32)
+        n = len(pos_pts)
+
+        vel = np.empty_like(pos_pts)
+        if n == 1:
+            vel[0] = 0.0
+        else:
+            vel[0] = (pos_pts[1] - pos_pts[0]) / dt
+            vel[-1] = (pos_pts[-1] - pos_pts[-2]) / dt
+            if n > 2:
+                vel[1:-1] = (pos_pts[2:] - pos_pts[:-2]) / (2.0 * dt)
+
+        x = np.concatenate([pos_pts, vel], axis=1)
+        x = (x - self._scaler_mean) / self._scaler_std
+
+        delta = self._session.run(None, {self._input_name: x})[0]
+        return pos_pts + delta.astype(np.float32)

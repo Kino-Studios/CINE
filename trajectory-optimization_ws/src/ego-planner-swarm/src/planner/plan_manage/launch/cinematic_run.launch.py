@@ -1,5 +1,16 @@
 import os
+import sys
 import numpy as np
+from pathlib import Path
+
+here = Path(__file__).resolve()
+for parent in [here] + list(here.parents):
+    if (parent / "configs").is_dir():
+        python_constants_path = parent / "configs" / "python-constants"
+        if str(python_constants_path) not in sys.path:
+            sys.path.insert(0, str(python_constants_path))
+        break
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
@@ -9,6 +20,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 from launch.substitutions import PythonExpression
 from launch.conditions import IfCondition, UnlessCondition
+
+from constants import MLPParams
 
 def generate_cinematic_waypoints():
     waypoints = [
@@ -31,30 +44,30 @@ def generate_cinematic_waypoints_UNUSED():
     start_angle = -np.pi/2
     end_angle = -np.pi/2 + 2*np.pi/3
     angles = np.linspace(start_angle, end_angle, num_points)
-    
+
     waypoints = []
     for angle in angles:
         x = center_x + radius * np.cos(angle)
         y = center_y + radius * np.sin(angle)
         waypoints.append((x, y, z_height))
-    
+
     return waypoints
 
 def generate_launch_description():
     waypoints = generate_cinematic_waypoints()
-    
+
     obj_num = LaunchConfiguration('obj_num', default=10)
     drone_id = LaunchConfiguration('drone_id', default=0)
-    
+
     map_size_x = LaunchConfiguration('map_size_x', default = 50.0)
     map_size_y = LaunchConfiguration('map_size_y', default = 25.0)
     map_size_z = LaunchConfiguration('map_size_z', default = 2.0)
-    
+
     odom_topic = LaunchConfiguration('odom_topic', default = 'visual_slam/odom')
     depth_topic = LaunchConfiguration('depth_topic', default = 'depth/image_raw')
     camera_pose_topic = LaunchConfiguration('camera_pose_topic', default = 'camera_pose')
     cloud_topic = LaunchConfiguration('cloud_topic', default = '/map_generator/global_cloud')
-    
+
     obj_num_cmd = DeclareLaunchArgument('obj_num', default_value=obj_num)
     drone_id_cmd = DeclareLaunchArgument('drone_id', default_value=drone_id)
     map_size_x_cmd = DeclareLaunchArgument('map_size_x', default_value=map_size_x)
@@ -67,13 +80,19 @@ def generate_launch_description():
 
     use_mockamap = LaunchConfiguration('use_mockamap', default=False)
     use_mockamap_cmd = DeclareLaunchArgument('use_mockamap', default_value=use_mockamap)
-    
-    use_dynamic = LaunchConfiguration('use_dynamic', default=True)  
+
+    use_dynamic = LaunchConfiguration('use_dynamic', default=True)
     use_dynamic_cmd = DeclareLaunchArgument('use_dynamic', default_value=use_dynamic)
-    
+
     use_cinematic_bspline = LaunchConfiguration('use_cinematic_bspline', default=True)
     use_cinematic_bspline_cmd = DeclareLaunchArgument('use_cinematic_bspline', default_value='true')
-    
+
+    use_mlp_correction = LaunchConfiguration('use_mlp_correction', default=str(MLPParams.USE_MLP_CORRECTION).lower())
+    use_mlp_correction_cmd = DeclareLaunchArgument('use_mlp_correction', default_value=str(MLPParams.USE_MLP_CORRECTION).lower())
+
+    mlp_weights_path = LaunchConfiguration('mlp_weights_path', default=MLPParams.MLP_WEIGHTS_PATH)
+    mlp_weights_path_cmd = DeclareLaunchArgument('mlp_weights_path', default_value=MLPParams.MLP_WEIGHTS_PATH)
+
     map_generator_node = Node(
         package='map_generator',
         executable='random_forest',
@@ -101,17 +120,17 @@ def generate_launch_description():
         ],
         condition = UnlessCondition(use_mockamap)
     )
-    
+
     waypoint_args = {
         'flight_type': str(2),
         'point_num': str(len(waypoints)),
     }
-    
+
     for i, (x, y, z) in enumerate(waypoints):
         waypoint_args[f'point{i}_x'] = str(x)
         waypoint_args[f'point{i}_y'] = str(y)
         waypoint_args[f'point{i}_z'] = str(z)
-    
+
     advanced_param_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('ego_planner'), 'launch', 'advanced_param.launch.py')),
@@ -136,12 +155,13 @@ def generate_launch_description():
             **waypoint_args
         }.items()
     )
-    
+
     traj_server_node = Node(
         package='ego_planner',
         executable='traj_server',
         name=['drone_', drone_id, '_traj_server'],
         output='screen',
+        condition=UnlessCondition(use_mlp_correction),
         remappings=[
             ('position_cmd', ['drone_', drone_id, '_planning/pos_cmd']),
             ('planning/bspline', ['drone_', drone_id, '_planning/bspline']),
@@ -150,6 +170,34 @@ def generate_launch_description():
         parameters=[
             {'traj_server/time_forward': 1.0},
             {'traj_server/use_cinematic_bspline': use_cinematic_bspline}
+        ]
+    )
+
+    traj_server_node_mlp = Node(
+        package='ego_planner',
+        executable='traj_server',
+        name=['drone_', drone_id, '_traj_server'],
+        output='screen',
+        condition=IfCondition(use_mlp_correction),
+        remappings=[
+            ('position_cmd', ['drone_', drone_id, '_planning/pos_cmd']),
+            ('planning/bspline', ['drone_', drone_id, '_planning/bspline']),
+            ('planning/cinematic_bspline', '/mlp/corrected_bspline')
+        ],
+        parameters=[
+            {'traj_server/time_forward': 1.0},
+            {'traj_server/use_cinematic_bspline': use_cinematic_bspline}
+        ]
+    )
+
+    mlp_correction_node = Node(
+        package='mlp_correction',
+        executable='mlp_node',
+        name='mlp_correction_node',
+        output='screen',
+        condition=IfCondition(use_mlp_correction),
+        parameters=[
+            {'mlp_weights_path': mlp_weights_path}
         ]
     )
 
@@ -205,7 +253,7 @@ def generate_launch_description():
             {'height': 480},
         ],
     )
-    
+
     simulator_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('ego_planner'), 'launch', 'simulator.launch.py')),
@@ -221,9 +269,9 @@ def generate_launch_description():
             'odometry_topic': odom_topic
         }.items()
     )
-    
+
     ld = LaunchDescription()
-    
+
     ld.add_action(map_size_x_cmd)
     ld.add_action(map_size_y_cmd)
     ld.add_action(map_size_z_cmd)
@@ -236,13 +284,17 @@ def generate_launch_description():
     ld.add_action(use_dynamic_cmd)
     ld.add_action(use_mockamap_cmd)
     ld.add_action(use_cinematic_bspline_cmd)
-    
+    ld.add_action(use_mlp_correction_cmd)
+    ld.add_action(mlp_weights_path_cmd)
+
     ld.add_action(map_generator_node)
     ld.add_action(advanced_param_include)
     ld.add_action(traj_server_node)
+    ld.add_action(traj_server_node_mlp)
+    ld.add_action(mlp_correction_node)
     ld.add_action(simulated_object_detector_node)
     ld.add_action(cinematic_intent_node)
     ld.add_action(cinematic_bspline_filter_node)
     ld.add_action(simulator_include)
-    
+
     return ld
