@@ -9,6 +9,7 @@ srv_gen/
 install/
 build_isolated/
 devel_isolated/
+docs/
 
 # Colcon build artifacts (catch nested workspaces too)
 **/build/
