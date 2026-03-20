@@ -2,9 +2,9 @@
 <package format="3">
   <name>cinematography_msgs</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="vtsyp@todo.todo">vtsyp</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Custom ROS 2 message definitions for the CINE cinematographic drone system</description>
+  <maintainer email="fishnos@users.noreply.github.com">fishnos</maintainer>
+  <license>GPL-3.0-only</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <build_depend>rosidl_default_generators</build_depend>

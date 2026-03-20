@@ -1,4 +1,5 @@
-# TODO: make a python script with cinematographic launching and formalize it (make it work as intended, currently lossy structure)
+# NOTE: Cinematographic data collection script. Structure is subject to change as the
+# data collection pipeline is formalized. See README for current usage instructions.
 
 from launch import LaunchDescription
 from launch_ros.actions import Node

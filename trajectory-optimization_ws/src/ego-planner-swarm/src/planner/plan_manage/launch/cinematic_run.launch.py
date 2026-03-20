@@ -294,7 +294,7 @@ def generate_launch_description():
         output="screen",
         condition=UnlessCondition(use_simulation),
         parameters=[
-            # TODO: verify /imu_propagate is the correct odometry source for this hardware setup
+            # NOTE: /imu_propagate is used as the odometry source for hardware mode. Confirm this topic matches the flight controller configuration.
             {'odom_topic': '/imu_propagate'},
             {'depth_topic': depth_topic},
             {'center_topic': '/object_detection/center_point'},
@@ -316,7 +316,7 @@ def generate_launch_description():
         condition=UnlessCondition(use_simulation),
         parameters=[
             {'image_topic': '/camera_publisher/image_raw'},
-            # TODO: verify /imu_propagate is the correct odometry source for this hardware setup
+            # NOTE: /imu_propagate is used as the odometry source for hardware mode. Confirm this topic matches the flight controller configuration.
             {'odom_topic': '/imu_propagate'},
             {'light_vector_topic': '/cinematography/light_vector'},
             {'camera_fx': 387.229248046875},
