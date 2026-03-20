@@ -18,6 +18,7 @@ ros2_executables = [
     os.path.join('scripts', 'ros2_nodes', 'simulated_object_detector'),
     os.path.join('scripts', 'ros2_nodes', 'simulated_focus_publisher'),
     os.path.join('scripts', 'ros2_nodes', 'simulated_light_publisher'),
+    os.path.join('scripts', 'ros2_nodes', 'light_vector_analysis'),
     os.path.join('scripts', 'ros2_nodes', 'baseline_collection'),
     os.path.join('scripts', 'ros2_nodes', 'cinematic_collection'),
 ]

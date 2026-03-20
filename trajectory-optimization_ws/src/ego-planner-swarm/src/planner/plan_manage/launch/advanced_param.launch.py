@@ -47,6 +47,8 @@ def generate_launch_description():
     obj_num_set = LaunchConfiguration('obj_num_set', default=10)
     
     drone_id = LaunchConfiguration('drone_id', default=0)
+    realworld_experiment = LaunchConfiguration('realworld_experiment', default='false')
+    use_sim_time = LaunchConfiguration('use_sim_time', default='true')
 
     # DeclareLaunchArguments
     map_size_x_arg = DeclareLaunchArgument('map_size_x_', default_value=map_size_x, description='Map size along X')
@@ -85,6 +87,8 @@ def generate_launch_description():
     use_distinctive_trajs_arg = DeclareLaunchArgument('use_distinctive_trajs', default_value=use_distinctive_trajs, description='Use distinctive trajectories')
     obj_num_set_arg = DeclareLaunchArgument('obj_num_set', default_value=obj_num_set, description='Number of objects')
     drone_id_arg = DeclareLaunchArgument('drone_id', default_value=drone_id, description='Drone ID')
+    realworld_experiment_arg = DeclareLaunchArgument('realworld_experiment', default_value='false', description='Set true for real hardware, false for simulation')
+    use_sim_time_arg = DeclareLaunchArgument('use_sim_time', default_value='true', description='Use ROS sim time (true for sim, false for hardware)')
 
     # Ego Planner Node
     ego_planner_node = Node(
@@ -118,7 +122,8 @@ def generate_launch_description():
             {'fsm/planning_horizon': planning_horizon},
             {'fsm/planning_horizen_time': 3.0},
             {'fsm/emergency_time': 1.0},
-            {'fsm/realworld_experiment': False},
+            {'fsm/realworld_experiment': realworld_experiment},
+            {'use_sim_time': use_sim_time},
             {'fsm/fail_safe': True},
             
             {'fsm/waypoint_num': point_num},
@@ -246,6 +251,8 @@ def generate_launch_description():
     ld.add_action(use_distinctive_trajs_arg)
     ld.add_action(obj_num_set_arg)
     ld.add_action(drone_id_arg)
+    ld.add_action(realworld_experiment_arg)
+    ld.add_action(use_sim_time_arg)
 
 
     # Add Node
