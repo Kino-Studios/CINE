@@ -25,6 +25,8 @@ __pycache__/
 
 # IDE / OS generated
 .vscode/
+!.vscode/settings.json
+!.vscode/c_cpp_properties.json
 .DS_Store
 **/.DS_Store
 *.db

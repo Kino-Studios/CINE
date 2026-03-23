@@ -167,6 +167,7 @@ class SimulationParams:
     FOCUS_DEPTH_M = config.get("params", "simulation_params", "focus_depth_m")
     EPSILON = config.get("params", "simulation_params", "epsilon")
     LOGGING_SEVERITY = config.get("params", "simulation_params", "logging_severity", "DEBUG")
+    USE_SIMULATION = config.get("params", "simulation_params", "use_simulation", True)
 
 class DepthAnythingParams:
     DEPTH_ANYTHING_PATH = config.get("params", "depth_anything_params", "depth_anything_path")

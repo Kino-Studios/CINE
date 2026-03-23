@@ -4,7 +4,7 @@
   <name>depth_publisher</name>
   <version>0.0.1</version>
   <description>Depth image publisher using Depth-Anything with CUDA acceleration</description>
-  <maintainer email="your.email@example.com">Your Name</maintainer>
+  <maintainer email="fishnos@users.noreply.github.com">fishnos</maintainer>
   <license>MIT</license>
 
   <depend>rclpy</depend>

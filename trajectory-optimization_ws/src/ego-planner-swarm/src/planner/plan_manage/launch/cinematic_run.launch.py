@@ -21,7 +21,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch.substitutions import PythonExpression
 from launch.conditions import IfCondition, UnlessCondition
 
-from constants import MLPParams
+from constants import MLPParams, SimulationParams
 
 def generate_cinematic_waypoints():
     waypoints = [
@@ -93,6 +93,9 @@ def generate_launch_description():
     mlp_weights_path = LaunchConfiguration('mlp_weights_path', default=MLPParams.MLP_WEIGHTS_PATH)
     mlp_weights_path_cmd = DeclareLaunchArgument('mlp_weights_path', default_value=MLPParams.MLP_WEIGHTS_PATH)
 
+    use_simulation = LaunchConfiguration('use_simulation', default='true' if SimulationParams.USE_SIMULATION else 'false')
+    use_simulation_cmd = DeclareLaunchArgument('use_simulation', default_value='true' if SimulationParams.USE_SIMULATION else 'false')
+
     map_generator_node = Node(
         package='map_generator',
         executable='random_forest',
@@ -118,7 +121,9 @@ def generate_launch_description():
             {'pub_rate': 1.0},
             {'min_distance': 0.8}
         ],
-        condition = UnlessCondition(use_mockamap)
+        condition = IfCondition(PythonExpression([
+            '"true" if "', use_simulation, '" == "true" and "', use_mockamap, '" == "false" else "false"'
+        ]))
     )
 
     waypoint_args = {
@@ -152,6 +157,8 @@ def generate_launch_description():
             'max_acc': str(7.0),
             'planning_horizon': str(7.5),
             'use_distinctive_trajs': 'False',
+            'realworld_experiment': PythonExpression(["'false' if '", use_simulation, "' == 'true' else 'true'"]),
+            'use_sim_time': use_simulation,
             **waypoint_args
         }.items()
     )
@@ -240,7 +247,9 @@ def generate_launch_description():
         executable="simulated_object_detector",
         name="simulated_object_detector",
         output="screen",
-        condition=IfCondition(use_cinematic_bspline),
+        condition=IfCondition(PythonExpression([
+            '"true" if "', use_simulation, '" == "true" and "', use_cinematic_bspline, '" == "true" else "false"'
+        ])),
         remappings=[
             ('depth/image_raw', depth_topic),
         ],
@@ -254,9 +263,73 @@ def generate_launch_description():
         ],
     )
 
+    simulated_focus_publisher_node = Node(
+        package="cinematographic_adjustment_agent",
+        executable="simulated_focus_publisher",
+        name="simulated_focus_publisher",
+        output="screen",
+        condition=IfCondition(use_simulation),
+        parameters=[
+            {'odom_topic': PythonExpression(["'/drone_' + str(", drone_id, ") + '_", odom_topic, "'"])},
+            {'target_xyz': SimulationParams.TARGET_XYZ},
+            {'focus_depth_m': SimulationParams.FOCUS_DEPTH_M},
+        ],
+    )
+
+    simulated_light_publisher_node = Node(
+        package="cinematographic_adjustment_agent",
+        executable="simulated_light_publisher",
+        name="simulated_light_publisher",
+        output="screen",
+        condition=IfCondition(use_simulation),
+        parameters=[
+            {'odom_topic': PythonExpression(["'/drone_' + str(", drone_id, ") + '_", odom_topic, "'"])},
+        ],
+    )
+
+    cost_function_calculator_node = Node(
+        package="cinematographic_adjustment_agent",
+        executable="cost_function_calculator",
+        name="cost_function_calculator",
+        output="screen",
+        condition=UnlessCondition(use_simulation),
+        parameters=[
+            # NOTE: /imu_propagate is used as the odometry source for hardware mode. Confirm this topic matches the flight controller configuration.
+            {'odom_topic': '/imu_propagate'},
+            {'depth_topic': depth_topic},
+            {'center_topic': '/object_detection/center_point'},
+            {'bbox_topic': '/object_detection/bounding_box'},
+            {'dimensions_topic': '/object_detection/dimensions'},
+            {'light_vector_topic': '/cinematography/light_vector'},
+            {'camera_fx': 387.229248046875},
+            {'camera_fy': 387.229248046875},
+            {'camera_cx': 320.5},
+            {'camera_cy': 240.5},
+        ],
+    )
+
+    light_vector_analysis_node = Node(
+        package="cinematographic_adjustment_agent",
+        executable="light_vector_analysis",
+        name="light_vector_analysis",
+        output="screen",
+        condition=UnlessCondition(use_simulation),
+        parameters=[
+            {'image_topic': '/camera_publisher/image_raw'},
+            # NOTE: /imu_propagate is used as the odometry source for hardware mode. Confirm this topic matches the flight controller configuration.
+            {'odom_topic': '/imu_propagate'},
+            {'light_vector_topic': '/cinematography/light_vector'},
+            {'camera_fx': 387.229248046875},
+            {'camera_fy': 387.229248046875},
+            {'camera_cx': 320.5},
+            {'camera_cy': 240.5},
+        ],
+    )
+
     simulator_include = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('ego_planner'), 'launch', 'simulator.launch.py')),
+        condition=IfCondition(use_simulation),
         launch_arguments={
             'use_dynamic': use_dynamic,
             'drone_id': drone_id,
@@ -286,6 +359,7 @@ def generate_launch_description():
     ld.add_action(use_cinematic_bspline_cmd)
     ld.add_action(use_mlp_correction_cmd)
     ld.add_action(mlp_weights_path_cmd)
+    ld.add_action(use_simulation_cmd)
 
     ld.add_action(map_generator_node)
     ld.add_action(advanced_param_include)
@@ -293,6 +367,10 @@ def generate_launch_description():
     ld.add_action(traj_server_node_mlp)
     ld.add_action(mlp_correction_node)
     ld.add_action(simulated_object_detector_node)
+    ld.add_action(simulated_focus_publisher_node)
+    ld.add_action(simulated_light_publisher_node)
+    ld.add_action(cost_function_calculator_node)
+    ld.add_action(light_vector_analysis_node)
     ld.add_action(cinematic_intent_node)
     ld.add_action(cinematic_bspline_filter_node)
     ld.add_action(simulator_include)

@@ -18,6 +18,7 @@ ros2_executables = [
     os.path.join('scripts', 'ros2_nodes', 'simulated_object_detector'),
     os.path.join('scripts', 'ros2_nodes', 'simulated_focus_publisher'),
     os.path.join('scripts', 'ros2_nodes', 'simulated_light_publisher'),
+    os.path.join('scripts', 'ros2_nodes', 'light_vector_analysis'),
     os.path.join('scripts', 'ros2_nodes', 'baseline_collection'),
     os.path.join('scripts', 'ros2_nodes', 'cinematic_collection'),
 ]
@@ -85,8 +86,8 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='vtsyp',
-    maintainer_email='dkosukhintech@gmail.com',
+    maintainer='fishnos',
+    maintainer_email='fishnos@users.noreply.github.com',
     description='Cinematographic adjustment agent for trajectory optimization',
     license='GPL-3.0',
     tests_require=['pytest'],

@@ -1,4 +1,5 @@
-# TODO: this kind of works but waypoints arent being sent here. figure out the fix here and for the cinematograpihc data collection
+# NOTE: Data collection script - waypoint dispatch via this launch file is not yet functional.
+# Use the standalone collect_baseline_data.py script directly for data collection.
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
