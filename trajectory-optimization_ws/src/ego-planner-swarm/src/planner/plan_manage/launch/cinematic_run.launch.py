@@ -1,6 +1,5 @@
 import os
 import sys
-import numpy as np
 from pathlib import Path
 
 here = Path(__file__).resolve()
@@ -21,7 +20,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch.substitutions import PythonExpression
 from launch.conditions import IfCondition, UnlessCondition
 
-from constants import MLPParams, SimulationParams
+from constants import MLPParams, SimulationParams, CinematicConstraints
 
 def generate_cinematic_waypoints():
     waypoints = [
@@ -36,37 +35,21 @@ def generate_cinematic_waypoints():
     ]
     return waypoints
 
-def generate_cinematic_waypoints_UNUSED():
-    center_x, center_y = 0.5, -1.0
-    radius = 0.4
-    z_height = 1.0
-    num_points = 16
-    start_angle = -np.pi/2
-    end_angle = -np.pi/2 + 2*np.pi/3
-    angles = np.linspace(start_angle, end_angle, num_points)
-
-    waypoints = []
-    for angle in angles:
-        x = center_x + radius * np.cos(angle)
-        y = center_y + radius * np.sin(angle)
-        waypoints.append((x, y, z_height))
-
-    return waypoints
-
 def generate_launch_description():
     waypoints = generate_cinematic_waypoints()
+    constraints = CinematicConstraints()
 
     obj_num = LaunchConfiguration('obj_num', default=10)
     drone_id = LaunchConfiguration('drone_id', default=0)
 
-    map_size_x = LaunchConfiguration('map_size_x', default = 50.0)
-    map_size_y = LaunchConfiguration('map_size_y', default = 25.0)
-    map_size_z = LaunchConfiguration('map_size_z', default = 2.0)
+    map_size_x = LaunchConfiguration('map_size_x', default=50.0)
+    map_size_y = LaunchConfiguration('map_size_y', default=25.0)
+    map_size_z = LaunchConfiguration('map_size_z', default=2.0)
 
-    odom_topic = LaunchConfiguration('odom_topic', default = 'visual_slam/odom')
-    depth_topic = LaunchConfiguration('depth_topic', default = 'depth/image_raw')
-    camera_pose_topic = LaunchConfiguration('camera_pose_topic', default = 'camera_pose')
-    cloud_topic = LaunchConfiguration('cloud_topic', default = '/map_generator/global_cloud')
+    odom_topic = LaunchConfiguration('odom_topic', default='visual_slam/odom')
+    depth_topic = LaunchConfiguration('depth_topic', default='depth/image_raw')
+    camera_pose_topic = LaunchConfiguration('camera_pose_topic', default='camera_pose')
+    cloud_topic = LaunchConfiguration('cloud_topic', default='/map_generator/global_cloud')
 
     obj_num_cmd = DeclareLaunchArgument('obj_num', default_value=obj_num)
     drone_id_cmd = DeclareLaunchArgument('drone_id', default_value=drone_id)
@@ -96,6 +79,66 @@ def generate_launch_description():
     use_simulation = LaunchConfiguration('use_simulation', default='true' if SimulationParams.USE_SIMULATION else 'false')
     use_simulation_cmd = DeclareLaunchArgument('use_simulation', default_value='true' if SimulationParams.USE_SIMULATION else 'false')
 
+    use_distinctive_trajs = LaunchConfiguration('use_distinctive_trajs', default='false')
+    use_distinctive_trajs_cmd = DeclareLaunchArgument('use_distinctive_trajs', default_value=use_distinctive_trajs)
+
+    # Kinematic and cinematographic constraints (loaded from CinematicConstraints / JSON config)
+    default_max_vel = LaunchConfiguration('default_max_vel', default=constraints.DEFAULT_MAX_VELOCITY_MPS)
+    default_max_acc = LaunchConfiguration('default_max_acc', default=constraints.DEFAULT_MAX_ACCEL_MPS2)
+    focus_max_vel = LaunchConfiguration('focus_max_vel', default=constraints.FOCUS_MAX_VELOCITY_MPS)
+    focus_max_acc = LaunchConfiguration('focus_max_acc', default=constraints.FOCUS_MAX_ACCEL_MPS2)
+    vel_damping = LaunchConfiguration('vel_damping', default=constraints.VEL_DAMPING)
+    acc_damping = LaunchConfiguration('acc_damping', default=constraints.ACC_DAMPING)
+    default_speed_scale = LaunchConfiguration('default_speed_scale', default=constraints.DEFAULT_SPEED_SCALE)
+    focus_speed_scale = LaunchConfiguration('focus_speed_scale', default=constraints.FOCUS_SPEED_SCALE)
+    target_distance_m = LaunchConfiguration('target_distance_m', default=constraints.TARGET_DISTANCE_M)
+    target_distance_tol_m = LaunchConfiguration('target_distance_tol_m', default=constraints.TARGET_DISTANCE_TOL_M)
+    target_distance_gate_m = LaunchConfiguration('target_distance_gate_m', default=constraints.TARGET_DISTANCE_GATE_M)
+    yawdot_max = LaunchConfiguration('yawdot_max', default=constraints.YAWDOT_MAX)
+    light_avoid_gain = LaunchConfiguration('light_avoid_gain', default=constraints.LIGHT_AVOID_GAIN)
+    light_influence_distance_m = LaunchConfiguration('light_influence_distance_m', default=constraints.LIGHT_INFLUENCE_DISTANCE_M)
+    light_avoid_speed_threshold = LaunchConfiguration('light_avoid_speed_threshold', default=constraints.LIGHT_AVOID_SPEED_THRESHOLD_MPS)
+    light_avoid_blend_base = LaunchConfiguration('light_avoid_blend_base', default=constraints.LIGHT_AVOID_BLEND_BASE)
+    light_avoid_max_blend = LaunchConfiguration('light_avoid_max_blend', default=constraints.LIGHT_AVOID_MAX_BLEND)
+    light_avoid_transition_s = LaunchConfiguration('light_avoid_transition_s', default=constraints.LIGHT_AVOID_TRANSITION_S)
+    light_cooldown_after_framing_s = LaunchConfiguration('light_cooldown_after_framing_s', default=constraints.LIGHT_COOLDOWN_AFTER_FRAMING_S)
+    light_disable_near_finish_s = LaunchConfiguration('light_disable_near_finish_s', default=constraints.LIGHT_DISABLE_NEAR_FINISH_S)
+    light_distance_blend_gain = LaunchConfiguration('light_distance_blend_gain', default=constraints.LIGHT_DISTANCE_BLEND_GAIN)
+    light_rotation_damping = LaunchConfiguration('light_rotation_damping', default=constraints.LIGHT_ROTATION_DAMPING)
+    light_yaw_smooth_alpha = LaunchConfiguration('light_yaw_smooth_alpha', default=constraints.LIGHT_YAW_SMOOTH_ALPHA)
+    use_target_yaw = LaunchConfiguration('use_target_yaw', default=str(constraints.USE_TARGET_YAW).lower())
+    use_light_avoid_yaw = LaunchConfiguration('use_light_avoid_yaw', default='true')
+    debug_light_yaw = LaunchConfiguration('debug_light_yaw', default='true')
+    debug_light_period_s = LaunchConfiguration('debug_light_period_s', default=0.5)
+
+    default_max_vel_cmd = DeclareLaunchArgument('default_max_vel', default_value=default_max_vel)
+    default_max_acc_cmd = DeclareLaunchArgument('default_max_acc', default_value=default_max_acc)
+    focus_max_vel_cmd = DeclareLaunchArgument('focus_max_vel', default_value=focus_max_vel)
+    focus_max_acc_cmd = DeclareLaunchArgument('focus_max_acc', default_value=focus_max_acc)
+    vel_damping_cmd = DeclareLaunchArgument('vel_damping', default_value=vel_damping)
+    acc_damping_cmd = DeclareLaunchArgument('acc_damping', default_value=acc_damping)
+    default_speed_scale_cmd = DeclareLaunchArgument('default_speed_scale', default_value=default_speed_scale)
+    focus_speed_scale_cmd = DeclareLaunchArgument('focus_speed_scale', default_value=focus_speed_scale)
+    target_distance_m_cmd = DeclareLaunchArgument('target_distance_m', default_value=target_distance_m)
+    target_distance_tol_m_cmd = DeclareLaunchArgument('target_distance_tol_m', default_value=target_distance_tol_m)
+    target_distance_gate_m_cmd = DeclareLaunchArgument('target_distance_gate_m', default_value=target_distance_gate_m)
+    yawdot_max_cmd = DeclareLaunchArgument('yawdot_max', default_value=yawdot_max)
+    light_avoid_gain_cmd = DeclareLaunchArgument('light_avoid_gain', default_value=light_avoid_gain)
+    light_influence_distance_m_cmd = DeclareLaunchArgument('light_influence_distance_m', default_value=light_influence_distance_m)
+    light_avoid_speed_threshold_cmd = DeclareLaunchArgument('light_avoid_speed_threshold', default_value=light_avoid_speed_threshold)
+    light_avoid_blend_base_cmd = DeclareLaunchArgument('light_avoid_blend_base', default_value=light_avoid_blend_base)
+    light_avoid_max_blend_cmd = DeclareLaunchArgument('light_avoid_max_blend', default_value=light_avoid_max_blend)
+    light_avoid_transition_s_cmd = DeclareLaunchArgument('light_avoid_transition_s', default_value=light_avoid_transition_s)
+    light_cooldown_after_framing_s_cmd = DeclareLaunchArgument('light_cooldown_after_framing_s', default_value=light_cooldown_after_framing_s)
+    light_disable_near_finish_s_cmd = DeclareLaunchArgument('light_disable_near_finish_s', default_value=light_disable_near_finish_s)
+    light_distance_blend_gain_cmd = DeclareLaunchArgument('light_distance_blend_gain', default_value=light_distance_blend_gain)
+    light_rotation_damping_cmd = DeclareLaunchArgument('light_rotation_damping', default_value=light_rotation_damping)
+    light_yaw_smooth_alpha_cmd = DeclareLaunchArgument('light_yaw_smooth_alpha', default_value=light_yaw_smooth_alpha)
+    use_target_yaw_cmd = DeclareLaunchArgument('use_target_yaw', default_value=use_target_yaw)
+    use_light_avoid_yaw_cmd = DeclareLaunchArgument('use_light_avoid_yaw', default_value=use_light_avoid_yaw)
+    debug_light_yaw_cmd = DeclareLaunchArgument('debug_light_yaw', default_value=debug_light_yaw)
+    debug_light_period_s_cmd = DeclareLaunchArgument('debug_light_period_s', default_value=debug_light_period_s)
+
     map_generator_node = Node(
         package='map_generator',
         executable='random_forest',
@@ -121,7 +164,7 @@ def generate_launch_description():
             {'pub_rate': 1.0},
             {'min_distance': 0.8}
         ],
-        condition = IfCondition(PythonExpression([
+        condition=IfCondition(PythonExpression([
             '"true" if "', use_simulation, '" == "true" and "', use_mockamap, '" == "false" else "false"'
         ]))
     )
@@ -153,15 +196,47 @@ def generate_launch_description():
             'cy': str(243.44969177246094),
             'fx': str(387.229248046875),
             'fy': str(387.229248046875),
-            'max_vel': str(2.5),
-            'max_acc': str(7.0),
+            'max_vel': default_max_vel,
+            'max_acc': default_max_acc,
             'planning_horizon': str(7.5),
-            'use_distinctive_trajs': 'False',
+            'use_distinctive_trajs': use_distinctive_trajs,
             'realworld_experiment': PythonExpression(["'false' if '", use_simulation, "' == 'true' else 'true'"]),
             'use_sim_time': use_simulation,
             **waypoint_args
         }.items()
     )
+
+    traj_server_params = [
+        {'traj_server/time_forward': 1.0},
+        {'traj_server/use_cinematic_bspline': use_cinematic_bspline},
+        {'traj_server/default_speed_scale': default_speed_scale},
+        {'traj_server/focus_speed_scale': focus_speed_scale},
+        {'traj_server/default_max_vel': default_max_vel},
+        {'traj_server/default_max_acc': default_max_acc},
+        {'traj_server/focus_max_vel': focus_max_vel},
+        {'traj_server/focus_max_acc': focus_max_acc},
+        {'traj_server/target_distance_m': target_distance_m},
+        {'traj_server/target_distance_tol_m': target_distance_tol_m},
+        {'traj_server/target_distance_gate_m': target_distance_gate_m},
+        {'traj_server/yawdot_max': yawdot_max},
+        {'traj_server/light_avoid_gain': light_avoid_gain},
+        {'traj_server/light_influence_distance_m': light_influence_distance_m},
+        {'traj_server/light_avoid_speed_threshold': light_avoid_speed_threshold},
+        {'traj_server/light_avoid_blend_base': light_avoid_blend_base},
+        {'traj_server/light_avoid_max_blend': light_avoid_max_blend},
+        {'traj_server/light_avoid_transition_s': light_avoid_transition_s},
+        {'traj_server/light_avoid_cooldown_after_framing_s': light_cooldown_after_framing_s},
+        {'traj_server/light_disable_near_finish_s': light_disable_near_finish_s},
+        {'traj_server/light_distance_blend_gain': light_distance_blend_gain},
+        {'traj_server/light_rotation_damping': light_rotation_damping},
+        {'traj_server/light_yaw_smooth_alpha': light_yaw_smooth_alpha},
+        {'traj_server/use_target_yaw': use_target_yaw},
+        {'traj_server/use_light_avoid_yaw': use_light_avoid_yaw},
+        {'traj_server/debug_light_yaw': debug_light_yaw},
+        {'traj_server/debug_light_period_s': debug_light_period_s},
+        {'traj_server/vel_damping': vel_damping},
+        {'traj_server/acc_damping': acc_damping},
+    ]
 
     traj_server_node = Node(
         package='ego_planner',
@@ -174,10 +249,7 @@ def generate_launch_description():
             ('planning/bspline', ['drone_', drone_id, '_planning/bspline']),
             ('planning/cinematic_bspline', ['drone_', drone_id, '_planning/cinematic_bspline'])
         ],
-        parameters=[
-            {'traj_server/time_forward': 1.0},
-            {'traj_server/use_cinematic_bspline': use_cinematic_bspline}
-        ]
+        parameters=traj_server_params
     )
 
     traj_server_node_mlp = Node(
@@ -191,10 +263,7 @@ def generate_launch_description():
             ('planning/bspline', ['drone_', drone_id, '_planning/bspline']),
             ('planning/cinematic_bspline', '/mlp/corrected_bspline')
         ],
-        parameters=[
-            {'traj_server/time_forward': 1.0},
-            {'traj_server/use_cinematic_bspline': use_cinematic_bspline}
-        ]
+        parameters=traj_server_params
     )
 
     mlp_correction_node = Node(
@@ -242,6 +311,7 @@ def generate_launch_description():
         ],
     )
 
+    # Simulation-only nodes
     simulated_object_detector_node = Node(
         package="cinematographic_adjustment_agent",
         executable="simulated_object_detector",
@@ -287,6 +357,7 @@ def generate_launch_description():
         ],
     )
 
+    # Hardware-only nodes
     cost_function_calculator_node = Node(
         package="cinematographic_adjustment_agent",
         executable="cost_function_calculator",
@@ -345,6 +416,7 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
+    # Core args
     ld.add_action(map_size_x_cmd)
     ld.add_action(map_size_y_cmd)
     ld.add_action(map_size_z_cmd)
@@ -360,7 +432,38 @@ def generate_launch_description():
     ld.add_action(use_mlp_correction_cmd)
     ld.add_action(mlp_weights_path_cmd)
     ld.add_action(use_simulation_cmd)
+    ld.add_action(use_distinctive_trajs_cmd)
 
+    # Kinematic/cinematographic constraint args
+    ld.add_action(default_max_vel_cmd)
+    ld.add_action(default_max_acc_cmd)
+    ld.add_action(focus_max_vel_cmd)
+    ld.add_action(focus_max_acc_cmd)
+    ld.add_action(vel_damping_cmd)
+    ld.add_action(acc_damping_cmd)
+    ld.add_action(default_speed_scale_cmd)
+    ld.add_action(focus_speed_scale_cmd)
+    ld.add_action(target_distance_m_cmd)
+    ld.add_action(target_distance_tol_m_cmd)
+    ld.add_action(target_distance_gate_m_cmd)
+    ld.add_action(yawdot_max_cmd)
+    ld.add_action(light_avoid_gain_cmd)
+    ld.add_action(light_influence_distance_m_cmd)
+    ld.add_action(light_avoid_speed_threshold_cmd)
+    ld.add_action(light_avoid_blend_base_cmd)
+    ld.add_action(light_avoid_max_blend_cmd)
+    ld.add_action(light_avoid_transition_s_cmd)
+    ld.add_action(light_cooldown_after_framing_s_cmd)
+    ld.add_action(light_disable_near_finish_s_cmd)
+    ld.add_action(light_distance_blend_gain_cmd)
+    ld.add_action(light_rotation_damping_cmd)
+    ld.add_action(light_yaw_smooth_alpha_cmd)
+    ld.add_action(use_target_yaw_cmd)
+    ld.add_action(use_light_avoid_yaw_cmd)
+    ld.add_action(debug_light_yaw_cmd)
+    ld.add_action(debug_light_period_s_cmd)
+
+    # Nodes and includes
     ld.add_action(map_generator_node)
     ld.add_action(advanced_param_include)
     ld.add_action(traj_server_node)

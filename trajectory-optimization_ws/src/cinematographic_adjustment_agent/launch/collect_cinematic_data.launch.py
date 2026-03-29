@@ -48,6 +48,7 @@ def generate_launch_description():
          parameters=[
              {
                  "odom_topic": odom_topic,
+                 "baseline_bspline_topic": ["/drone_", drone_id, "/planning/bspline"],
                  "cinematic_bspline_topic": cinematic_topic,
                  "frame_id": WaypointParams.FRAME_ID,
                  "target_xyz": SimulationParams.TARGET_XYZ,
@@ -56,9 +57,6 @@ def generate_launch_description():
                  "use_simulated_light": SimulationParams.USE_SIMULATED_LIGHT,
                  "waypoints_topic": waypoints_topic,
                  "waypoints_file": waypoints_file,
-                 "cinematic_waypoints_topic": cinematic_topic,
-                 "cinematic_waypoints_file": cinematic_topic,
-                 "cinematic_waypoints_rate": cinematic_topic,
              }
          ],
     )

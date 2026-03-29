@@ -1,6 +1,3 @@
-# NOTE: Data collection script - waypoint dispatch via this launch file is not yet functional.
-# Use the standalone collect_baseline_data.py script directly for data collection.
-
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
