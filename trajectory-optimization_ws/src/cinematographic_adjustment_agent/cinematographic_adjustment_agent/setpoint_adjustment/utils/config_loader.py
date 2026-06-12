@@ -1,3 +1,14 @@
+"""ROS 2 parameter shim for the setpoint-adjustment node.
+
+This ``ConfigLoader`` is a different layer from
+``configs/python-constants/config_loader.py``. The latter is the low-level JSON
+loader (a process singleton that parses the config files). This class sits above
+it: given a ROS 2 ``Node``, it *declares* node parameters seeded from the
+dataclasses that the JSON loader populated, then reads back the (possibly
+launch-overridden) parameter values. The two are intentionally not merged --
+one owns file parsing, the other owns ROS parameter lifecycle.
+"""
+
 import rclpy
 from rclpy.node import Node
 from typing import Dict, Any

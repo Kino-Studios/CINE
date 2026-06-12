@@ -1,7 +1,7 @@
 {
   "mlp": {
     "use_mlp_correction": true,
-    "mlp_weights_path": "/Users/vtsyp/Desktop/HSR-2026/CINE/mlp/weights",
+    "mlp_weights_path": "mlp/weights",
     "bspline_in_topic": "/drone_0_planning/cinematic_bspline",
     "corrected_bspline_topic": "/mlp/corrected_bspline",
     "correction_delta_topic": "/mlp/correction_delta"

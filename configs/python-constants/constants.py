@@ -4,8 +4,10 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPo
 
 try:
     from .config_loader import ConfigLoader
+    from .paths import resolve_repo_path
 except (ImportError, ValueError):
     from config_loader import ConfigLoader
+    from paths import resolve_repo_path
 
 config = ConfigLoader()
 
@@ -226,7 +228,10 @@ class LightOrientationParams:
 
 class MLPParams:
     USE_MLP_CORRECTION: bool = config.get("mlp", "mlp", "use_mlp_correction", False)
-    MLP_WEIGHTS_PATH: str = config.get("mlp", "mlp", "mlp_weights_path", "")
+
+    # Stored repo-relative in JSON; resolved against the CINE repo root here so
+    # weight loading works on any checkout without hardcoded absolute paths.
+    MLP_WEIGHTS_PATH: str = resolve_repo_path(config.get("mlp", "mlp", "mlp_weights_path", ""))
     BSPLINE_IN_TOPIC: str = config.get("mlp", "mlp", "bspline_in_topic", "/drone_0_planning/cinematic_bspline")
     CORRECTED_BSPLINE_TOPIC: str = config.get("mlp", "mlp", "corrected_bspline_topic", "/mlp/corrected_bspline")
     CORRECTION_DELTA_TOPIC: str = config.get("mlp", "mlp", "correction_delta_topic", "/mlp/correction_delta")
