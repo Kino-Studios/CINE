@@ -86,8 +86,6 @@ ros_logs/
 context-text
 bashrc
 
-# Empty external deps
-Depth-Anything/
 
 *~
 
