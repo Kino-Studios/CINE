@@ -34,8 +34,8 @@ class WaypointIOMixin:
             else:
                 self.get_logger().warn(f"No valid waypoints found in file: {path}")
 
-        except Exception as e:
-            self.get_logger().error(f"Failed to load waypoints from file: {e}")
+        except (OSError, csv.Error) as error:
+            self.get_logger().error(f"Failed to load waypoints from file: {error}")
 
     def waypoints_callback(self, msg: PoseArray):
         if not msg.poses:

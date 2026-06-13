@@ -19,13 +19,14 @@ class DetectionMixin:
 
         try:
             self.cost_calculator.update_light_vector(msg)
-        except Exception:
-            pass
+        except AttributeError as error:
+            self.get_logger().debug(f"light vector update skipped: {error}")
 
     def focus_depth_callback(self, msg: Float32):
         try:
             self.focus_depth_m = float(getattr(msg, "data", None))
-        except Exception:
+        except (TypeError, ValueError) as error:
+            self.get_logger().warn(f"focus_depth_m nulled; bad Float32 data field: {error}")
             self.focus_depth_m = None
 
     def _is_published_target(self, stamp):
@@ -56,10 +57,18 @@ class DetectionMixin:
             p = msg.point
             self.target_world = (float(p.x), float(p.y), float(p.z))
             self.last_target_world = self.target_world
+        except (AttributeError, TypeError, ValueError) as error:
+            self.get_logger().warn(f"target world parse failed: {error}")
+            self.target_world = None
+            self.last_target_world = None
+            return
+
+        try:
             self._set_anchors(
                 target_world=self.target_world, obj_depth=self.focus_depth_m
             )
-        except Exception:
+        except (AttributeError, TypeError, ValueError, IndexError) as error:
+            self.get_logger().warn(f"anchor update failed; nulling target world: {error}")
             self.target_world = None
             self.last_target_world = None
 

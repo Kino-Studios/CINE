@@ -264,8 +264,10 @@ class TrajectoryDataLogger(Node):
             if header_stamp.sec != 0 or header_stamp.nanosec != 0:
                 try:
                     self._global_start_ros_time = rclpy.time.Time.from_msg(header_stamp)
-                except Exception:
-                    pass
+                except (AttributeError, TypeError, ValueError) as error:
+                    self.get_logger().debug(
+                        f'[LOGGER] ROS-time parse failed; wall-clock fallback: {error}'
+                    )
 
     def log_data(self):
         """Evaluate B-spline trajectories at 20 Hz to get planned position/velocity"""
@@ -279,7 +281,10 @@ class TrajectoryDataLogger(Node):
             try:
                 header_stamp = msg.header.stamp
                 odom_time = rclpy.time.Time.from_msg(header_stamp)
-            except Exception:
+            except (AttributeError, TypeError, ValueError) as error:
+                self.get_logger().debug(
+                    f'[LOGGER] ROS-time parse failed; wall-clock fallback: {error}'
+                )
                 odom_time = None
         if self._global_start_ros_time is None:
             self._global_start_ros_time = odom_time
@@ -381,8 +386,8 @@ class TrajectoryDataLogger(Node):
 
             return position, velocity
 
-        except Exception as e:
-            self.get_logger().error(f'Error evaluating B-spline: {e}')
+        except (AttributeError, ValueError, IndexError, ZeroDivisionError, TypeError) as error:
+            self.get_logger().error(f'Error evaluating B-spline: {error}')
             return None, None
 
     def target_world_callback(self, msg: PointStamped):
@@ -641,8 +646,8 @@ class TrajectoryDataLogger(Node):
         try:
             self.get_logger().info(f"Saving trajectory data ({reason})")
             self.save_data()
-        except Exception:
-            pass
+        except (OSError, csv.Error, ValueError) as error:
+            self.get_logger().warn(f"failed to save trajectory data on exit: {error}")
 
     def _write_csv(self, path: Path, rows: list[dict]):
         if not rows:

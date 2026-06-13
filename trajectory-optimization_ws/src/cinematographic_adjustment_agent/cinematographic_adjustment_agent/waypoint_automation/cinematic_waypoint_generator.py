@@ -585,8 +585,8 @@ class CinematicWaypointGenerator(
         self.velocity_settled = velocity_mag < self.VELOCITY_THRESHOLD
         try:
             self.cost_calculator.update_odometry(msg)
-        except Exception:
-            pass
+        except AttributeError as error:
+            self.get_logger().warn(f"odometry update skipped: malformed message ({error})")
 
 def main(args=None):
     rclpy.init(args=args)

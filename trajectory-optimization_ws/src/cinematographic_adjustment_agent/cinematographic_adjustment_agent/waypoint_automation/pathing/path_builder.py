@@ -69,14 +69,16 @@ class PathBuilderMixin:
 
         try:
             total = math.dist(candidate_world, target_world)
-        except Exception:
+        except (ValueError, TypeError):
             return None
 
         if reference_world is not None:
             try:
                 total += math.dist(candidate_world, reference_world)
-            except Exception:
-                pass
+            except (ValueError, TypeError) as error:
+                self.get_logger().debug(
+                    f"fallback cost skipped reference distance: {error}"
+                )
         return total
 
     def _sample_cubic_bezier(self, p0, p1, p2, p3, n_points):

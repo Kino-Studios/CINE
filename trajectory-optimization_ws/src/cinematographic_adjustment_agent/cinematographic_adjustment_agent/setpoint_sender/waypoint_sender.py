@@ -1,4 +1,8 @@
 import rclpy
+from rclpy.exceptions import (
+    ParameterAlreadyDeclaredException,
+    ParameterNotDeclaredException,
+)
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from geometry_msgs.msg import PoseStamped
@@ -12,7 +16,7 @@ class WaypointPublisher:
         try:
             node.declare_parameter("frame_id", "map")
             self.frame_id = str(node.get_parameter("frame_id").value)
-        except Exception:
+        except (ParameterAlreadyDeclaredException, ParameterNotDeclaredException):
             self.frame_id = "map"
         self.goal_pub = node.create_publisher(
             PoseStamped,

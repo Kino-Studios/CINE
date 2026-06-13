@@ -4,7 +4,7 @@ add_config_path()
 
 import numpy as np
 import rclpy
-from cv_bridge import CvBridge
+from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from rclpy.executors import MultiThreadedExecutor
@@ -124,12 +124,12 @@ class CinematographicPlannerNode(Node):
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
             self.cost_calculator.update_bgr_image(cv_image)
-        except Exception:
+        except CvBridgeError:
             try:
                 cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
                 self.cost_calculator.update_bgr_image(cv_image)
-            except Exception as e:
-                self.get_logger().warn(f'Image callback error: {e}')
+            except CvBridgeError as error:
+                self.get_logger().warn(f'Image callback error: {error}')
 
     def depth_callback(self, msg: Image):
         try:
@@ -145,8 +145,8 @@ class CinematographicPlannerNode(Node):
                 z = float(depth[vv, uu])
                 if z > 0 and not np.isnan(z):
                     self.tracker.record_depth(z)
-        except Exception as e:
-            self.get_logger().warn(f'Depth callback error: {e}')
+        except (CvBridgeError, ValueError, IndexError) as error:
+            self.get_logger().warn(f'Depth callback error: {error}')
 
     def _dt(self) -> float:
         now_s = self.get_clock().now().nanoseconds / 1e9

@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 import rclpy
-from cv_bridge import CvBridge
+from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import Vector3Stamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
@@ -82,12 +82,14 @@ class LightVectorAnalysisNode(Node):
 
         try:
             import cv2
-        except Exception:
+        except ImportError:
+            self.get_logger().warn("cv2 unavailable; skipping light vector analysis")
             return
 
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-        except Exception:
+        except CvBridgeError as error:
+            self.get_logger().warn(f"cv_bridge conversion failed: {error}")
             return
 
         if cv_image.ndim == 3 and cv_image.shape[2] == 3:

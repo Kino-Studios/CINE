@@ -39,7 +39,8 @@ class OrbitWaypointGenerator(Node):
 
             self._PositionTarget = PositionTarget
             self.setpoint_pub = self.create_publisher(PositionTarget, "/mavros/setpoint_raw/local", 10)
-        except Exception:
+        except ImportError:
+            self.get_logger().warn("mavros_msgs unavailable; setpoint publishing disabled")
             self._PositionTarget = None
             self.setpoint_pub = None
 
@@ -69,13 +70,15 @@ class OrbitWaypointGenerator(Node):
         try:
             p = msg.point
             self.target_world = (float(p.x), float(p.y), float(p.z))
-        except Exception:
+        except (AttributeError, TypeError, ValueError) as error:
+            self.get_logger().warn(f"target_world nulled; bad PointStamped point field: {error}")
             self.target_world = None
 
     def focus_depth_callback(self, msg: Float32):
         try:
             self.focus_depth_m = float(getattr(msg, "data", None))
-        except Exception:
+        except (TypeError, ValueError) as error:
+            self.get_logger().warn(f"focus_depth_m nulled; bad Float32 data field: {error}")
             self.focus_depth_m = None
 
     def evaluate_cost_at_position(self, x: float, y: float, z: float) -> Optional[float]:

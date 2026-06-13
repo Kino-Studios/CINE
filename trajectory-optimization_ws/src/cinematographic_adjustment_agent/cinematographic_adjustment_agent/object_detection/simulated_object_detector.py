@@ -3,7 +3,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Point32, PolygonStamped
 from std_msgs.msg import Bool, Float32MultiArray
-from cv_bridge import CvBridge
+from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 import cv2
 
@@ -90,8 +90,8 @@ class SimulatedObjectDetector(Node):
             else:
                 self._republish_cached_detection()
                 
-        except Exception as e:
-            self.get_logger().error(f'Error processing depth image: {e}')
+        except (CvBridgeError, ValueError, cv2.error) as error:
+            self.get_logger().warn(f'Error processing depth image: {error}')
     
     def detect_objects(self, depth_image):
         depth_clean = np.copy(depth_image)

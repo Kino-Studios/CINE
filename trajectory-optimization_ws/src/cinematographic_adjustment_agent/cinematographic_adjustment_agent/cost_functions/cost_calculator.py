@@ -2,6 +2,7 @@ from cinematographic_adjustment_agent.utils.paths import add_config_path
 
 add_config_path()
 
+import logging
 import math
 from typing import Dict, Optional
 
@@ -14,11 +15,35 @@ from constants import (
     ROSParams,
     UserRequestedParams,
     ImageParams,
+    CinematographyParams,
     CostParams,
     LightOrientationParams,
     LightAvoidanceParams,
     SimulationParams,
 )
+
+COLLISION_DEPTH_MARGIN_M: float = 0.5
+FOCUS_YAW_HOLD_DEADBAND_RAD: float = math.radians(2.0)
+
+try:
+    from rclpy.exceptions import (
+        ParameterAlreadyDeclaredException,
+        ParameterNotDeclaredException,
+    )
+except ImportError:  # rclpy unavailable outside a ROS environment (e.g. unit tests)
+    class ParameterAlreadyDeclaredException(Exception):
+        pass
+
+    class ParameterNotDeclaredException(Exception):
+        pass
+
+PARAMETER_READ_ERRORS = (
+    ParameterNotDeclaredException,
+    TypeError,
+    ValueError,
+)
+
+_logger = logging.getLogger(__name__)
 class CostCalculator:
     def __init__(self, node):
         self.node = node
@@ -39,6 +64,7 @@ class CostCalculator:
         self.ROSParams = ROSParams
         self.UserRequestedParams = UserRequestedParams
         self.ImageParams = ImageParams
+        self.CinematographyParams = CinematographyParams()
         self.CostParams = CostParams
         self.LightOrientationParams = LightOrientationParams
         self.LightAvoidanceParams = LightAvoidanceParams
@@ -94,7 +120,7 @@ class CostCalculator:
         self._declare_parameter("light_roll_gain", LightOrientationParams.ROLL_GAIN)
         self._declare_parameter("light_pitch_gain", LightOrientationParams.PITCH_GAIN)
         self._declare_parameter("light_yaw_gain", LightOrientationParams.YAW_GAIN)
-        self._declare_parameter("focus_yaw_hold_deadband_rad", math.radians(2.0))
+        self._declare_parameter("focus_yaw_hold_deadband_rad", FOCUS_YAW_HOLD_DEADBAND_RAD)
         self._declare_parameter(
             "light_distance_bias_m", CostParams.LIGHT_DISTANCE_BIAS_M
         )
@@ -130,38 +156,38 @@ class CostCalculator:
             "framing_vertical_weight", CostParams.FRAMING_VERTICAL_WEIGHT
         )
 
-        self._declare_parameter("camera_fx", self.ImageParams.CAMERA_FX)
-        self._declare_parameter("camera_fy", self.ImageParams.CAMERA_FY)
-        self._declare_parameter("camera_cx", self.ImageParams.CAMERA_CX)
-        self._declare_parameter("camera_cy", self.ImageParams.CAMERA_CY)
-        self._declare_parameter("collision_depth_margin_m", 0.5)
+        self._declare_parameter("camera_fx", self.CinematographyParams.CAMERA_FX)
+        self._declare_parameter("camera_fy", self.CinematographyParams.CAMERA_FY)
+        self._declare_parameter("camera_cx", self.CinematographyParams.CAMERA_CX)
+        self._declare_parameter("camera_cy", self.CinematographyParams.CAMERA_CY)
+        self._declare_parameter("collision_depth_margin_m", COLLISION_DEPTH_MARGIN_M)
 
         self._last_framing_log_time = 0.0
 
     def _declare_parameter(self, name: str, default):
         try:
             self.node.declare_parameter(name, default)
-        except Exception:
+        except ParameterAlreadyDeclaredException:
             return
 
     def _get_bool_parameter(self, name: str, default: bool) -> bool:
         try:
             return bool(self.node.get_parameter(name).value)
-        except Exception:
+        except PARAMETER_READ_ERRORS:
             return bool(default)
 
     def _light_avoidance_enabled(self) -> bool:
         try:
             return bool(self.node.get_parameter("light_avoidance_enabled").value)
-        except Exception:
+        except PARAMETER_READ_ERRORS:
             return bool(self.LightAvoidanceParams.ENABLED)
 
     def _image_size(self) -> tuple[float, float]:
         try:
-            w = float(self.node.get_parameter("image_width").value)
-            h = float(self.node.get_parameter("image_height").value)
-            return max(1.0, w), max(1.0, h)
-        except Exception:
+            width = float(self.node.get_parameter("image_width").value)
+            height = float(self.node.get_parameter("image_height").value)
+            return max(1.0, width), max(1.0, height)
+        except PARAMETER_READ_ERRORS:
             return float(self.ImageParams.IMAGE_WIDTH), float(
                 self.ImageParams.IMAGE_HEIGHT
             )
@@ -181,7 +207,7 @@ class CostCalculator:
         try:
             if bool(self.node.get_parameter("use_simulated_light").value):
                 return 1.0
-        except Exception:
+        except PARAMETER_READ_ERRORS:
             pass
 
         if self.light_distance is None:
@@ -191,7 +217,7 @@ class CostCalculator:
                 self.node.get_parameter("light_distance_attenuation_m").value
             )
 
-        except Exception:
+        except PARAMETER_READ_ERRORS:
             max_range = 0.0
         if max_range <= 0.0:
             return 1.0
@@ -550,7 +576,7 @@ class CostCalculator:
         current_time = None
         try:
             current_time = self.node.get_clock().now().nanoseconds / 1e9
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
         img_w, img_h = self._image_size()
@@ -798,7 +824,7 @@ class CostCalculator:
             pitch_error = self._angle_diff(pitch_setpoint, pitch_val)
             roll_error = self._angle_diff(roll_setpoint, roll_val)
 
-        focus_deadband = math.radians(2.0)
+        focus_deadband = FOCUS_YAW_HOLD_DEADBAND_RAD
         try:
             focus_deadband = max(
                 0.0,
@@ -806,7 +832,7 @@ class CostCalculator:
                     self.node.get_parameter("focus_yaw_hold_deadband_rad").value
                 ),
             )
-        except Exception:
+        except PARAMETER_READ_ERRORS:
             pass
 
         focus_cinematic_active = focus_override and (
@@ -872,110 +898,6 @@ class CostCalculator:
             "actual_roll": float(actual_roll),
         }
 
-    def estimate_cost_at_position(
-        self,
-        drone_x: float,
-        drone_y: float,
-        drone_z: float,
-        target_world_x: float,
-        target_world_y: float,
-        target_world_z: float,
-    ) -> Optional[float]:
-
-        dx = target_world_x - drone_x
-        dy = target_world_y - drone_y
-        dz = target_world_z - drone_z
-        distance = math.sqrt(dx * dx + dy * dy + dz * dz)
-
-        d_star = self._resolve_desired_focus_distance()
-        d_min = self.UserRequestedParams.FOCUS_DISTANCE_MIN_M
-
-        J_dist = math.pow(distance - d_star, 2)
-        J_near = math.pow(d_min - distance, 2) if distance < d_min else 0.0
-
-        if hasattr(self, "_prev_Z") and self._prev_Z is not None:
-            J_stab = 0.0
-        else:
-            prev_Z = getattr(self, "_prev_Z", distance)
-            J_stab = math.pow(distance - prev_Z, 2)
-
-        w_dist = float(self.node.get_parameter("w_dist").value)
-        w_near = float(self.node.get_parameter("w_near").value)
-        w_stab = float(self.node.get_parameter("w_stab").value)
-        depth_cost = (w_dist * J_dist) + (w_near * J_near) + (w_stab * J_stab)
-
-        img_w, img_h = self._image_size()
-
-        if self.center_point is not None and len(self.center_point.polygon.points) > 0:
-            u_current = float(self.center_point.polygon.points[0].x)
-            v_current = float(self.center_point.polygon.points[0].y)
-        elif (
-            self.bounding_box is not None and len(self.bounding_box.polygon.points) >= 2
-        ):
-            points = self.bounding_box.polygon.points
-            u_current = float(np.mean([p.x for p in points]))
-            v_current = float(np.mean([p.y for p in points]))
-        else:
-            u_current = img_w / 2.0
-            v_current = img_h / 2.0
-
-        u_star = img_w * self.UserRequestedParams.THIRDS_ANCHOR[0]
-        v_star = img_h * self.UserRequestedParams.THIRDS_ANCHOR[1]
-
-        du_est = u_current - u_star
-        dv_est = v_current - v_star
-
-        deadband = float(self.node.get_parameter("deadband_px").value)
-        delta_px = float(self.node.get_parameter("huber_delta_px").value)
-
-        du_est = 0.0 if abs(du_est) < deadband else du_est
-        dv_est = 0.0 if abs(dv_est) < deadband else dv_est
-
-        w_framing = float(self.node.get_parameter("w_framing").value)
-        framing_cost = w_framing * (
-            self.huber_function(du_est, delta_px)
-            + self.huber_function(dv_est, delta_px)
-        )
-
-        total_cost = depth_cost + framing_cost
-        return total_cost
-
-    def estimate_full_cost_at_position(
-        self,
-        drone_x: float,
-        drone_y: float,
-        drone_z: float,
-        target_world_x: float,
-        target_world_y: float,
-        target_world_z: float,
-        reference_drone_x: Optional[float] = None,
-        reference_drone_y: Optional[float] = None,
-        reference_drone_z: Optional[float] = None,
-    ) -> Optional[float]:
-        include_framing = self._get_bool_parameter(
-            "include_framing_in_orientation_cost",
-            self.CostParams.INCLUDE_FRAMING_IN_ORIENTATION_COST,
-        )
-        include_lighting = self._get_bool_parameter(
-            "include_lighting_in_orientation_cost",
-            self.CostParams.INCLUDE_LIGHTING_IN_ORIENTATION_COST,
-        )
-
-        depth_cost, lighting_cost, smoothness_cost, framing_cost = self._compute_cost_components(
-            drone_x,
-            drone_y,
-            drone_z,
-            target_world_x,
-            target_world_y,
-            target_world_z,
-            reference_drone_x,
-            reference_drone_y,
-            reference_drone_z,
-            include_framing=include_framing,
-            include_lighting=include_lighting,
-        )
-        return float(depth_cost + framing_cost + lighting_cost + smoothness_cost)
-
     def estimate_position_cost_at_position(
         self,
         drone_x: float,
@@ -1028,7 +950,7 @@ class CostCalculator:
             cx = float(self.node.get_parameter("camera_cx").value)
             cy = float(self.node.get_parameter("camera_cy").value)
             margin = float(self.node.get_parameter("collision_depth_margin_m").value)
-        except Exception:
+        except PARAMETER_READ_ERRORS:
             return False
 
         h, w = self.depth_image.shape[:2]
@@ -1170,7 +1092,7 @@ class CostCalculator:
                 if include_framing:
                     try:
                         fx = float(self.node.get_parameter("camera_fx").value)
-                    except Exception:
+                    except PARAMETER_READ_ERRORS:
                         fx = None
 
                     if fx is not None and fx > 0.0:

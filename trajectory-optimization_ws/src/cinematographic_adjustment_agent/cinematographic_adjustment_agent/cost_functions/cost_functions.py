@@ -80,15 +80,20 @@ class CostFunctionCalculatorNode(Node):
 
     def _depth_cb(self, msg: Image):
         try:
-            from cv_bridge import CvBridge
+            from cv_bridge import CvBridge, CvBridgeError
+        except ImportError:
+            self.get_logger().warn("cv_bridge unavailable; skipping depth update")
+            return
 
+        try:
             bridge = getattr(self, "_bridge", None)
             if bridge is None:
                 bridge = CvBridge()
                 self._bridge = bridge
             depth = bridge.imgmsg_to_cv2(msg, desired_encoding="32FC1")
             self.cost_calculator.update_depth_image(depth)
-        except Exception:
+        except CvBridgeError as error:
+            self.get_logger().warn(f"depth image conversion failed: {error}")
             return
 
     def _center_cb(self, msg: PolygonStamped):

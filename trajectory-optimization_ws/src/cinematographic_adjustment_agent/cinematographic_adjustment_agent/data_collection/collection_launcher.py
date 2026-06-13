@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import glob
+import logging
 import os
 import shutil
 import signal
@@ -32,6 +33,8 @@ def _add_config_path() -> None:
 
 _add_config_path()
 from constants import SimulationParams, WaypointParams  # noqa: E402
+
+_logger = logging.getLogger(__name__)
 
 _ROS_PACKAGE = "cinematographic_adjustment_agent"
 
@@ -175,7 +178,7 @@ def _resolve_param(
         return value
     try:
         return parser(value)
-    except Exception:
+    except (ValueError, TypeError, SyntaxError):
         return value
 
 
@@ -190,11 +193,11 @@ def _ros2_node_list() -> list[str]:
         )
         if result.returncode != 0:
             if result.stderr:
-                print(f"\n[collection] ros2 node list error: {result.stderr.strip()}")
+                _logger.warning("ros2 node list error: %s", result.stderr.strip())
             return []
         return [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    except Exception as e:
-        print(f"\n[collection] failed to run ros2 node list: {e}")
+    except (OSError, subprocess.SubprocessError) as error:
+        _logger.warning("failed to run ros2 node list: %s", error)
         return []
 
 
@@ -212,7 +215,7 @@ def _wait_for_node(node_name: str, timeout_s: float = 30.0) -> bool:
 
 
 def _start_process(cmd: Iterable[str], label: str) -> subprocess.Popen:
-    print(f"[collection] launching {label}: {' '.join(cmd)}")
+    _logger.info("launching %s: %s", label, " ".join(cmd))
     return subprocess.Popen(list(cmd), env=os.environ, start_new_session=True)
 
 
@@ -238,7 +241,7 @@ def _cleanup_procs(procs: list[subprocess.Popen | None]) -> None:
 
 
 def _safety_cleanup() -> None:
-    print("[collection] performing final safety cleanup...")
+    _logger.info("performing final safety cleanup...")
     for target in _SAFETY_CLEANUP_TARGETS:
         subprocess.run(["pkill", "-f", target], capture_output=True)
 
@@ -300,15 +303,15 @@ def _launch_simulation(
         stderr=subprocess.STDOUT,
         env=os.environ,
     )
-    print("starting simulation...")
+    _logger.info("starting simulation...")
 
     if not _wait_for_node(ego_node_name, timeout_s=30):
-        print(f"simulation failed to start; check {log_path}")
+        _logger.error("simulation failed to start; check %s", log_path)
         sim_proc.terminate()
         log_handle.close()
         return sim_proc, log_handle, False
 
-    print(f"simulation initialized successfully! log: {log_path}")
+    _logger.info("simulation initialized successfully! log: %s", log_path)
     return sim_proc, log_handle, True
 
 
@@ -426,7 +429,7 @@ def _run_collection(
     try:
         _run_event_loop(child_procs)
     finally:
-        print("stopping data collection.")
+        _logger.info("stopping data collection.")
         _cleanup_procs(child_procs + [sim_proc])
         if sim_log_handle:
             sim_log_handle.close()

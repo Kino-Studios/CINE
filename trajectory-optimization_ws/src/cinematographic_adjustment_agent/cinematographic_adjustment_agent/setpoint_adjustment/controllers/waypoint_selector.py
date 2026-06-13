@@ -135,8 +135,8 @@ class WaypointSelector:
                 )
 
                 return orbit
-            except Exception as e:
-                self.node.get_logger().warn(f'Optimization cost failed: {e}')
+            except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as error:
+                self.node.get_logger().warn(f'Optimization cost failed: {error}')
 
         orbit = generate_orbit_waypoints_xy(
             center_xy_m=center_xy,
@@ -192,5 +192,5 @@ class WaypointSelector:
                 f'Optimized orbit: center=({opt_center[0]:.2f}, {opt_center[1]:.2f}), '
                 f'radius={opt_radius:.2f}m'
             )
-        except Exception as e:
-            self.node.get_logger().warn(f'Orbit optimization failed: {e}')
+        except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as error:
+            self.node.get_logger().warn(f'Orbit optimization failed: {error}')
