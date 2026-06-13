@@ -1,3 +1,37 @@
+"""Stateful cinematographic cost calculator for a single drone.
+
+``CostCalculator`` accumulates sensor observations (depth image, bounding box,
+odometry, light vector) and on each call to ``calculate_cost()`` returns a dict
+of weighted scalar costs used to steer the cinematographic B-spline filter and
+the cinematic waypoint generator.
+
+Cost terms
+----------
+framing_cost
+    Huber-penalised pixel offset of the detected subject centre from the
+    rule-of-thirds anchor (pixels; image-plane frame).  Anchor and deadband
+    come from ``UserRequestedParams``.
+distance_cost
+    Weighted sum of squared deviation from the desired focus depth
+    (``desired_focus_distance_m``, metres), a proximity penalty below
+    ``focus_distance_min_m``, and a temporal depth-rate stability term.
+lighting_cost
+    Forward-dot-light penalty active only while framing is engaged and
+    ``light_avoidance_enabled`` is true.  Scaled by distance attenuation and
+    image saturation fraction near the brightest pixel.
+smoothness_cost
+    L2 norm of angular-velocity delta between successive odometry callbacks
+    (rad/s per callback interval), weighted by ``w_smooth``.
+
+All position/depth quantities are in metres; angles in radians.  Odometry is
+expected in the world (ENU) frame as ``nav_msgs/Odometry``; the orientation
+quaternion is [x, y, z, w].  Camera intrinsics (fx, fy, cx, cy) are read from
+``CinematographyParams`` and can be overridden via ROS 2 node parameters.
+
+``estimate_position_cost_at_position()`` provides a geometry-only cost estimate
+for candidate waypoint positions without requiring a live depth image.
+"""
+
 from cinematographic_adjustment_agent.utils.paths import add_config_path
 
 add_config_path()

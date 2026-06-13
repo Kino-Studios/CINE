@@ -1,3 +1,33 @@
+"""ROS 2 node that sequences and publishes cinematographic waypoints.
+
+``CinematicWaypointGenerator`` owns the waypoint schedule for one drone.  It
+maintains a list of static (pre-planned) waypoints and, when a subject is
+detected, splices in dynamically generated arc waypoints around the subject
+using cost-guided candidate selection.
+
+Coordinate frames and units
+----------------------------
+All waypoint positions are in the world (ENU) frame, metres.  Yaw angles are
+radians, measured from the positive-X axis.  Odometry is received as
+``nav_msgs/Odometry``; orientation quaternion convention is [x, y, z, w].
+
+Waypoint sources (in priority order)
+--------------------------------------
+1. File: path supplied via the ``waypoints_file`` ROS parameter.
+2. Topic: ``PoseArray`` received on ``waypoints_topic``.
+3. Hardcoded ``static_waypoints`` list (fallback, used in simulation).
+
+When ``use_dynamic_waypoints_on_detection`` is true and a subject detection
+arrives on the ``detections_topic`` (``Float32MultiArray``), the node generates
+candidate arc positions around the detected subject and selects the one with the
+lowest cinematographic cost (framing + focus distance + light avoidance).  The
+anchor window (``anchor_start_index``, ``anchor_end_index``) marks the sub-path
+along which cinematic framing is active.
+
+``baseline_mode`` disables dynamic waypoint merging and subject tracking,
+producing plain EGO-Planner setpoints for comparison data collection.
+"""
+
 from cinematographic_adjustment_agent.utils.paths import add_config_path
 
 add_config_path()

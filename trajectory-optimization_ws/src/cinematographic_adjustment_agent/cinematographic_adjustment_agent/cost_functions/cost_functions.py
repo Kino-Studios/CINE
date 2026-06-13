@@ -1,3 +1,30 @@
+"""ROS 2 node that publishes cinematographic cost terms and orientation setpoints.
+
+``CostFunctionCalculatorNode`` wraps ``CostCalculator`` as a timed ROS 2 node.
+It subscribes to depth, detection, odometry, and light-vector topics; calls
+``CostCalculator.calculate_cost()`` at a configurable rate; and publishes the
+results as ``cinematography_msgs/CinematographyCosts`` on
+``/cinematography/cinematography_costs``.
+
+Additional publishers
+---------------------
+/cinematography/focus_depth_m       (std_msgs/Float32)
+    Median depth of the subject bounding-box ROI, metres.
+/cinematography/focus_center_depth_m (std_msgs/Float32)
+    Depth at the detected subject centre pixel, metres.
+/cinematography/focus_roi_depth_median_m (std_msgs/Float32)
+    Median depth over the ROI window around the centre point, metres.
+/cinematography/target_world        (geometry_msgs/PointStamped)
+    Estimated world-frame position of the subject, back-projected from the
+    centre pixel and current odometry; frame_id matches the ``frame_id``
+    parameter (default ``"map"``).
+
+Camera intrinsics are declared as node parameters (``camera_fx``, ``camera_fy``,
+``camera_cx``, ``camera_cy``) and default to values from ``CinematographyParams``.
+All depth values are in metres; angles in radians; positions in the ENU world
+frame unless ``frame_id`` is overridden.
+"""
+
 from cinematographic_adjustment_agent.utils.paths import add_config_path
 
 add_config_path()
