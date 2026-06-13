@@ -3,7 +3,7 @@
             schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>mlp_correction</name>
-  <version>0.0.1</version>
+  <version>1.0.0</version>
   <description>
     MLP setpoint correction interceptor node for cinematic drone trajectory control.
     Subscribes to /drone_0_planning/cinematic_bspline, applies learned position

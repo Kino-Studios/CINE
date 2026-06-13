@@ -1,11 +1,15 @@
 # pip install -r requirements.txt
 
-numpy>=1.24
-opencv-python>=4.8
-scipy>=1.11
-matplotlib>=3.7
-pandas>=2.0
-pillow>=10.0
-torch>=2.0
-torchvision>=0.15
-onnxruntime>=1.16
+numpy>=1.24,<2.0
+opencv-python>=4.8,<5.0
+scipy>=1.11,<2.0
+matplotlib>=3.7,<4.0
+pandas>=2.0,<3.0
+pillow>=10.0,<13.0
+torch>=2.0,<3.0
+torchvision>=0.15,<1.0
+onnxruntime>=1.16,<2.0
+
+# Known-good exact versions (system Python, 2026-06-13):
+# numpy==2.4.6
+# pillow==12.2.0

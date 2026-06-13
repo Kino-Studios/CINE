@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>cinematography_msgs</name>
-  <version>0.0.0</version>
+  <version>1.0.0</version>
   <description>Custom ROS 2 message definitions for the CINE cinematographic drone system</description>
   <maintainer email="fishnos@users.noreply.github.com">fishnos</maintainer>
   <license>GPL-3.0-only</license>
