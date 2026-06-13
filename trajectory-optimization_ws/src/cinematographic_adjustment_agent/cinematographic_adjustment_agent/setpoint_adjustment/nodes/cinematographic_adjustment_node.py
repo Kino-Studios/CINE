@@ -4,24 +4,24 @@ add_config_path()
 
 import numpy as np
 import rclpy
+from cinematography_msgs.msg import CinematographyCosts
+from constants import SensorNoiseParams
 from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from cinematography_msgs.msg import CinematographyCosts
 
-from constants import SensorNoiseParams
 from cinematographic_adjustment_agent.cost_functions.cost_calculator import CostCalculator
-from cinematographic_adjustment_agent.setpoint_sender.waypoint_sender import WaypointPublisher
 from cinematographic_adjustment_agent.sensor_noise.noisy_odometry import NoisyOdometryNode
+from cinematographic_adjustment_agent.setpoint_sender.waypoint_sender import WaypointPublisher
 
-from ..utils.config_loader import ConfigLoader
-from ..utils.state_tracker import StateTracker
 from ..controllers.kinematics_controller import KinematicsController
 from ..controllers.target_computer import TargetComputer
 from ..controllers.waypoint_selector import WaypointSelector
+from ..utils.config_loader import ConfigLoader
+from ..utils.state_tracker import StateTracker
 
 
 class CinematographicPlannerNode(Node):
@@ -41,8 +41,7 @@ class CinematographicPlannerNode(Node):
 
         self.cost_calculator = CostCalculator(self)
         self.tracker = StateTracker(
-            look_duration_s=self.config.params.LOOK_DURATION_S,
-            depth_window_size=15
+            look_duration_s=self.config.params.LOOK_DURATION_S, depth_window_size=15
         )
         self.target_computer = TargetComputer(self.config, self.tracker, self.cost_calculator)
         self.kinematics_controller = KinematicsController(self.config)
@@ -56,7 +55,9 @@ class CinematographicPlannerNode(Node):
             10,
         )
         self.waypoint_pub_node = WaypointPublisher(self, self.config.params.WAYPOINTS_TOPIC)
-        self.timer = self.create_timer(1.0 / max(1.0, self.config.params.WAYPOINT_RATE_HZ), self.tick)
+        self.timer = self.create_timer(
+            1.0 / max(1.0, self.config.params.WAYPOINT_RATE_HZ), self.tick
+        )
 
     def setup_subscriptions(self) -> None:
         self.center_sub = self.create_subscription(
@@ -76,7 +77,10 @@ class CinematographicPlannerNode(Node):
         )
         if self.config.light_avoidance_enabled:
             self.light_vector_sub = self.create_subscription(
-                Vector3Stamped, self.config.params.LIGHT_VECTOR_TOPIC, self.light_vector_callback, 10
+                Vector3Stamped,
+                self.config.params.LIGHT_VECTOR_TOPIC,
+                self.light_vector_callback,
+                10,
             )
         else:
             self.light_vector_sub = None
@@ -101,17 +105,17 @@ class CinematographicPlannerNode(Node):
         self.cost_calculator.update_dimensions(msg)
 
     def odom_callback(self, msg: Odometry):
-        self.drone_position = np.array([
-            msg.pose.pose.position.x,
-            msg.pose.pose.position.y,
-            msg.pose.pose.position.z
-        ])
-        self.drone_orientation = np.array([
-            msg.pose.pose.orientation.x,
-            msg.pose.pose.orientation.y,
-            msg.pose.pose.orientation.z,
-            msg.pose.pose.orientation.w
-        ])
+        self.drone_position = np.array(
+            [msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z]
+        )
+        self.drone_orientation = np.array(
+            [
+                msg.pose.pose.orientation.x,
+                msg.pose.pose.orientation.y,
+                msg.pose.pose.orientation.z,
+                msg.pose.pose.orientation.w,
+            ]
+        )
         self.has_odom = True
         self.cost_calculator.update_odometry(msg)
 
@@ -129,7 +133,7 @@ class CinematographicPlannerNode(Node):
                 cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
                 self.cost_calculator.update_bgr_image(cv_image)
             except CvBridgeError as error:
-                self.get_logger().warn(f'Image callback error: {error}')
+                self.get_logger().warn(f"Image callback error: {error}")
 
     def depth_callback(self, msg: Image):
         try:
@@ -146,7 +150,7 @@ class CinematographicPlannerNode(Node):
                 if z > 0 and not np.isnan(z):
                     self.tracker.record_depth(z)
         except (CvBridgeError, ValueError, IndexError) as error:
-            self.get_logger().warn(f'Depth callback error: {error}')
+            self.get_logger().warn(f"Depth callback error: {error}")
 
     def _dt(self) -> float:
         now_s = self.get_clock().now().nanoseconds / 1e9
@@ -160,14 +164,14 @@ class CinematographicPlannerNode(Node):
     def publish_costs(self):
         cost_result = self.cost_calculator.calculate_cost()
         if cost_result is not None and isinstance(cost_result, dict):
-            total_cost = cost_result.get('total_cost', 0.0)
+            total_cost = cost_result.get("total_cost", 0.0)
             msg = CinematographyCosts()
             msg.header.stamp = self.get_clock().now().to_msg()
             msg.header.frame_id = "map"
-            msg.light_cost = float(cost_result.get('lighting_cost', 0.0))
-            msg.framing_cost = float(cost_result.get('framing_cost', 0.0))
-            msg.smoothness_cost = float(cost_result.get('smoothness_cost', 0.0))
-            msg.distance_cost = float(cost_result.get('distance_cost', 0.0))
+            msg.light_cost = float(cost_result.get("lighting_cost", 0.0))
+            msg.framing_cost = float(cost_result.get("framing_cost", 0.0))
+            msg.smoothness_cost = float(cost_result.get("smoothness_cost", 0.0))
+            msg.distance_cost = float(cost_result.get("distance_cost", 0.0))
             msg.total_cost = float(total_cost)
             self.cost_pub.publish(msg)
 
@@ -182,7 +186,9 @@ class CinematographicPlannerNode(Node):
         now = self.get_clock().now()
         current_time_s = now.nanoseconds / 1e9
 
-        target_world = self.target_computer.compute_target_world_position(self.drone_position, self.has_odom)
+        target_world = self.target_computer.compute_target_world_position(
+            self.drone_position, self.has_odom
+        )
         if target_world is None:
             return
 
@@ -190,7 +196,7 @@ class CinematographicPlannerNode(Node):
             current_time=current_time_s,
             target_world=target_world,
             drone_position=self.drone_position,
-            cost_estimation_func=self.cost_calculator.estimate_position_cost_at_position
+            cost_estimation_func=self.cost_calculator.estimate_position_cost_at_position,
         )
 
         opt_center = self.waypoint_selector.optimized_center
@@ -216,8 +222,12 @@ class CinematographicPlannerNode(Node):
         if desired is None:
             return
 
-        next_pos = self.kinematics_controller.next_kinematic_step(desired, self.drone_position, dt, self.has_focus)
-        self.waypoint_pub_node.publish_single_waypoint(float(next_pos[0]), float(next_pos[1]), float(next_pos[2]))
+        next_pos = self.kinematics_controller.next_kinematic_step(
+            desired, self.drone_position, dt, self.has_focus
+        )
+        self.waypoint_pub_node.publish_single_waypoint(
+            float(next_pos[0]), float(next_pos[1]), float(next_pos[2])
+        )
 
 
 def main(args=None):

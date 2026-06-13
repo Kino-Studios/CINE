@@ -2,12 +2,16 @@ import numpy as np
 from geometry_msgs.msg import Point
 from traj_utils.msg import Bspline
 
+
 def msg_to_arrays(msg: Bspline):
     pos_pts = np.array([[p.x, p.y, p.z] for p in msg.pos_pts], dtype=float)
     knots = np.array(msg.knots, dtype=float)
     return pos_pts, knots
 
-def arrays_to_msg(original: Bspline, pos_pts: np.ndarray, knots: np.ndarray | None = None) -> Bspline:
+
+def arrays_to_msg(
+    original: Bspline, pos_pts: np.ndarray, knots: np.ndarray | None = None
+) -> Bspline:
     out = Bspline()
     out.drone_id = original.drone_id
     out.order = original.order
@@ -18,7 +22,7 @@ def arrays_to_msg(original: Bspline, pos_pts: np.ndarray, knots: np.ndarray | No
         out.knots = list(original.knots)
     else:
         out.knots = [float(k) for k in knots]
-        
+
     out.yaw_pts = list(original.yaw_pts)
     out.yaw_dt = original.yaw_dt
     out.pos_pts = []

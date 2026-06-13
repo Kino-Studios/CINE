@@ -1,9 +1,10 @@
+import sys
+from pathlib import Path
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-import sys
-from pathlib import Path
 
 here = Path(__file__).resolve()
 for parent in [here] + list(here.parents):
@@ -14,6 +15,7 @@ for parent in [here] + list(here.parents):
         break
 
 from constants import SimulationParams, WaypointParams
+
 
 def generate_launch_description():
     drone_id_arg = DeclareLaunchArgument(
@@ -40,25 +42,25 @@ def generate_launch_description():
     cinematic_topic = ["/drone_", drone_id, "/planning/cinematic_bspline"]
 
     cinematic_collection = Node(
-         package="cinematographic_adjustment_agent",
-         executable="cinematic_collection",
-         name="cinematic_collection",
-         namespace=["drone_", drone_id],
-         output="screen",
-         parameters=[
-             {
-                 "odom_topic": odom_topic,
-                 "baseline_bspline_topic": ["/drone_", drone_id, "/planning/bspline"],
-                 "cinematic_bspline_topic": cinematic_topic,
-                 "frame_id": WaypointParams.FRAME_ID,
-                 "target_xyz": SimulationParams.TARGET_XYZ,
-                 "focus_depth_m": SimulationParams.FOCUS_DEPTH_M,
-                 "use_simulated_focus": SimulationParams.USE_SIMULATED_FOCUS,
-                 "use_simulated_light": SimulationParams.USE_SIMULATED_LIGHT,
-                 "waypoints_topic": waypoints_topic,
-                 "waypoints_file": waypoints_file,
-             }
-         ],
+        package="cinematographic_adjustment_agent",
+        executable="cinematic_collection",
+        name="cinematic_collection",
+        namespace=["drone_", drone_id],
+        output="screen",
+        parameters=[
+            {
+                "odom_topic": odom_topic,
+                "baseline_bspline_topic": ["/drone_", drone_id, "/planning/bspline"],
+                "cinematic_bspline_topic": cinematic_topic,
+                "frame_id": WaypointParams.FRAME_ID,
+                "target_xyz": SimulationParams.TARGET_XYZ,
+                "focus_depth_m": SimulationParams.FOCUS_DEPTH_M,
+                "use_simulated_focus": SimulationParams.USE_SIMULATED_FOCUS,
+                "use_simulated_light": SimulationParams.USE_SIMULATED_LIGHT,
+                "waypoints_topic": waypoints_topic,
+                "waypoints_file": waypoints_file,
+            }
+        ],
     )
 
     return LaunchDescription(
@@ -67,5 +69,5 @@ def generate_launch_description():
             waypoints_topic_arg,
             waypoints_file_arg,
             cinematic_collection,
-         ]
+        ]
     )

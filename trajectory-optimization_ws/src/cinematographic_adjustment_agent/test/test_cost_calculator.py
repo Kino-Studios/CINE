@@ -1,5 +1,5 @@
-import sys
 import math
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -33,17 +33,14 @@ sys.modules["cv2"] = MagicMock()
 
 import numpy as np
 import pytest
-from geometry_msgs.msg import PolygonStamped, Vector3Stamped
-from nav_msgs.msg import Odometry
-
+from cinematographic_adjustment_agent.cost_functions.cost_calculator import CostCalculator
 from constants import (
-    UserRequestedParams,
-    ImageParams,
     CostParams,
-    LightOrientationParams,
+    ImageParams,
     SimulationParams,
 )
-from cinematographic_adjustment_agent.cost_functions.cost_calculator import CostCalculator
+from geometry_msgs.msg import PolygonStamped
+
 
 @pytest.fixture
 def mock_node():
@@ -68,12 +65,13 @@ def mock_node():
         "w_saturation": CostParams.W_SATURATION,
         "use_simulated_light": SimulationParams.USE_SIMULATED_LIGHT,
         "camera_fx": 500.0,
-        "focus_yaw_hold_deadband_rad": math.radians(2.0)
+        "focus_yaw_hold_deadband_rad": math.radians(2.0),
     }
 
     node.get_parameter.side_effect = lambda name: MagicMock(value=param_mapping.get(name, 0.0))
     node.get_clock().now().nanoseconds = 10**9
     return node
+
 
 def test_camera_forward_vector_alignment(mock_node):
     calculator = CostCalculator(mock_node)
@@ -87,6 +85,7 @@ def test_camera_forward_vector_alignment(mock_node):
     forward = calculator._camera_forward_vector()
     np.testing.assert_allclose(forward, [1.0, 0.0, 0.0], atol=1e-7)
 
+
 def test_acceleration_smoothness_cost(mock_node):
     calculator = CostCalculator(mock_node)
     calculator.angular_velocity = np.array([1.0, 0.0, 0.0])
@@ -97,6 +96,7 @@ def test_acceleration_smoothness_cost(mock_node):
 
     msg = PolygonStamped()
     from geometry_msgs.msg import Point32
+
     p = Point32()
     p.x, p.y = 320.0, 240.0
     msg.polygon.points = [p]
@@ -106,15 +106,14 @@ def test_acceleration_smoothness_cost(mock_node):
     assert costs is not None
     assert costs["smoothness_cost"] == pytest.approx(float(CostParams.W_SMOOTH))
 
+
 def test_feature_tracking_center_depth(mock_node):
     calculator = CostCalculator(mock_node)
-    calculator.depth_image = np.array([
-        [1.0, 2.0],
-        [3.0, 4.0]
-    ], dtype=np.float32)
+    calculator.depth_image = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
 
     msg = PolygonStamped()
     from geometry_msgs.msg import Point32
+
     p = Point32()
     p.x, p.y = 1.0, 1.0
     msg.polygon.points = [p]
@@ -123,15 +122,22 @@ def test_feature_tracking_center_depth(mock_node):
     calculator._update_center_depth()
     assert calculator.center_depth == pytest.approx(4.0)
 
+
 def test_calibration_parameter_integration(mock_node):
     calculator = CostCalculator(mock_node)
 
     res = calculator._compute_cost_components(
-        drone_x=0.0, drone_y=0.0, drone_z=0.0,
-        target_world_x=1.0, target_world_y=0.0, target_world_z=1.0,
-        reference_drone_x=0.0, reference_drone_y=0.0, reference_drone_z=-1.0,
+        drone_x=0.0,
+        drone_y=0.0,
+        drone_z=0.0,
+        target_world_x=1.0,
+        target_world_y=0.0,
+        target_world_z=1.0,
+        reference_drone_x=0.0,
+        reference_drone_y=0.0,
+        reference_drone_z=-1.0,
         include_framing=True,
-        include_lighting=False
+        include_lighting=False,
     )
 
     framing_cost = res[3]
@@ -139,19 +145,29 @@ def test_calibration_parameter_integration(mock_node):
 
     def get_param_double_fx(name):
         params = {
-            "w_framing": CostParams.W_FRAMING, "camera_fx": 1000.0,
-            "huber_delta_px": CostParams.HUBER_DELTA_PX, "deadband_px": 0.0,
-            "w_dist": CostParams.W_DIST, "w_near": CostParams.W_NEAR,
-            "w_stab": CostParams.W_STAB, "w_smooth": CostParams.W_SMOOTH
+            "w_framing": CostParams.W_FRAMING,
+            "camera_fx": 1000.0,
+            "huber_delta_px": CostParams.HUBER_DELTA_PX,
+            "deadband_px": 0.0,
+            "w_dist": CostParams.W_DIST,
+            "w_near": CostParams.W_NEAR,
+            "w_stab": CostParams.W_STAB,
+            "w_smooth": CostParams.W_SMOOTH,
         }
         return MagicMock(value=params.get(name, 1.0))
 
     mock_node.get_parameter.side_effect = get_param_double_fx
     res_double = calculator._compute_cost_components(
-        drone_x=0.0, drone_y=0.0, drone_z=0.0,
-        target_world_x=1.0, target_world_y=0.0, target_world_z=1.0,
-        reference_drone_x=0.0, reference_drone_y=0.0, reference_drone_z=-1.0,
+        drone_x=0.0,
+        drone_y=0.0,
+        drone_z=0.0,
+        target_world_x=1.0,
+        target_world_y=0.0,
+        target_world_z=1.0,
+        reference_drone_x=0.0,
+        reference_drone_y=0.0,
+        reference_drone_z=-1.0,
         include_framing=True,
-        include_lighting=False
+        include_lighting=False,
     )
     assert res_double[3] > framing_cost

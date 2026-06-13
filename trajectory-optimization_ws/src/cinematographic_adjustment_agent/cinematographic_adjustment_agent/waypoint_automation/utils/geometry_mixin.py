@@ -28,14 +28,11 @@ class GeometryMixin:
             if abs(z - original_z) > 1e-6:
                 self.get_logger().debug(f"Z clamped from {original_z:.2f} to {z:.2f}")
         else:
-
             z = max(self.world_bounds_min[2], max(self.min_altitude_m, float(z)))
         return (x, y, z)
 
     def _rel_to_world(self, target_rel):
-        origin = (
-            self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
-        )
+        origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
         target_world = (
             target_rel[0] + origin[0],
             target_rel[1] + origin[1],

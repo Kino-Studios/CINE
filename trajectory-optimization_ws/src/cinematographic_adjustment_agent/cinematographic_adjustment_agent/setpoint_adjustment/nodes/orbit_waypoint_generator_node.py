@@ -1,12 +1,11 @@
 import math
-from typing import Optional, Tuple
+from typing import Optional
 
-import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import PointStamped, PoseStamped
 from rclpy.node import Node
-from sensor_msgs.msg import CameraInfo, Image
+from sensor_msgs.msg import CameraInfo
 from std_msgs.msg import Float32
 
 from .trajectory_planner import (
@@ -29,16 +28,24 @@ class OrbitWaypointGenerator(Node):
         self.target_world: tuple[float, float, float] | None = None
         self.focus_depth_m: float | None = None
 
-        self.camera_info_sub = self.create_subscription(CameraInfo, "/camera/camera_info", self.camera_info_callback, 10)
+        self.camera_info_sub = self.create_subscription(
+            CameraInfo, "/camera/camera_info", self.camera_info_callback, 10
+        )
         self.pose_sub = self.create_subscription(PoseStamped, "/vio/pose", self.pose_callback, 10)
-        self.target_world_sub = self.create_subscription(PointStamped, "/cinematography/target_world", self.target_world_callback, 10)
-        self.focus_depth_sub = self.create_subscription(Float32, "/cinematography/focus_depth_m", self.focus_depth_callback, 10)
+        self.target_world_sub = self.create_subscription(
+            PointStamped, "/cinematography/target_world", self.target_world_callback, 10
+        )
+        self.focus_depth_sub = self.create_subscription(
+            Float32, "/cinematography/focus_depth_m", self.focus_depth_callback, 10
+        )
 
         try:
             from mavros_msgs.msg import PositionTarget
 
             self._PositionTarget = PositionTarget
-            self.setpoint_pub = self.create_publisher(PositionTarget, "/mavros/setpoint_raw/local", 10)
+            self.setpoint_pub = self.create_publisher(
+                PositionTarget, "/mavros/setpoint_raw/local", 10
+            )
         except ImportError:
             self.get_logger().warn("mavros_msgs unavailable; setpoint publishing disabled")
             self._PositionTarget = None
@@ -62,7 +69,11 @@ class OrbitWaypointGenerator(Node):
 
     def pose_callback(self, msg: PoseStamped):
         self.current_pose = msg
-        if not self.publishing_active and self.camera_info is not None and self.target_world is not None:
+        if (
+            not self.publishing_active
+            and self.camera_info is not None
+            and self.target_world is not None
+        ):
             self.generate_waypoints()
             self.publishing_active = True
 
@@ -113,7 +124,9 @@ class OrbitWaypointGenerator(Node):
         if self.target_world is not None:
             center = (float(self.target_world[0]), float(self.target_world[1]))
         if optimize:
-            center, radius = optimize_orbit_center_and_radius(center, radius, altitude, self.evaluate_cost_at_position)
+            center, radius = optimize_orbit_center_and_radius(
+                center, radius, altitude, self.evaluate_cost_at_position
+            )
             self.waypoints = generate_cost_optimized_orbit_waypoints(
                 center_xy_m=center,
                 initial_radius_m=radius,
@@ -124,7 +137,9 @@ class OrbitWaypointGenerator(Node):
                 cost_function=self.evaluate_cost_at_position,
             )
         else:
-            self.waypoints = generate_orbit_waypoints_xy(center, radius, angular_velocity, duration, waypoint_rate, altitude)
+            self.waypoints = generate_orbit_waypoints_xy(
+                center, radius, angular_velocity, duration, waypoint_rate, altitude
+            )
 
         self.waypoint_index = 0
 
@@ -158,8 +173,8 @@ class OrbitWaypointGenerator(Node):
         msg.position.x = float(x)
         msg.position.y = float(y)
         msg.position.z = float(z)
-        cy = center_y
-        cx = center_x
+        cy = float(self.get_parameter("center_y").value)
+        cx = float(self.get_parameter("center_x").value)
         if self.target_world is not None:
             cx = float(self.target_world[0])
             cy = float(self.target_world[1])

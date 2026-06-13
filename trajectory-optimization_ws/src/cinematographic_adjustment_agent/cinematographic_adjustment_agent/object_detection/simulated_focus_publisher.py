@@ -19,7 +19,9 @@ class SimulatedFocusPublisher(Node):
         self.odom_topic = str(self.declare_parameter("odom_topic", "/odom").value)
         self.use_odom = bool(self.declare_parameter("use_odom", True).value)
 
-        self.target_xyz = tuple(float(v) for v in self.declare_parameter("target_xyz", [2.34, 4.9, 1.35]).value)
+        self.target_xyz = tuple(
+            float(v) for v in self.declare_parameter("target_xyz", [2.34, 4.9, 1.35]).value
+        )
         self.target_offset_xyz = tuple(
             float(v) for v in self.declare_parameter("target_offset_xyz", [2.34, 4.9, 1.35]).value
         )
@@ -32,8 +34,12 @@ class SimulatedFocusPublisher(Node):
         self._odom_sub = self.create_subscription(Odometry, self.odom_topic, self._odom_cb, 10)
 
         self._focus_depth_pub = self.create_publisher(Float32, "/cinematography/focus_depth_m", 10)
-        self._target_world_pub = self.create_publisher(PointStamped, "/cinematography/target_world", 10)
-        self._costs_pub = self.create_publisher(CinematographyCosts, "/cinematography/cinematography_costs", 10)
+        self._target_world_pub = self.create_publisher(
+            PointStamped, "/cinematography/target_world", 10
+        )
+        self._costs_pub = self.create_publisher(
+            CinematographyCosts, "/cinematography/cinematography_costs", 10
+        )
 
         period = 1.0 / max(1.0, self.publish_rate_hz)
         self._timer = self.create_timer(period, self._tick)
@@ -44,7 +50,11 @@ class SimulatedFocusPublisher(Node):
             p = msg.pose.pose.position
             self._odom_origin = (float(p.x), float(p.y), float(p.z))
             ox, oy, oz = self.target_offset_xyz
-            self._target_world = (self._odom_origin[0] + ox, self._odom_origin[1] + oy, self._odom_origin[2] + oz)
+            self._target_world = (
+                self._odom_origin[0] + ox,
+                self._odom_origin[1] + oy,
+                self._odom_origin[2] + oz,
+            )
 
     def _target_from_odom(self) -> Optional[Tuple[float, float, float]]:
         if not self.use_odom or self._last_odom is None:

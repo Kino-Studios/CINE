@@ -6,13 +6,13 @@ import math
 
 import numpy as np
 import rclpy
+from constants import CinematographyParams
 from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import Vector3Stamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 
-from constants import CinematographyParams
 
 def _quat_to_rot(q: np.ndarray) -> np.ndarray:
     x, y, z, w = float(q[0]), float(q[1]), float(q[2]), float(q[3])
@@ -34,6 +34,7 @@ def _quat_to_rot(q: np.ndarray) -> np.ndarray:
         ],
         dtype=float,
     )
+
 
 class LightVectorAnalysisNode(Node):
     def __init__(self):

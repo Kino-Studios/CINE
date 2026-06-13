@@ -4,14 +4,14 @@
 Generates a full-circle orbital trajectory around a room centre, simulates
 baseline and velocity-constrained variants, then saves CSV files for analysis.
 """
+
 import logging
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
-import pandas as pd
 
 # -- repo-root path bootstrap to find 'configs' --
 _here = Path(__file__).resolve()
@@ -24,10 +24,10 @@ for _parent in [_here] + list(_here.parents):
 
 from constants import CinematicConstraints
 from trajectory_sim_common import (
+    ORBIT_ALTITUDE_M,
+    ORBIT_RADIUS_M,
     BSplineTrajectory,
     TrajectorySimulator,
-    ORBIT_RADIUS_M,
-    ORBIT_ALTITUDE_M,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,14 +40,16 @@ def generate_room_orbit_trajectory() -> Tuple[BSplineTrajectory, List[Tuple[floa
     """Build a full-circle orbital B-spline and a single full-range focus region."""
     angles = np.linspace(0, 2 * np.pi, ORBIT_N_POINTS, endpoint=False)
 
-    waypoints = np.array([
+    waypoints = np.array(
         [
-            ROOM_CENTER[0] + ORBIT_RADIUS_M * np.cos(a),
-            ROOM_CENTER[1] + ORBIT_RADIUS_M * np.sin(a),
-            ORBIT_ALTITUDE_M,
+            [
+                ROOM_CENTER[0] + ORBIT_RADIUS_M * np.cos(a),
+                ROOM_CENTER[1] + ORBIT_RADIUS_M * np.sin(a),
+                ORBIT_ALTITUDE_M,
+            ]
+            for a in angles
         ]
-        for a in angles
-    ])
+    )
 
     focus_regions = [(0.0, 1.0)]
     bspline = BSplineTrajectory(waypoints)
@@ -88,8 +90,10 @@ def main() -> None:
     logger.info(
         "Baseline mean=%.3f m/s max=%.3f m/s | Constrained mean=%.3f m/s max=%.3f m/s | "
         "Reduction=%.3f m/s",
-        baseline_df["speed"].mean(), baseline_df["speed"].max(),
-        constrained_df["speed"].mean(), constrained_df["speed"].max(),
+        baseline_df["speed"].mean(),
+        baseline_df["speed"].max(),
+        constrained_df["speed"].mean(),
+        constrained_df["speed"].max(),
         speed_reduction,
     )
     logger.info("Data collection complete.")

@@ -59,27 +59,18 @@ class ConfigLoader:
             full_path = os.path.join(config_dir, relative_path)
 
             if not os.path.isfile(full_path):
-                raise FileNotFoundError(
-                    f"Required config file for '{key}' not found: {full_path}"
-                )
+                raise FileNotFoundError(f"Required config file for '{key}' not found: {full_path}")
 
             with open(full_path, "r") as handle:
                 try:
                     self._configs[key] = json.load(handle)
                 except json.JSONDecodeError as exc:
-                    raise ValueError(
-                        f"Invalid JSON in config file '{full_path}': {exc}"
-                    ) from exc
+                    raise ValueError(f"Invalid JSON in config file '{full_path}': {exc}") from exc
 
     def get(self, config_key: str, section: str, key: str, default: Any = None) -> Any:
         """Return a nested config value, or ``default`` when the key is absent."""
-        return self._configs \
-            .get(config_key, {}) \
-            .get(section, {}) \
-            .get(key, default)
+        return self._configs.get(config_key, {}).get(section, {}).get(key, default)
 
     def get_section(self, config_key: str, section: str) -> Dict[str, Any]:
         """Return an entire config section as a dict (empty when absent)."""
-        return self._configs \
-            .get(config_key, {}) \
-            .get(section, {})
+        return self._configs.get(config_key, {}).get(section, {})

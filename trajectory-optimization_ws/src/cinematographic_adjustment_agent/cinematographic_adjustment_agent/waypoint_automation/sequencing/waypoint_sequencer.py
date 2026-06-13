@@ -45,19 +45,14 @@ class WaypointSequencerMixin:
                     or self.target_world is not None
                     or self.last_target_world is not None
                 ):
-                    self.get_logger().info(
-                        "Generating dynamic waypoints for active path"
-                    )
+                    self.get_logger().info("Generating dynamic waypoints for active path")
                     self.generate_cinematographic_waypoints()
                 if self.dynamic_waypoints is None:
                     self.get_logger().warn(
                         "Dynamic waypoints unavailable; falling back to static path"
                     )
                     self.use_dynamic_waypoints = False
-                    if (
-                        self.detected_object is not None
-                        or self.target_world is not None
-                    ):
+                    if self.detected_object is not None or self.target_world is not None:
                         self.pending_detection_merge = True
 
             if self.use_dynamic_waypoints and self.dynamic_waypoints is not None:
@@ -75,13 +70,9 @@ class WaypointSequencerMixin:
                 )
                 self.pending_detection_merge = False
             elif self.simulate_object and (not self.use_dynamic_waypoints):
-                waypoints_to_send = self._insert_simulated_object_orbit(
-                    waypoints_to_send
-                )
+                waypoints_to_send = self._insert_simulated_object_orbit(waypoints_to_send)
 
-        origin = (
-            self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
-        )
+        origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
         waypoints_to_send = self._remove_anchor_points_from_waypoints(
             waypoints_to_send, origin=origin
         )
@@ -96,13 +87,9 @@ class WaypointSequencerMixin:
         if not self.use_dynamic_waypoints:
             waypoints_to_send = self._apply_descent_tail(waypoints_to_send)
 
-        self.active_waypoints = self._limit_consecutive_waypoint_jumps(
-            waypoints_to_send
-        )
+        self.active_waypoints = self._limit_consecutive_waypoint_jumps(waypoints_to_send)
 
-        self.viz_data["static_world"] = [
-            self._rel_to_world(wp) for wp in self.active_waypoints
-        ]
+        self.viz_data["static_world"] = [self._rel_to_world(wp) for wp in self.active_waypoints]
 
         self.current_target_index = 0
         self.last_published_index = -1
@@ -128,9 +115,7 @@ class WaypointSequencerMixin:
                     and self.current_target_index >= self.framing_start_idx
                 ):
                     break
-                target_world = self._rel_to_world(
-                    self.active_waypoints[self.current_target_index]
-                )
+                target_world = self._rel_to_world(self.active_waypoints[self.current_target_index])
                 dist = self._distance_to(target_world)
                 threshold = min_start_threshold
                 if self.current_target_index == 0:
@@ -142,14 +127,9 @@ class WaypointSequencerMixin:
             if skipped > 0:
                 self.last_published_index = self.current_target_index - 1
                 total_waypoints = (
-                    len(self.active_waypoints)
-                    if self.active_waypoints is not None
-                    else 0
+                    len(self.active_waypoints) if self.active_waypoints is not None else 0
                 )
-                if (
-                    self.framing_start_idx is not None
-                    and self.framing_end_idx is not None
-                ):
+                if self.framing_start_idx is not None and self.framing_end_idx is not None:
                     range_desc = f"{self.framing_start_idx}-{self.framing_end_idx}"
                 else:
                     range_desc = "unset"
@@ -197,20 +177,14 @@ class WaypointSequencerMixin:
             return
         self._update_framing_indices()
         start_idx = self.framing_start_idx
-        if (
-            start_idx is None
-            or start_idx <= 0
-            or start_idx >= len(self.active_waypoints)
-        ):
+        if start_idx is None or start_idx <= 0 or start_idx >= len(self.active_waypoints):
             return
         prev_wp = self.active_waypoints[start_idx - 1]
         entry_wp = self.active_waypoints[start_idx]
         inserts = []
         for i in range(self.focus_entry_decel_waypoints):
             t = (i + 1) / (self.focus_entry_decel_waypoints + 1)
-            inserts.append(
-                tuple(prev_wp[j] + t * (entry_wp[j] - prev_wp[j]) for j in range(3))
-            )
+            inserts.append(tuple(prev_wp[j] + t * (entry_wp[j] - prev_wp[j]) for j in range(3)))
         self.active_waypoints[start_idx:start_idx] = inserts
         self._update_framing_indices()
 
@@ -287,9 +261,7 @@ class WaypointSequencerMixin:
         radius = max(float(self.waypoint_radius_m), 0.001)
         if self._is_framing_idx(self.current_target_index):
             spacing = (
-                float(self.arc_waypoint_spacing_m)
-                if self.arc_waypoint_spacing_m > 0.0
-                else radius
+                float(self.arc_waypoint_spacing_m) if self.arc_waypoint_spacing_m > 0.0 else radius
             )
             arc_threshold = max(radius, min(0.9 * spacing, spacing))
             return max(arc_threshold, self.min_goal_distance_m)
@@ -330,9 +302,7 @@ class WaypointSequencerMixin:
             return False
         if self.current_target_index >= len(self.active_waypoints):
             return True
-        target_world = self._rel_to_world(
-            self.active_waypoints[self.current_target_index]
-        )
+        target_world = self._rel_to_world(self.active_waypoints[self.current_target_index])
         return self._distance_to(target_world) <= self._current_distance_threshold()
 
     def _publish_framing_active(self, active):
@@ -340,9 +310,7 @@ class WaypointSequencerMixin:
         if self.framing_active == active:
             return
         prev_idx = getattr(self, "current_target_index", 0) or 0
-        total_waypoints = (
-            len(self.active_waypoints) if self.active_waypoints is not None else 0
-        )
+        total_waypoints = len(self.active_waypoints) if self.active_waypoints is not None else 0
         if self.framing_start_idx is not None and self.framing_end_idx is not None:
             range_desc = f"{self.framing_start_idx}-{self.framing_end_idx}"
         else:
@@ -372,7 +340,6 @@ class WaypointSequencerMixin:
 
     def _publish_framing_states(self, framing_active):
         if self.baseline_mode:
-
             self._publish_framing_active(False)
             self._publish_baseline_framing_active(framing_active)
         else:
@@ -456,9 +423,7 @@ class WaypointSequencerMixin:
         framing_active = self._is_framing_idx(self.current_target_index)
         self._publish_framing_states(framing_active)
 
-        target_world = self._rel_to_world(
-            self.active_waypoints[self.current_target_index]
-        )
+        target_world = self._rel_to_world(self.active_waypoints[self.current_target_index])
 
         dx = self.current_pos[0] - target_world[0]
         dy = self.current_pos[1] - target_world[1]
@@ -494,9 +459,7 @@ class WaypointSequencerMixin:
                     return
 
         if dist <= threshold:
-            total_waypoints = (
-                len(self.active_waypoints) if self.active_waypoints is not None else 0
-            )
+            total_waypoints = len(self.active_waypoints) if self.active_waypoints is not None else 0
             max_idx = max(total_waypoints - 1, 0)
             idx_label = f"{self.current_target_index}/{max_idx}"
             framing_tag = " [FRAMING]" if framing_active else ""

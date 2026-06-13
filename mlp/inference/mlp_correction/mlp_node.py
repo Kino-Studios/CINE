@@ -9,6 +9,7 @@ from .mlp_loader import MLPLoader
 
 try:
     from constants import MLPParams
+
     _BSPLINE_IN_TOPIC = MLPParams.BSPLINE_IN_TOPIC
     _CORRECTED_BSPLINE_TOPIC = MLPParams.CORRECTED_BSPLINE_TOPIC
     _CORRECTION_DELTA_TOPIC = MLPParams.CORRECTION_DELTA_TOPIC

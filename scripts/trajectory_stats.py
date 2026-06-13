@@ -25,9 +25,7 @@ class ColumnSummary:
     median: float
 
 
-def collect_statistics(
-    files: Iterable[Path]
-) -> OrderedDict[str, ColumnSummary]:
+def collect_statistics(files: Iterable[Path]) -> OrderedDict[str, ColumnSummary]:
     dfs = []
     for csv_path in sorted(files):
         try:
@@ -49,7 +47,7 @@ def collect_statistics(
     for col in full_df.columns:
         # Convert column to numeric, coercing errors to NaN
         # This mimics the try-except ValueError block in the original code
-        numeric_series = pd.to_numeric(full_df[col], errors='coerce')
+        numeric_series = pd.to_numeric(full_df[col], errors="coerce")
 
         # Drop NaNs (originally: if raw is None/empty or ValueError)
         numeric_series = numeric_series.dropna()
@@ -57,9 +55,7 @@ def collect_statistics(
         count = len(numeric_series)
         if count == 0:
             nan = float("nan")
-            stats[col] = ColumnSummary(
-                count=0, mean=nan, std=nan, min=nan, max=nan, median=nan
-            )
+            stats[col] = ColumnSummary(count=0, mean=nan, std=nan, min=nan, max=nan, median=nan)
         else:
             # Calculate statistics
             # Original uses population variance (divide by N)
@@ -87,15 +83,11 @@ def format_float(value: float) -> str:
     return f"{value:.6e}"
 
 
-def emit_csv(
-    output_path: Path, summary: "OrderedDict[str, ColumnSummary]"
-) -> None:
+def emit_csv(output_path: Path, summary: "OrderedDict[str, ColumnSummary]") -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(
-            ["column", "count", "mean", "std", "min", "max", "median"]
-        )
+        writer.writerow(["column", "count", "mean", "std", "min", "max", "median"])
         for column, stats in summary.items():
             writer.writerow(
                 [
@@ -119,10 +111,7 @@ def summarize_dataset(dataset_path: Path) -> OrderedDict[str, ColumnSummary]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description=(
-            "Compute dataset-level statistics for each "
-            "trajectory CSV directory."
-        )
+        description=("Compute dataset-level statistics for each trajectory CSV directory.")
     )
     parser.add_argument(
         "--trajectory-root",
@@ -140,9 +129,7 @@ def main() -> int:
         "--output-dir",
         type=Path,
         default=None,
-        help=(
-            "Where to write the summary CSVs (default: trajectory root)."
-        ),
+        help=("Where to write the summary CSVs (default: trajectory root)."),
     )
     args = parser.parse_args()
 
@@ -152,10 +139,7 @@ def main() -> int:
     for dataset in args.datasets:
         dataset_path = root / dataset
         if not dataset_path.is_dir():
-            print(
-                f"Skipping {dataset}: {dataset_path} is not a directory",
-                file=sys.stderr
-            )
+            print(f"Skipping {dataset}: {dataset_path} is not a directory", file=sys.stderr)
             status = 1
             continue
         try:

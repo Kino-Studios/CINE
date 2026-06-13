@@ -1,14 +1,16 @@
 import math
-from typing import Optional, List, Tuple, Callable
+from typing import Callable, List, Optional, Tuple
+
 import numpy as np
 from rclpy.node import Node
 
 from ..utils.config_loader import ConfigLoader
 from ..utils.trajectory_planner import (
-    generate_orbit_waypoints_xy,
     generate_cost_optimized_orbit_waypoints,
+    generate_orbit_waypoints_xy,
     optimize_orbit_center_and_radius,
 )
+
 
 class WaypointSelector:
     def __init__(self, node: Node, config: ConfigLoader):
@@ -29,8 +31,10 @@ class WaypointSelector:
         altitude_m: float,
         target_world: np.ndarray,
         drone_position: np.ndarray,
-        cost_estimation_func: Callable[[float, float, float, float, float, float, float, float, float], Optional[float]],
-        dt: float
+        cost_estimation_func: Callable[
+            [float, float, float, float, float, float, float, float, float], Optional[float]
+        ],
+        dt: float,
     ) -> Optional[np.ndarray]:
 
         cx, cy = center_xy
@@ -53,9 +57,14 @@ class WaypointSelector:
 
         angle_samples = max(1, self.config.candidate_angle_samples)
         window = float(max(0.0, self.config.candidate_angle_window_rad))
-        angle_offsets = np.linspace(-window, window, angle_samples) if angle_samples > 1 else np.array([0.0])
+        angle_offsets = (
+            np.linspace(-window, window, angle_samples) if angle_samples > 1 else np.array([0.0])
+        )
 
-        r_min, r_max = float(self.config.candidate_radius_range_m[0]), float(self.config.candidate_radius_range_m[1])
+        r_min, r_max = (
+            float(self.config.candidate_radius_range_m[0]),
+            float(self.config.candidate_radius_range_m[1]),
+        )
         r_min, r_max = (min(r_min, r_max), max(r_min, r_max))
         base_r = float(radius_m)
         r_low = max(0.1, min(base_r, base_r * 1.5, r_max))
@@ -65,7 +74,9 @@ class WaypointSelector:
             r_low, r_high = r_min, r_max
 
         radius_samples = max(1, self.config.candidate_radius_samples)
-        radii = np.linspace(r_low, r_high, radius_samples) if radius_samples > 1 else np.array([base_r])
+        radii = (
+            np.linspace(r_low, r_high, radius_samples) if radius_samples > 1 else np.array([base_r])
+        )
 
         best = None
         best_cost = float("inf")
@@ -93,7 +104,9 @@ class WaypointSelector:
         self,
         target_world: np.ndarray,
         drone_position: np.ndarray,
-        cost_estimation_func: Callable[[float, float, float, float, float, float, float, float, float], Optional[float]]
+        cost_estimation_func: Callable[
+            [float, float, float, float, float, float, float, float, float], Optional[float]
+        ],
     ) -> List[Tuple[float, float, float, float]]:
 
         tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
@@ -126,7 +139,8 @@ class WaypointSelector:
                     center_xy_m=center_xy,
                     initial_radius_m=radius,
                     angular_velocity_rps=self.config.params.ANGULAR_VELOCITY_RPS,
-                    duration_s=float(self.config.params.NUM_INITIAL_WAYPOINTS) / self.config.params.WAYPOINT_RATE_HZ,
+                    duration_s=float(self.config.params.NUM_INITIAL_WAYPOINTS)
+                    / self.config.params.WAYPOINT_RATE_HZ,
                     waypoint_rate_hz=self.config.params.WAYPOINT_RATE_HZ,
                     altitude_m=z,
                     cost_function=cost_function,
@@ -136,13 +150,14 @@ class WaypointSelector:
 
                 return orbit
             except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as error:
-                self.node.get_logger().warn(f'Optimization cost failed: {error}')
+                self.node.get_logger().warn(f"Optimization cost failed: {error}")
 
         orbit = generate_orbit_waypoints_xy(
             center_xy_m=center_xy,
             radius_m=radius,
             angular_velocity_rps=self.config.params.ANGULAR_VELOCITY_RPS,
-            duration_s=float(self.config.params.NUM_INITIAL_WAYPOINTS) / self.config.params.WAYPOINT_RATE_HZ,
+            duration_s=float(self.config.params.NUM_INITIAL_WAYPOINTS)
+            / self.config.params.WAYPOINT_RATE_HZ,
             waypoint_rate_hz=self.config.params.WAYPOINT_RATE_HZ,
             altitude_m=z,
         )
@@ -154,9 +169,14 @@ class WaypointSelector:
         current_time: float,
         target_world: np.ndarray,
         drone_position: np.ndarray,
-        cost_estimation_func: Callable[[float, float, float, float, float, float, float, float, float], Optional[float]]
+        cost_estimation_func: Callable[
+            [float, float, float, float, float, float, float, float, float], Optional[float]
+        ],
     ) -> None:
-        if not self.use_cost_optimization or (current_time - self.last_optimization_time) < self.optimization_frequency:
+        if (
+            not self.use_cost_optimization
+            or (current_time - self.last_optimization_time) < self.optimization_frequency
+        ):
             return
 
         tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
@@ -189,8 +209,8 @@ class WaypointSelector:
             self.optimized_radius = opt_radius
             self.last_optimization_time = current_time
             self.node.get_logger().info(
-                f'Optimized orbit: center=({opt_center[0]:.2f}, {opt_center[1]:.2f}), '
-                f'radius={opt_radius:.2f}m'
+                f"Optimized orbit: center=({opt_center[0]:.2f}, {opt_center[1]:.2f}), "
+                f"radius={opt_radius:.2f}m"
             )
         except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as error:
-            self.node.get_logger().warn(f'Orbit optimization failed: {error}')
+            self.node.get_logger().warn(f"Orbit optimization failed: {error}")

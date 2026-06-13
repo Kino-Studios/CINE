@@ -1,14 +1,17 @@
-import math
 from typing import Optional, Tuple
+
 import numpy as np
 
-from ..utils.trajectory_planner import pixel_to_camera_xy, clamp_depth_to_preference
-from ..utils.state_tracker import StateTracker
 from ..cost_functions.cost_calculator import CostCalculator
 from ..utils.config_loader import ConfigLoader
+from ..utils.state_tracker import StateTracker
+from ..utils.trajectory_planner import clamp_depth_to_preference, pixel_to_camera_xy
+
 
 class TargetComputer:
-    def __init__(self, config: ConfigLoader, tracker: StateTracker, cost_calculator: CostCalculator):
+    def __init__(
+        self, config: ConfigLoader, tracker: StateTracker, cost_calculator: CostCalculator
+    ):
         self.config = config
         self.tracker = tracker
         self.cost_calculator = cost_calculator
@@ -77,7 +80,9 @@ class TargetComputer:
 
         return x_cam, y_cam, preferred_depth
 
-    def compute_target_world_position(self, drone_position: np.ndarray, has_odom: bool) -> Optional[np.ndarray]:
+    def compute_target_world_position(
+        self, drone_position: np.ndarray, has_odom: bool
+    ) -> Optional[np.ndarray]:
         target_cam = self.compute_target_xy()
 
         if target_cam is None or not has_odom:

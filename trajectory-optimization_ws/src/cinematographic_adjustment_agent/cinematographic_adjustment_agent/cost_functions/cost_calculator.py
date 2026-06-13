@@ -42,19 +42,18 @@ from typing import Dict, Optional
 
 import cv2
 import numpy as np
-from geometry_msgs.msg import PolygonStamped, Vector3Stamped
-from nav_msgs.msg import Odometry
-
 from constants import (
-    ROSParams,
-    UserRequestedParams,
-    ImageParams,
     CinematographyParams,
     CostParams,
-    LightOrientationParams,
+    ImageParams,
     LightAvoidanceParams,
+    LightOrientationParams,
+    ROSParams,
     SimulationParams,
+    UserRequestedParams,
 )
+from geometry_msgs.msg import PolygonStamped, Vector3Stamped
+from nav_msgs.msg import Odometry
 
 COLLISION_DEPTH_MARGIN_M: float = 0.5
 FOCUS_YAW_HOLD_DEADBAND_RAD: float = math.radians(2.0)
@@ -65,11 +64,13 @@ try:
         ParameterNotDeclaredException,
     )
 except ImportError:  # rclpy unavailable outside a ROS environment (e.g. unit tests)
+
     class ParameterAlreadyDeclaredException(Exception):
         pass
 
     class ParameterNotDeclaredException(Exception):
         pass
+
 
 PARAMETER_READ_ERRORS = (
     ParameterNotDeclaredException,
@@ -78,6 +79,8 @@ PARAMETER_READ_ERRORS = (
 )
 
 _logger = logging.getLogger(__name__)
+
+
 class CostCalculator:
     def __init__(self, node):
         self.node = node
@@ -117,24 +120,18 @@ class CostCalculator:
         self._declare_parameter("w_light", CostParams.W_LIGHT)
         self._declare_parameter("w_smooth", CostParams.W_SMOOTH)
         self._declare_parameter("light_avoidance_enabled", LightAvoidanceParams.ENABLED)
-        self._declare_parameter(
-            "light_yaw_deadband_rad", LightOrientationParams.YAW_DEADBAND_RAD
-        )
+        self._declare_parameter("light_yaw_deadband_rad", LightOrientationParams.YAW_DEADBAND_RAD)
         self._declare_parameter(
             "light_pitch_deadband_rad", LightOrientationParams.PITCH_DEADBAND_RAD
         )
-        self._declare_parameter(
-            "light_roll_deadband_rad", LightOrientationParams.ROLL_DEADBAND_RAD
-        )
+        self._declare_parameter("light_roll_deadband_rad", LightOrientationParams.ROLL_DEADBAND_RAD)
         self._declare_parameter(
             "light_pitch_weight_factor", LightOrientationParams.PITCH_WEIGHT_FACTOR
         )
         self._declare_parameter(
             "light_roll_weight_factor", LightOrientationParams.ROLL_WEIGHT_FACTOR
         )
-        self._declare_parameter(
-            "light_pitch_max_rad", LightOrientationParams.PITCH_MAX_RAD
-        )
+        self._declare_parameter("light_pitch_max_rad", LightOrientationParams.PITCH_MAX_RAD)
         self._declare_parameter(
             "light_pitch_damping_factor", LightOrientationParams.PITCH_DAMPING_FACTOR
         )
@@ -155,20 +152,14 @@ class CostCalculator:
         self._declare_parameter("light_pitch_gain", LightOrientationParams.PITCH_GAIN)
         self._declare_parameter("light_yaw_gain", LightOrientationParams.YAW_GAIN)
         self._declare_parameter("focus_yaw_hold_deadband_rad", FOCUS_YAW_HOLD_DEADBAND_RAD)
-        self._declare_parameter(
-            "light_distance_bias_m", CostParams.LIGHT_DISTANCE_BIAS_M
-        )
+        self._declare_parameter("light_distance_bias_m", CostParams.LIGHT_DISTANCE_BIAS_M)
         self._declare_parameter("light_distance_gain", CostParams.LIGHT_DISTANCE_GAIN)
         self._declare_parameter(
             "light_cost_increase_when_close", CostParams.LIGHT_COST_INCREASE_WHEN_CLOSE
         )
-        self._declare_parameter(
-            "use_simulated_light", SimulationParams.USE_SIMULATED_LIGHT
-        )
+        self._declare_parameter("use_simulated_light", SimulationParams.USE_SIMULATED_LIGHT)
         self._declare_parameter("light_tau", CostParams.LIGHT_TAU)
-        self._declare_parameter(
-            "light_saturation_threshold", CostParams.LIGHT_SATURATION_THRESHOLD
-        )
+        self._declare_parameter("light_saturation_threshold", CostParams.LIGHT_SATURATION_THRESHOLD)
         self._declare_parameter("w_saturation", CostParams.W_SATURATION)
         self._declare_parameter(
             "include_lighting_in_position_cost",
@@ -186,9 +177,7 @@ class CostCalculator:
             "include_framing_in_orientation_cost",
             CostParams.INCLUDE_FRAMING_IN_ORIENTATION_COST,
         )
-        self._declare_parameter(
-            "framing_vertical_weight", CostParams.FRAMING_VERTICAL_WEIGHT
-        )
+        self._declare_parameter("framing_vertical_weight", CostParams.FRAMING_VERTICAL_WEIGHT)
 
         self._declare_parameter("camera_fx", self.CinematographyParams.CAMERA_FX)
         self._declare_parameter("camera_fy", self.CinematographyParams.CAMERA_FY)
@@ -222,9 +211,7 @@ class CostCalculator:
             height = float(self.node.get_parameter("image_height").value)
             return max(1.0, width), max(1.0, height)
         except PARAMETER_READ_ERRORS:
-            return float(self.ImageParams.IMAGE_WIDTH), float(
-                self.ImageParams.IMAGE_HEIGHT
-            )
+            return float(self.ImageParams.IMAGE_WIDTH), float(self.ImageParams.IMAGE_HEIGHT)
 
     def update_light_vector(self, msg: Vector3Stamped):
         if not self._light_avoidance_enabled():
@@ -247,9 +234,7 @@ class CostCalculator:
         if self.light_distance is None:
             return 1.0
         try:
-            max_range = float(
-                self.node.get_parameter("light_distance_attenuation_m").value
-            )
+            max_range = float(self.node.get_parameter("light_distance_attenuation_m").value)
 
         except PARAMETER_READ_ERRORS:
             max_range = 0.0
@@ -258,9 +243,7 @@ class CostCalculator:
 
         normalized = min(self.light_distance, max_range) / max_range
 
-        favor_close = bool(
-            self.node.get_parameter("light_cost_increase_when_close").value
-        )
+        favor_close = bool(self.node.get_parameter("light_cost_increase_when_close").value)
         if favor_close:
             fac = 1.0 - normalized
         else:
@@ -347,9 +330,7 @@ class CostCalculator:
         r21 = 2 * (y * z + x * w)
         r22 = 1 - 2 * (x * x + y * y)
 
-        forward = np.array(
-            [r02, r12, r22], dtype=float
-        )
+        forward = np.array([r02, r12, r22], dtype=float)
         norm_f = np.linalg.norm(forward)
         return forward / norm_f if norm_f > 0 else None
 
@@ -398,9 +379,7 @@ class CostCalculator:
         if self.center_point is not None and len(self.center_point.polygon.points) > 0:
             center_x = int(self.center_point.polygon.points[0].x)
             center_y = int(self.center_point.polygon.points[0].y)
-        elif (
-            self.bounding_box is not None and len(self.bounding_box.polygon.points) > 0
-        ):
+        elif self.bounding_box is not None and len(self.bounding_box.polygon.points) > 0:
             points = self.bounding_box.polygon.points
             if len(points) >= 2:
                 x_coords = [p.x for p in points]
@@ -485,9 +464,7 @@ class CostCalculator:
         if self.center_point is not None and len(self.center_point.polygon.points) > 0:
             center_x = int(self.center_point.polygon.points[0].x)
             center_y = int(self.center_point.polygon.points[0].y)
-        elif (
-            self.bounding_box is not None and len(self.bounding_box.polygon.points) >= 2
-        ):
+        elif self.bounding_box is not None and len(self.bounding_box.polygon.points) >= 2:
             points = self.bounding_box.polygon.points
             x_coords = [p.x for p in points]
             y_coords = [p.y for p in points]
@@ -620,9 +597,7 @@ class CostCalculator:
         if self.center_point is not None and len(self.center_point.polygon.points) > 0:
             u_current = self.center_point.polygon.points[0].x
             v_current = self.center_point.polygon.points[0].y
-        elif (
-            self.bounding_box is not None and len(self.bounding_box.polygon.points) > 0
-        ):
+        elif self.bounding_box is not None and len(self.bounding_box.polygon.points) > 0:
             points = self.bounding_box.polygon.points
             if len(points) >= 2:
                 x_coords = [p.x for p in points]
@@ -638,9 +613,7 @@ class CostCalculator:
 
         deadband = float(self.node.get_parameter("deadband_px").value)
         delta_px = float(self.node.get_parameter("huber_delta_px").value)
-        vertical_weight = float(
-            self.node.get_parameter("framing_vertical_weight").value
-        )
+        vertical_weight = float(self.node.get_parameter("framing_vertical_weight").value)
         vertical_weight = max(0.0, vertical_weight)
 
         du = u_current - u_star
@@ -674,11 +647,7 @@ class CostCalculator:
         prev_time = getattr(self, "_prev_depth_timestamp", None)
         J_stab = 0.0
 
-        if (
-            prev_z is not None
-            and prev_time is not None
-            and current_time is not None
-        ):
+        if prev_z is not None and prev_time is not None and current_time is not None:
             dt = current_time - prev_time
             if dt >= self.SimulationParams.EPSILON:
                 dz = Z - prev_z
@@ -694,9 +663,7 @@ class CostCalculator:
         depth_cost = (w_dist * J_dist) + (w_near * J_near) + (w_stab * J_stab)
 
         current_euler = (
-            self._quaternion_to_euler(self.orientation)
-            if self.orientation is not None
-            else None
+            self._quaternion_to_euler(self.orientation) if self.orientation is not None else None
         )
 
         lighting_cost = 0.0
@@ -725,19 +692,11 @@ class CostCalculator:
             w_light = float(self.node.get_parameter("w_light").value)
 
             yaw_deadband = float(self.node.get_parameter("light_yaw_deadband_rad").value)
-            pitch_deadband = float(
-                self.node.get_parameter("light_pitch_deadband_rad").value
-            )
-            roll_deadband = float(
-                self.node.get_parameter("light_roll_deadband_rad").value
-            )
+            pitch_deadband = float(self.node.get_parameter("light_pitch_deadband_rad").value)
+            roll_deadband = float(self.node.get_parameter("light_roll_deadband_rad").value)
 
-            pitch_weight_factor = float(
-                self.node.get_parameter("light_pitch_weight_factor").value
-            )
-            roll_weight_factor = float(
-                self.node.get_parameter("light_roll_weight_factor").value
-            )
+            pitch_weight_factor = float(self.node.get_parameter("light_pitch_weight_factor").value)
+            roll_weight_factor = float(self.node.get_parameter("light_roll_weight_factor").value)
 
             w_pitch = w_light * pitch_weight_factor
             w_roll = w_light * roll_weight_factor
@@ -780,18 +739,12 @@ class CostCalculator:
                     dtype=float,
                 )
 
-                smooth_setpoints = (
-                    alpha * self._last_light_setpoint + (1.0 - alpha) * raw_setpoints
-                )
+                smooth_setpoints = alpha * self._last_light_setpoint + (1.0 - alpha) * raw_setpoints
 
-                yaw_limit = float(
-                    self.node.get_parameter("light_yaw_change_limit_rad").value
-                )
+                yaw_limit = float(self.node.get_parameter("light_yaw_change_limit_rad").value)
 
                 yaw_limit = max(0.0, yaw_limit)
-                yaw_delta = self._angle_diff(
-                    smooth_setpoints[2], self._last_light_setpoint[2]
-                )
+                yaw_delta = self._angle_diff(smooth_setpoints[2], self._last_light_setpoint[2])
 
                 if yaw_delta > yaw_limit:
                     yaw_delta = yaw_limit
@@ -800,14 +753,10 @@ class CostCalculator:
 
                 smooth_setpoints[2] = self._last_light_setpoint[2] + yaw_delta
 
-                pitch_limit = float(
-                    self.node.get_parameter("light_pitch_change_limit_rad").value
-                )
+                pitch_limit = float(self.node.get_parameter("light_pitch_change_limit_rad").value)
                 pitch_limit = max(0.0, pitch_limit)
 
-                pitch_delta = self._angle_diff(
-                    smooth_setpoints[1], self._last_light_setpoint[1]
-                )
+                pitch_delta = self._angle_diff(smooth_setpoints[1], self._last_light_setpoint[1])
 
                 if pitch_delta > pitch_limit:
                     pitch_delta = pitch_limit
@@ -820,13 +769,9 @@ class CostCalculator:
 
                 max_pitch = float(self.node.get_parameter("light_pitch_max_rad").value)
 
-                pitch_setpoint = float(
-                    np.clip(pitch_setpoint, -abs(max_pitch), abs(max_pitch))
-                )
+                pitch_setpoint = float(np.clip(pitch_setpoint, -abs(max_pitch), abs(max_pitch)))
 
-                accel_factor = float(
-                    self.node.get_parameter("light_pitch_damping_factor").value
-                )
+                accel_factor = float(self.node.get_parameter("light_pitch_damping_factor").value)
 
                 ang_vel_norm = (
                     float(np.linalg.norm(self.angular_velocity))
@@ -862,9 +807,7 @@ class CostCalculator:
         try:
             focus_deadband = max(
                 0.0,
-                float(
-                    self.node.get_parameter("focus_yaw_hold_deadband_rad").value
-                ),
+                float(self.node.get_parameter("focus_yaw_hold_deadband_rad").value),
             )
         except PARAMETER_READ_ERRORS:
             pass
@@ -897,10 +840,7 @@ class CostCalculator:
             total_cost,
         )
 
-        if (
-            current_time is not None
-            and current_time - self._last_framing_log_time >= 1.0
-        ):
+        if current_time is not None and current_time - self._last_framing_log_time >= 1.0:
             self._last_framing_log_time = current_time
             logger.info(
                 "CostCalculator detail: framing=%.3f depth_cost=%.3f lighting=%.3f total=%.3f target=%.3f actual=%.3f err=%.3f d_min=%.3f",
@@ -995,7 +935,7 @@ class CostCalculator:
         ry = target_world_y - self.position[1]
         rz = target_world_z - self.position[2]
 
-        norm = math.sqrt(tx*tx + ty*ty + tz*tz + tw*tw)
+        norm = math.sqrt(tx * tx + ty * ty + tz * tz + tw * tw)
         if norm > 0:
             tx /= norm
             ty /= norm
@@ -1082,10 +1022,7 @@ class CostCalculator:
             pdy = target_world_y - reference_drone_y
             pdz = target_world_z - reference_drone_z
             prev_distance = math.sqrt(pdx * pdx + pdy * pdy + pdz * pdz)
-            if (
-                math.isfinite(prev_distance)
-                and prev_distance > self.SimulationParams.EPSILON
-            ):
+            if math.isfinite(prev_distance) and prev_distance > self.SimulationParams.EPSILON:
                 j_stab = (distance - prev_distance) ** 2
 
         depth_cost = (w_dist * j_dist) + (w_near * j_near) + (w_stab * j_stab)
@@ -1112,12 +1049,8 @@ class CostCalculator:
             rdz = target_world_z - reference_drone_z
             ref_norm = math.sqrt(rdx * rdx + rdy * rdy + rdz * rdz)
             if math.isfinite(ref_norm) and ref_norm > self.SimulationParams.EPSILON:
-                reference_forward = np.array([rdx, rdy, rdz], dtype=float) / float(
-                    ref_norm
-                )
-                dot_val = float(
-                    np.clip(np.dot(reference_forward, desired_forward), -1.0, 1.0)
-                )
+                reference_forward = np.array([rdx, rdy, rdz], dtype=float) / float(ref_norm)
+                dot_val = float(np.clip(np.dot(reference_forward, desired_forward), -1.0, 1.0))
                 angle = math.acos(dot_val)
 
                 w_smooth = float(self.node.get_parameter("w_smooth").value)
@@ -1139,8 +1072,6 @@ class CostCalculator:
                         delta_px = float(self.node.get_parameter("huber_delta_px").value)
                         err_px = 0.0 if abs(err_px) < deadband else err_px
                         w_framing = float(self.node.get_parameter("w_framing").value)
-                        framing_cost = w_framing * float(
-                            self.huber_function(err_px, delta_px)
-                        )
+                        framing_cost = w_framing * float(self.huber_function(err_px, delta_px))
 
         return depth_cost, lighting_cost, smoothness_cost, framing_cost

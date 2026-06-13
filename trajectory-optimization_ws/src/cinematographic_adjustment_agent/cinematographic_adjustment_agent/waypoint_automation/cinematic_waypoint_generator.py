@@ -35,19 +35,18 @@ add_config_path()
 import math
 
 import rclpy
+from constants import (
+    BsplineFilterParams,
+    CinematicConstraints,
+    CinematographyParams,
+    LightAvoidanceParams,
+    WaypointParams,
+)
 from geometry_msgs.msg import PointStamped, PoseArray, PoseStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from std_msgs.msg import Bool, Float32, Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
-
-from constants import (
-    WaypointParams,
-    BsplineFilterParams,
-    CinematicConstraints,
-    CinematographyParams,
-    LightAvoidanceParams,
-)
 
 from ..cost_functions.cost_functions import CostCalculator
 from .anchors.anchor_mixin import AnchorMixin
@@ -58,6 +57,7 @@ from .sequencing.waypoint_sequencer import WaypointSequencerMixin
 from .simulation.simulation_mixin import SimulationMixin
 from .utils.geometry_mixin import GeometryMixin
 from .viz.visualization_mixin import VisualizationMixin
+
 
 class CinematicWaypointGenerator(
     Node,
@@ -75,25 +75,19 @@ class CinematicWaypointGenerator(
         self.params = CinematographyParams()
         self.constraints = CinematicConstraints()
 
-        self.frame_id = str(
-            self.declare_parameter("frame_id", WaypointParams.FRAME_ID).value
-        )
+        self.frame_id = str(self.declare_parameter("frame_id", WaypointParams.FRAME_ID).value)
         self.waypoints_topic = str(self.declare_parameter("waypoints_topic", "").value)
         self.waypoints_file = str(self.declare_parameter("waypoints_file", "").value)
 
         self.output_topic = str(
             self.declare_parameter("output_topic", self.params.WAYPOINTS_TOPIC).value
         )
-        self.odom_topic = str(
-            self.declare_parameter("odom_topic", self.params.ODOM_TOPIC).value
-        )
+        self.odom_topic = str(self.declare_parameter("odom_topic", self.params.ODOM_TOPIC).value)
         self.detections_topic = str(
             self.declare_parameter("detections_topic", "/object_detections").value
         )
         self.light_vector_topic = str(
-            self.declare_parameter(
-                "light_vector_topic", self.params.LIGHT_VECTOR_TOPIC
-            ).value
+            self.declare_parameter("light_vector_topic", self.params.LIGHT_VECTOR_TOPIC).value
         )
         self.enable_cost_optimization = bool(
             self.declare_parameter(
@@ -101,14 +95,10 @@ class CinematicWaypointGenerator(
             ).value
         )
         self.light_avoidance_enabled = bool(
-            self.declare_parameter(
-                "light_avoidance_enabled", LightAvoidanceParams.ENABLED
-            ).value
+            self.declare_parameter("light_avoidance_enabled", LightAvoidanceParams.ENABLED).value
         )
         self.light_avoidance_gain = float(
-            self.declare_parameter(
-                "light_avoid_gain", self.constraints.LIGHT_AVOID_GAIN
-            ).value
+            self.declare_parameter("light_avoid_gain", self.constraints.LIGHT_AVOID_GAIN).value
         )
         self.light_influence_distance_m = float(
             self.declare_parameter(
@@ -145,9 +135,7 @@ class CinematicWaypointGenerator(
         ]
 
         self.goal_pub = self.create_publisher(PoseStamped, self.output_topic, 10)
-        self.odom_sub = self.create_subscription(
-            Odometry, self.odom_topic, self.odom_callback, 10
-        )
+        self.odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, 10)
         self.detection_sub = self.create_subscription(
             Float32MultiArray, self.detections_topic, self.detection_callback, 10
         )
@@ -165,9 +153,7 @@ class CinematicWaypointGenerator(
                 "/cinematography/anchor_focus_distance",
             ).value
         )
-        self.anchor_distance_pub = self.create_publisher(
-            Float32, self.anchor_distance_topic, 10
-        )
+        self.anchor_distance_pub = self.create_publisher(Float32, self.anchor_distance_topic, 10)
         if self.light_avoidance_enabled:
             self.light_sub = self.create_subscription(
                 Vector3Stamped,
@@ -194,13 +180,9 @@ class CinematicWaypointGenerator(
         self.waypoints_sent = False
         self.ready_time = None
         self.STARTUP_DELAY = 0.5
-        self.WAYPOINT_TIMER_PERIOD_S = (
-            0.05
-        )
+        self.WAYPOINT_TIMER_PERIOD_S = 0.05
         self.WAYPOINT_LOOKAHEAD = int(
-            self.declare_parameter(
-                "waypoint_lookahead", WaypointParams.WAYPOINT_LOOKAHEAD
-            ).value
+            self.declare_parameter("waypoint_lookahead", WaypointParams.WAYPOINT_LOOKAHEAD).value
         )
         self.dynamic_waypoint_lookahead = int(
             self.declare_parameter(
@@ -222,14 +204,10 @@ class CinematicWaypointGenerator(
         )
         self.PROGRESS_EPS_M = 0.05
         self.PROGRESS_TIMEOUT_S = float(
-            self.declare_parameter(
-                "progress_timeout_s", WaypointParams.PROGRESS_TIMEOUT_S
-            ).value
+            self.declare_parameter("progress_timeout_s", WaypointParams.PROGRESS_TIMEOUT_S).value
         )
         self.min_goal_distance_m = float(
-            self.declare_parameter(
-                "min_goal_distance_m", WaypointParams.MIN_GOAL_DISTANCE_M
-            ).value
+            self.declare_parameter("min_goal_distance_m", WaypointParams.MIN_GOAL_DISTANCE_M).value
         )
         self.min_first_waypoint_distance_m = float(
             self.declare_parameter(
@@ -243,53 +221,31 @@ class CinematicWaypointGenerator(
             ).value
         )
 
-        self.image_width = int(
-            self.declare_parameter("image_width", self.params.IMAGE_WIDTH).value
-        )
+        self.image_width = int(self.declare_parameter("image_width", self.params.IMAGE_WIDTH).value)
         self.image_height = int(
             self.declare_parameter("image_height", self.params.IMAGE_HEIGHT).value
         )
-        self.fx = float(
-            self.declare_parameter("camera_fx", self.params.CAMERA_FX).value
-        )
-        self.fy = float(
-            self.declare_parameter("camera_fy", self.params.CAMERA_FY).value
-        )
-        self.cx = float(
-            self.declare_parameter("camera_cx", self.params.CAMERA_CX).value
-        )
-        self.cy = float(
-            self.declare_parameter("camera_cy", self.params.CAMERA_CY).value
-        )
+        self.fx = float(self.declare_parameter("camera_fx", self.params.CAMERA_FX).value)
+        self.fy = float(self.declare_parameter("camera_fy", self.params.CAMERA_FY).value)
+        self.cx = float(self.declare_parameter("camera_cx", self.params.CAMERA_CX).value)
+        self.cy = float(self.declare_parameter("camera_cy", self.params.CAMERA_CY).value)
         self.orbit_altitude_m = float(
-            self.declare_parameter(
-                "orbit_altitude_m", self.params.CONSTANT_ALTITUDE_M
-            ).value
+            self.declare_parameter("orbit_altitude_m", self.params.CONSTANT_ALTITUDE_M).value
         )
         self.min_altitude_m = float(
-            self.declare_parameter(
-                "min_altitude_m", BsplineFilterParams.MIN_ALTITUDE_M
-            ).value
+            self.declare_parameter("min_altitude_m", BsplineFilterParams.MIN_ALTITUDE_M).value
         )
         self.max_altitude_m = float(
-            self.declare_parameter(
-                "max_altitude_m", BsplineFilterParams.MAX_ALTITUDE_M
-            ).value
+            self.declare_parameter("max_altitude_m", BsplineFilterParams.MAX_ALTITUDE_M).value
         )
         self.min_orbit_radius_m = float(
-            self.declare_parameter(
-                "min_orbit_radius_m", WaypointParams.MIN_ORBIT_RADIUS_M
-            ).value
+            self.declare_parameter("min_orbit_radius_m", WaypointParams.MIN_ORBIT_RADIUS_M).value
         )
         self.waypoint_radius_m = float(
-            self.declare_parameter(
-                "waypoint_radius_m", WaypointParams.WAYPOINT_RADIUS_M
-            ).value
+            self.declare_parameter("waypoint_radius_m", WaypointParams.WAYPOINT_RADIUS_M).value
         )
         self.max_waypoint_jump_m = float(
-            self.declare_parameter(
-                "max_waypoint_jump_m", WaypointParams.MAX_WAYPOINT_JUMP_M
-            ).value
+            self.declare_parameter("max_waypoint_jump_m", WaypointParams.MAX_WAYPOINT_JUMP_M).value
         )
         self.min_waypoint_separation_m = float(
             self.declare_parameter(
@@ -316,29 +272,19 @@ class CinematicWaypointGenerator(
             self.declare_parameter("focus_distance_tolerance_m", 0.05).value
         )
         self.focus_altitude_m = float(
-            self.declare_parameter(
-                "focus_altitude_m", BsplineFilterParams.FOCUS_ALTITUDE_M
-            ).value
+            self.declare_parameter("focus_altitude_m", BsplineFilterParams.FOCUS_ALTITUDE_M).value
         )
         self.anchor_start_index = int(
-            self.declare_parameter(
-                "anchor_start_index", WaypointParams.ANCHOR_START_INDEX
-            ).value
+            self.declare_parameter("anchor_start_index", WaypointParams.ANCHOR_START_INDEX).value
         )
         self.anchor_end_index = int(
-            self.declare_parameter(
-                "anchor_end_index", WaypointParams.ANCHOR_END_INDEX
-            ).value
+            self.declare_parameter("anchor_end_index", WaypointParams.ANCHOR_END_INDEX).value
         )
         self.anchor_index_window = int(
-            self.declare_parameter(
-                "anchor_index_window", WaypointParams.ANCHOR_INDEX_WINDOW
-            ).value
+            self.declare_parameter("anchor_index_window", WaypointParams.ANCHOR_INDEX_WINDOW).value
         )
         self.anchor_min_gap = int(
-            self.declare_parameter(
-                "anchor_min_gap", WaypointParams.ANCHOR_MIN_GAP
-            ).value
+            self.declare_parameter("anchor_min_gap", WaypointParams.ANCHOR_MIN_GAP).value
         )
         self.arc_waypoint_spacing_m = float(
             self.declare_parameter(
@@ -362,9 +308,7 @@ class CinematicWaypointGenerator(
             ).value
         )
         self.waypoint_xy_scale = float(
-            self.declare_parameter(
-                "waypoint_xy_scale", WaypointParams.WAYPOINT_XY_SCALE
-            ).value
+            self.declare_parameter("waypoint_xy_scale", WaypointParams.WAYPOINT_XY_SCALE).value
         )
         self.waypoint_y_extra_scale = float(
             self.declare_parameter(
@@ -372,14 +316,10 @@ class CinematicWaypointGenerator(
             ).value
         )
         self.waypoint_z_scale = float(
-            self.declare_parameter(
-                "waypoint_z_scale", WaypointParams.WAYPOINT_Z_SCALE
-            ).value
+            self.declare_parameter("waypoint_z_scale", WaypointParams.WAYPOINT_Z_SCALE).value
         )
         self.enable_z_clamp = bool(
-            self.declare_parameter(
-                "enable_z_clamp", WaypointParams.ENABLE_Z_CLAMP
-            ).value
+            self.declare_parameter("enable_z_clamp", WaypointParams.ENABLE_Z_CLAMP).value
         )
         self.z_ceiling_override_m = float(
             self.declare_parameter(
@@ -399,18 +339,12 @@ class CinematicWaypointGenerator(
             ).value
         ]
         self.virtual_ceiling_m = float(
-            self.declare_parameter(
-                "virtual_ceiling_m", BsplineFilterParams.VIRTUAL_CEILING_M
-            ).value
+            self.declare_parameter("virtual_ceiling_m", BsplineFilterParams.VIRTUAL_CEILING_M).value
         )
-        self.simulate_object = bool(
-            self.declare_parameter("simulate_object", False).value
-        )
+        self.simulate_object = bool(self.declare_parameter("simulate_object", False).value)
         self.simulated_object_world_offset = [
             float(v)
-            for v in self.declare_parameter(
-                "simulated_object_world_offset", [0.3, 0.6, 0.0]
-            ).value
+            for v in self.declare_parameter("simulated_object_world_offset", [0.3, 0.6, 0.0]).value
         ]
         self.simulated_object_side_offset_m = float(
             self.declare_parameter("simulated_object_side_offset_m", 0.6).value
@@ -424,9 +358,7 @@ class CinematicWaypointGenerator(
 
         self.max_altitude_m = min(self.max_altitude_m, self.virtual_ceiling_m)
         self.DISTANCE_THRESHOLD_M = max(self.waypoint_radius_m, 0.001)
-        self.min_goal_distance_m = max(
-            self.min_goal_distance_m, self.DISTANCE_THRESHOLD_M
-        )
+        self.min_goal_distance_m = max(self.min_goal_distance_m, self.DISTANCE_THRESHOLD_M)
         self.min_first_waypoint_distance_m = max(
             self.min_first_waypoint_distance_m, self.DISTANCE_THRESHOLD_M
         )
@@ -446,9 +378,7 @@ class CinematicWaypointGenerator(
         ]
 
         if self.waypoints_file:
-            self.get_logger().info(
-                f"Loading base waypoints from file: {self.waypoints_file}"
-            )
+            self.get_logger().info(f"Loading base waypoints from file: {self.waypoints_file}")
             self._load_waypoints_from_file(self.waypoints_file)
         else:
             self.get_logger().info(
@@ -490,30 +420,18 @@ class CinematicWaypointGenerator(
         if self.simulate_object:
             self.create_timer(0.5, self.publish_simulated_detection)
         self.anchor_start_topic = str(
-            self.declare_parameter(
-                "anchor_start_topic", "/cinematography/anchor_start"
-            ).value
+            self.declare_parameter("anchor_start_topic", "/cinematography/anchor_start").value
         )
         self.anchor_end_topic = str(
-            self.declare_parameter(
-                "anchor_end_topic", "/cinematography/anchor_end"
-            ).value
+            self.declare_parameter("anchor_end_topic", "/cinematography/anchor_end").value
         )
-        self.anchor_start_pub = self.create_publisher(
-            PointStamped, self.anchor_start_topic, 10
-        )
-        self.anchor_end_pub = self.create_publisher(
-            PointStamped, self.anchor_end_topic, 10
-        )
+        self.anchor_start_pub = self.create_publisher(PointStamped, self.anchor_start_topic, 10)
+        self.anchor_end_pub = self.create_publisher(PointStamped, self.anchor_end_topic, 10)
         self.anchor_marker_pub = self.create_publisher(
             MarkerArray, "/cinematography/anchor_markers", 10
         )
-        self.target_marker_pub = self.create_publisher(
-            Marker, "/cinematography/target_marker", 10
-        )
-        self.framing_active_pub = self.create_publisher(
-            Bool, "/cinematography/framing_active", 10
-        )
+        self.target_marker_pub = self.create_publisher(Marker, "/cinematography/target_marker", 10)
+        self.framing_active_pub = self.create_publisher(Bool, "/cinematography/framing_active", 10)
         self.baseline_framing_pub = self.create_publisher(
             Bool, "/cinematography/baseline_framing_active", 10
         )
@@ -524,9 +442,7 @@ class CinematicWaypointGenerator(
         self.debug_arc = True
         self.debug_arc_log_period_s = 0.5
         self.debug_arc_marker_scale = 0.04
-        self.arc_marker_pub = self.create_publisher(
-            Marker, "/cinematography/arc_marker", 10
-        )
+        self.arc_marker_pub = self.create_publisher(Marker, "/cinematography/arc_marker", 10)
         self.last_arc_log_time = None
         self.enable_debug_viz = True
         self.viz_static_path = True
@@ -558,9 +474,7 @@ class CinematicWaypointGenerator(
         self.anchor_timer = self.create_timer(1.0, self._publish_anchor_points)
         self.target_marker_timer = self.create_timer(0.5, self._publish_target_marker)
 
-        self.timer = self.create_timer(
-            self.WAYPOINT_TIMER_PERIOD_S, self.check_and_send_waypoints
-        )
+        self.timer = self.create_timer(self.WAYPOINT_TIMER_PERIOD_S, self.check_and_send_waypoints)
         self.focus_depth_m: float | None = None
         self.target_world: tuple[float, float, float] | None = None
         self.last_target_world: tuple[float, float, float] | None = None
@@ -599,9 +513,7 @@ class CinematicWaypointGenerator(
             self.origin_offset = self.start_pos
             self.ready_time = self.get_clock().now()
             if self.target_world is not None:
-                self._set_anchors(
-                    target_world=self.target_world, obj_depth=self.focus_depth_m
-                )
+                self._set_anchors(target_world=self.target_world, obj_depth=self.focus_depth_m)
 
         w = msg.pose.pose.orientation.w
         x = msg.pose.pose.orientation.x
@@ -618,6 +530,7 @@ class CinematicWaypointGenerator(
         except AttributeError as error:
             self.get_logger().warn(f"odometry update skipped: malformed message ({error})")
 
+
 def main(args=None):
     rclpy.init(args=args)
     node = CinematicWaypointGenerator()
@@ -629,6 +542,7 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()

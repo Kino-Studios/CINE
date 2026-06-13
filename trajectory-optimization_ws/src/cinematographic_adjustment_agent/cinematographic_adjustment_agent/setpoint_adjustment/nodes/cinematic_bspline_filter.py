@@ -3,17 +3,24 @@ from cinematographic_adjustment_agent.utils.paths import add_config_path
 add_config_path()
 
 import math
+
 import numpy as np
 import rclpy
 from cinematography_msgs.msg import CinematographyCosts
+from constants import (
+    BsplineFilterParams,
+    CinematicConstraints,
+    CinematographyParams,
+    UserRequestedParams,
+)
 from geometry_msgs.msg import PointStamped, PolygonStamped, Vector3Stamped
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from traj_utils.msg import Bspline
 
-from constants import UserRequestedParams, CinematicConstraints, BsplineFilterParams, CinematographyParams
-from .bspline_utils import msg_to_arrays, arrays_to_msg
+from .bspline_utils import arrays_to_msg, msg_to_arrays
+
 
 class CinematicBsplineFilter(Node):
     def __init__(self):
@@ -30,13 +37,17 @@ class CinematicBsplineFilter(Node):
         self.declare_parameter("cinematic_smooth_alpha", self.params.CINEMATIC_SMOOTH_ALPHA)
         self.declare_parameter("min_altitude_m", self.params.MIN_ALTITUDE_M)
         self.declare_parameter("focus_radius_m", BsplineFilterParams.FOCUS_RADIUS_M)
-        self.declare_parameter("focus_radius_tolerance_m", BsplineFilterParams.FOCUS_RADIUS_TOLERANCE_M)
+        self.declare_parameter(
+            "focus_radius_tolerance_m", BsplineFilterParams.FOCUS_RADIUS_TOLERANCE_M
+        )
         self.declare_parameter("focus_altitude_m", BsplineFilterParams.FOCUS_ALTITUDE_M)
 
         self.params.BSPLINE_IN_TOPIC = str(self.get_parameter("bspline_in_topic").value)
         self.params.BSPLINE_OUT_TOPIC = str(self.get_parameter("bspline_out_topic").value)
         self.params.CINEMATIC_OFFSET_M = float(self.get_parameter("cinematic_offset_m").value)
-        self.params.CINEMATIC_SMOOTH_ALPHA = float(self.get_parameter("cinematic_smooth_alpha").value)
+        self.params.CINEMATIC_SMOOTH_ALPHA = float(
+            self.get_parameter("cinematic_smooth_alpha").value
+        )
         self.params.MIN_ALTITUDE_M = float(self.get_parameter("min_altitude_m").value)
         self.focus_radius_m = float(self.get_parameter("focus_radius_m").value)
         self.focus_radius_tolerance_m = float(self.get_parameter("focus_radius_tolerance_m").value)
@@ -65,7 +76,7 @@ class CinematicBsplineFilter(Node):
 
         self.detections_sub = self.create_subscription(
             Float32MultiArray,
-            'object_detections',
+            "object_detections",
             self.detections_callback,
             10,
         )
@@ -121,7 +132,7 @@ class CinematicBsplineFilter(Node):
         self.has_focus = num_objects > 0
 
         if self.has_focus and num_objects > 0:
-            if not hasattr(self, '_detection_logged'):
+            if not hasattr(self, "_detection_logged"):
                 self._detection_logged = True
 
     def bspline_callback(self, msg: Bspline):
@@ -140,25 +151,36 @@ class CinematicBsplineFilter(Node):
         alpha = float(self.params.CINEMATIC_SMOOTH_ALPHA)
         alpha = min(
             0.9,
-            alpha
-            * (1.0 + 0.05 * smooth_cost),
+            alpha * (1.0 + 0.05 * smooth_cost),
         )
 
         if pos_pts.shape[0] > 2 and alpha > 0.0:
             smoothed = pos_pts.copy()
             for i in range(1, pos_pts.shape[0] - 1):
-                smoothed[i] = (1 - alpha) * pos_pts[i] + alpha * 0.5 * (pos_pts[i - 1] + pos_pts[i + 1])
+                smoothed[i] = (1 - alpha) * pos_pts[i] + alpha * 0.5 * (
+                    pos_pts[i - 1] + pos_pts[i + 1]
+                )
             pos_pts = smoothed
 
         dt = self._estimate_dt(knots)
 
         focus_mask = self._compute_focus_mask(pos_pts)
-        focus_ratio = float(np.mean(focus_mask)) if focus_mask is not None and focus_mask.size > 0 else 0.0
+        focus_ratio = (
+            float(np.mean(focus_mask)) if focus_mask is not None and focus_mask.size > 0 else 0.0
+        )
         focus_mask_count = int(np.count_nonzero(focus_mask)) if focus_mask is not None else 0
         use_focus_limits = focus_ratio >= 0.15
 
-        max_vel = self.constraints.FOCUS_MAX_VELOCITY_MPS if use_focus_limits else self.constraints.DEFAULT_MAX_VELOCITY_MPS
-        max_acc = self.constraints.FOCUS_MAX_ACCEL_MPS2 if use_focus_limits else self.constraints.DEFAULT_MAX_ACCEL_MPS2
+        max_vel = (
+            self.constraints.FOCUS_MAX_VELOCITY_MPS
+            if use_focus_limits
+            else self.constraints.DEFAULT_MAX_VELOCITY_MPS
+        )
+        max_acc = (
+            self.constraints.FOCUS_MAX_ACCEL_MPS2
+            if use_focus_limits
+            else self.constraints.DEFAULT_MAX_ACCEL_MPS2
+        )
         focus_vel_damping = max(0.0, min(1.0, float(self.constraints.FOCUS_VELOCITY_DAMPING)))
         focus_acc_damping = max(0.0, min(1.0, float(self.constraints.FOCUS_ACCELERATION_DAMPING)))
 
@@ -166,9 +188,13 @@ class CinematicBsplineFilter(Node):
             max_vel = max_vel * focus_vel_damping
             max_acc = max_acc * focus_acc_damping
 
-        knots = self._time_scale_knots_for_limits(pos_pts, knots, dt, max_vel, max_acc, focus_mask=focus_mask)
+        knots = self._time_scale_knots_for_limits(
+            pos_pts, knots, dt, max_vel, max_acc, focus_mask=focus_mask
+        )
         dt = self._estimate_dt(knots)
-        pos_pts = self._enforce_velocity_acc_limits(pos_pts, dt, max_vel, max_acc, focus_mask=focus_mask)
+        pos_pts = self._enforce_velocity_acc_limits(
+            pos_pts, dt, max_vel, max_acc, focus_mask=focus_mask
+        )
 
         pos_pts = self.apply_mlp_adjustment(pos_pts)
         pos_pts = self._enforce_focus_radius(pos_pts, focus_mask=focus_mask)
@@ -184,10 +210,13 @@ class CinematicBsplineFilter(Node):
 
         z_pre_stats = z_stats
         z_post_stats = (
-            (float(np.min(pos_pts[:, 2])),
-             float(np.mean(pos_pts[:, 2])),
-             float(np.max(pos_pts[:, 2])))
-            if pos_pts.size else (0.0, 0.0, 0.0)
+            (
+                float(np.min(pos_pts[:, 2])),
+                float(np.mean(pos_pts[:, 2])),
+                float(np.max(pos_pts[:, 2])),
+            )
+            if pos_pts.size
+            else (0.0, 0.0, 0.0)
         )
 
         self.get_logger().debug(
@@ -227,7 +256,9 @@ class CinematicBsplineFilter(Node):
 
         return np.abs(dists - desired) <= tol
 
-    def _enforce_focus_radius(self, pos_pts: np.ndarray, focus_mask: np.ndarray | None = None) -> np.ndarray:
+    def _enforce_focus_radius(
+        self, pos_pts: np.ndarray, focus_mask: np.ndarray | None = None
+    ) -> np.ndarray:
         if self.target_world is None or pos_pts is None:
             return pos_pts
 
@@ -354,7 +385,11 @@ class CinematicBsplineFilter(Node):
             delta = pts[i] - pts[i - 1]
             vel = delta / dt
             speed = np.linalg.norm(vel)
-            seg_max_vel = self.constraints.FOCUS_MAX_VELOCITY_MPS if (focus_mask[i] and focus_mask[i - 1]) else max_vel
+            seg_max_vel = (
+                self.constraints.FOCUS_MAX_VELOCITY_MPS
+                if (focus_mask[i] and focus_mask[i - 1])
+                else max_vel
+            )
 
             if speed > seg_max_vel and speed > 0:
                 scale = seg_max_vel / speed
@@ -364,7 +399,11 @@ class CinematicBsplineFilter(Node):
             for i in range(1, pts.shape[0] - 1):
                 acc = (pts[i + 1] - 2 * pts[i] + pts[i - 1]) / (math.pow(dt, 2))
                 acc_mag = np.linalg.norm(acc)
-                seg_max_acc = self.constraints.FOCUS_MAX_ACCEL_MPS2 if (focus_mask[i] and focus_mask[i - 1] and focus_mask[i + 1]) else max_acc
+                seg_max_acc = (
+                    self.constraints.FOCUS_MAX_ACCEL_MPS2
+                    if (focus_mask[i] and focus_mask[i - 1] and focus_mask[i + 1])
+                    else max_acc
+                )
 
                 if acc_mag > seg_max_acc and acc_mag > 0:
                     blend = seg_max_acc / acc_mag
@@ -372,6 +411,7 @@ class CinematicBsplineFilter(Node):
                     pts[i] = blend * pts[i] + (1.0 - blend) * midpoint
 
         return pts
+
 
 def main(args=None):
     rclpy.init(args=args)

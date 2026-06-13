@@ -21,9 +21,7 @@ class PathBuilderMixin:
         logger = self.get_logger()
         if not bool(self.enable_cost_optimization):
             logger.debug("Waypoint cost optimization disabled, using fallback cost")
-            return self._fallback_waypoint_cost(
-                candidate_world, target_world, reference_world
-            )
+            return self._fallback_waypoint_cost(candidate_world, target_world, reference_world)
         if candidate_world is None or target_world is None or reference_world is None:
             logger.debug(
                 "Waypoint cost missing world info (candidate=%s target=%s reference=%s)",
@@ -31,14 +29,10 @@ class PathBuilderMixin:
                 target_world,
                 reference_world,
             )
-            return self._fallback_waypoint_cost(
-                candidate_world, target_world, reference_world
-            )
+            return self._fallback_waypoint_cost(candidate_world, target_world, reference_world)
         if self.cost_calculator is None:
             logger.debug("Cost calculator unavailable, using fallback cost")
-            return self._fallback_waypoint_cost(
-                candidate_world, target_world, reference_world
-            )
+            return self._fallback_waypoint_cost(candidate_world, target_world, reference_world)
 
         cost = self.cost_calculator.estimate_position_cost_at_position(
             float(candidate_world[0]),
@@ -76,9 +70,7 @@ class PathBuilderMixin:
             try:
                 total += math.dist(candidate_world, reference_world)
             except (ValueError, TypeError) as error:
-                self.get_logger().debug(
-                    f"fallback cost skipped reference distance: {error}"
-                )
+                self.get_logger().debug(f"fallback cost skipped reference distance: {error}")
         return total
 
     def _sample_cubic_bezier(self, p0, p1, p2, p3, n_points):
@@ -143,9 +135,7 @@ class PathBuilderMixin:
             p3[1] - beta * v3_dir[1],
             p3[2],
         )
-        transition = self._sample_cubic_bezier(
-            p0, p1, p2, p3, self.bezier_transition_points
-        )
+        transition = self._sample_cubic_bezier(p0, p1, p2, p3, self.bezier_transition_points)
         self.get_logger().debug(
             f"Bezier transition: p0={p0} p3={p3} blend={self.bezier_blend_length_m:.2f} points={len(transition)}"
         )
@@ -313,9 +303,7 @@ class PathBuilderMixin:
             return candidate
 
         desired = float(desired_distance)
-        min_dist = math.sqrt(
-            self.min_orbit_radius_m * self.min_orbit_radius_m + dz * dz
-        )
+        min_dist = math.sqrt(self.min_orbit_radius_m * self.min_orbit_radius_m + dz * dz)
         if desired < min_dist:
             desired = min_dist
 
@@ -346,9 +334,7 @@ class PathBuilderMixin:
         if self.detected_object is None:
             target_world = self.target_world or self.last_target_world
             if target_world is None and self.simulate_object:
-                base_pos = (
-                    self.current_pos if self.current_pos is not None else self.start_pos
-                )
+                base_pos = self.current_pos if self.current_pos is not None else self.start_pos
                 if base_pos is not None:
                     offset = self.simulated_object_world_offset
                     target_world = (
@@ -444,13 +430,9 @@ class PathBuilderMixin:
             )
         self.last_target_world = target_world
 
-        static_world = [
-            self._rel_to_world(wp) for wp in self._scaled_static_waypoints()
-        ]
+        static_world = [self._rel_to_world(wp) for wp in self._scaled_static_waypoints()]
         start_idx = int(max(0, min(self.anchor_start_idx, len(static_world) - 2)))
-        end_idx = int(
-            max(start_idx + 1, min(self.anchor_end_idx, len(static_world) - 1))
-        )
+        end_idx = int(max(start_idx + 1, min(self.anchor_end_idx, len(static_world) - 1)))
         self.viz_data["static_world"] = static_world
         self.viz_data["start_idx"] = start_idx
         self.viz_data["end_idx"] = end_idx
@@ -511,9 +493,7 @@ class PathBuilderMixin:
         self.viz_data["arc_end"] = arc_end
 
         prev_static = static_world[start_idx - 1] if start_idx - 1 >= 0 else None
-        next_static = (
-            static_world[end_idx + 1] if end_idx + 1 < len(static_world) else None
-        )
+        next_static = static_world[end_idx + 1] if end_idx + 1 < len(static_world) else None
         if prev_static is None and len(static_world) >= 2:
             fallback_ref = (
                 static_world[min(start_idx + 1, len(static_world) - 1)]
@@ -527,9 +507,7 @@ class PathBuilderMixin:
 
         if next_static is None and len(static_world) >= 2:
             fallback_ref = (
-                static_world[max(end_idx - 1, 0)]
-                if end_idx - 1 >= 0
-                else static_world[end_idx]
+                static_world[max(end_idx - 1, 0)] if end_idx - 1 >= 0 else static_world[end_idx]
             )
 
             next_static = self._extrapolate_transition_point(
@@ -548,9 +526,7 @@ class PathBuilderMixin:
         )
 
         has_cinematic_arc = bool(cinematographic_waypoints)
-        self.generated_arc_length = (
-            len(cinematographic_waypoints) if has_cinematic_arc else 0
-        )
+        self.generated_arc_length = len(cinematographic_waypoints) if has_cinematic_arc else 0
 
         if cinematographic_waypoints:
             self.anchor_start_world = arc_start
@@ -562,9 +538,7 @@ class PathBuilderMixin:
         actual_focus_distance = focus_distance
         if cinematographic_waypoints:
             waypoint_dists = [
-                math.dist(wp, target_world)
-                for wp in cinematographic_waypoints
-                if wp is not None
+                math.dist(wp, target_world) for wp in cinematographic_waypoints if wp is not None
             ]
             if waypoint_dists:
                 max_arc_dist = max(waypoint_dists)
@@ -582,9 +556,7 @@ class PathBuilderMixin:
             if prev_static is not None:
                 prev_prev = static_world[start_idx - 2] if start_idx - 2 >= 0 else None
                 next_dynamic = (
-                    cinematographic_waypoints[2]
-                    if len(cinematographic_waypoints) > 1
-                    else None
+                    cinematographic_waypoints[2] if len(cinematographic_waypoints) > 1 else None
                 )
 
                 transition_in = self._build_bezier_transition(
@@ -630,9 +602,7 @@ class PathBuilderMixin:
         else:
             if suffix:
                 suffix_altitudes = [f"{wp[2]:.3f}" for wp in suffix[:5]]
-                self.get_logger().info(
-                    f"Suffix altitudes (first 5): {suffix_altitudes}"
-                )
+                self.get_logger().info(f"Suffix altitudes (first 5): {suffix_altitudes}")
 
             combined_world = (
                 static_world[:start_idx]
@@ -661,16 +631,10 @@ class PathBuilderMixin:
             self.viz_data["transition_out"] = transition_out
             self.viz_data["combined_world"] = combined_world
 
-
-        origin = (
-            self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
-        )
-        combined_world = self._remove_anchor_points_from_waypoints(
-            combined_world, origin=origin
-        )
+        origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
+        combined_world = self._remove_anchor_points_from_waypoints(combined_world, origin=origin)
         self.dynamic_waypoints = [
-            (wp[0] - origin[0], wp[1] - origin[1], wp[2] - origin[2])
-            for wp in combined_world
+            (wp[0] - origin[0], wp[1] - origin[1], wp[2] - origin[2]) for wp in combined_world
         ]
         self.last_cinematic_waypoints = cinematographic_waypoints
         self.get_logger().debug(
@@ -678,25 +642,19 @@ class PathBuilderMixin:
             f"arc_pts={len(cinematographic_waypoints)} transition_in={len(transition_in)} transition_out={len(transition_out)} focus_dist={float(focus_distance):.3f}"
         )
 
-    def _build_orbit_segment(
-        self, center_world, radius, z, num_pts=16, reference_world=None
-    ):
+    def _build_orbit_segment(self, center_world, radius, z, num_pts=16, reference_world=None):
         radius = max(self.min_orbit_radius_m, float(radius))
         z = max(self.min_altitude_m, min(self.max_altitude_m, float(z)))
         num_pts = int(max(1, num_pts))
 
         reference = reference_world
         if reference is None:
-            reference = (
-                self.current_pos if self.current_pos is not None else self.start_pos
-            )
+            reference = self.current_pos if self.current_pos is not None else self.start_pos
 
         best_radius = float(radius)
         if bool(self.enable_cost_optimization) and reference is not None:
             radius_samples = int(max(1, self.candidate_radius_samples))
-            r_scale_min, r_scale_max = [
-                float(v) for v in self.candidate_radius_scale_range
-            ]
+            r_scale_min, r_scale_max = [float(v) for v in self.candidate_radius_scale_range]
             r_scale_min, r_scale_max = (
                 min(r_scale_min, r_scale_max),
                 max(r_scale_min, r_scale_max),
@@ -706,10 +664,7 @@ class PathBuilderMixin:
             r_min = max(self.min_orbit_radius_m, r0 * r_scale_min)
             r_max = max(r_min, r0 * r_scale_max)
             radii = (
-                [
-                    r_min + (r_max - r_min) * k / (radius_samples - 1)
-                    for k in range(radius_samples)
-                ]
+                [r_min + (r_max - r_min) * k / (radius_samples - 1) for k in range(radius_samples)]
                 if radius_samples > 1
                 else [r0]
             )
@@ -750,12 +705,9 @@ class PathBuilderMixin:
         if not rel_waypoints or detection is None:
             return rel_waypoints
 
-        origin = (
-            self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
-        )
+        origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
         wps_world = [
-            (wp[0] + origin[0], wp[1] + origin[1], wp[2] + origin[2])
-            for wp in rel_waypoints
+            (wp[0] + origin[0], wp[1] + origin[1], wp[2] + origin[2]) for wp in rel_waypoints
         ]
 
         center_world, obj_depth = self._compute_object_world(detection)
@@ -763,12 +715,11 @@ class PathBuilderMixin:
             return rel_waypoints
         self.last_target_world = center_world
 
-
-
         idx_anchor = min(
             range(len(wps_world)),
-            key=lambda i: (wps_world[i][0] - center_world[0]) ** 2
-            + (wps_world[i][1] - center_world[1]) ** 2,
+            key=lambda i: (
+                (wps_world[i][0] - center_world[0]) ** 2 + (wps_world[i][1] - center_world[1]) ** 2
+            ),
         )
         anchor_wp = wps_world[idx_anchor]
         focus_distance = self._resolve_focus_distance(obj_depth)
@@ -794,14 +745,9 @@ class PathBuilderMixin:
         tail = [wp for wp in wps_world[idx_anchor + 1 :] if not too_close(wp)]
         merged_world = head + orbit + tail
 
-        return [
-            (wp[0] - origin[0], wp[1] - origin[1], wp[2] - origin[2])
-            for wp in merged_world
-        ]
+        return [(wp[0] - origin[0], wp[1] - origin[1], wp[2] - origin[2]) for wp in merged_world]
 
-    def _build_framing_arc(
-        self, obj_world, anchor_wp, radius, prev_wp=None, next_wp=None
-    ):
+    def _build_framing_arc(self, obj_world, anchor_wp, radius, prev_wp=None, next_wp=None):
         cx, cy, _ = obj_world
         ax, ay, az = anchor_wp
 
@@ -809,7 +755,6 @@ class PathBuilderMixin:
         desired_r = min(radius, 0.4 * dist_oa) if dist_oa > 1e-3 else radius
         radius = max(self.min_orbit_radius_m, desired_r)
         z = max(self.min_altitude_m, min(self.max_altitude_m, az))
-
 
         def _dir_from(a, b):
             return (a[0] - b[0], a[1] - b[1])
@@ -823,7 +768,6 @@ class PathBuilderMixin:
         approach_ang = _angle(approach) if approach else None
         depart_ang = _angle(depart) if depart else approach_ang
 
-
         start_angle = math.atan2(ay - cy, ax - cx)
         end_angle = start_angle
         if next_wp is not None:
@@ -836,7 +780,6 @@ class PathBuilderMixin:
             cross = approach[0] * obj_vec[1] - approach[1] * obj_vec[0]
             turn_sign = 1.0 if cross > 0.0 else -1.0
             if delta * turn_sign < 0:
-
                 delta = delta - math.copysign(2 * math.pi, delta)
         num_pts = 7
 

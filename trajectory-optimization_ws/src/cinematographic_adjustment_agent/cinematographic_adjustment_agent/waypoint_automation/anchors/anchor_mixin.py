@@ -10,9 +10,7 @@ class AnchorMixin:
         if self.current_pos is None or self.origin_offset is None:
             return
 
-        static_world = [
-            self._rel_to_world(wp) for wp in self._scaled_static_waypoints()
-        ]
+        static_world = [self._rel_to_world(wp) for wp in self._scaled_static_waypoints()]
         if target_world is None and self.detected_object is not None:
             target_world, _ = self._compute_object_world(self.detected_object)
 
@@ -39,16 +37,18 @@ class AnchorMixin:
             )
         else:
             start_idx = 0
-            if self.active_waypoints is not None and 0 <= int(
-                self.current_target_index
-            ) < len(self.active_waypoints):
+            if self.active_waypoints is not None and 0 <= int(self.current_target_index) < len(
+                self.active_waypoints
+            ):
                 start_idx = int(self.current_target_index)
             else:
                 start_idx = min(
                     range(len(static_world)),
-                    key=lambda i: (static_world[i][0] - self.current_pos[0]) ** 2
-                    + (static_world[i][1] - self.current_pos[1]) ** 2
-                    + (static_world[i][2] - self.current_pos[2]) ** 2,
+                    key=lambda i: (
+                        (static_world[i][0] - self.current_pos[0]) ** 2
+                        + (static_world[i][1] - self.current_pos[1]) ** 2
+                        + (static_world[i][2] - self.current_pos[2]) ** 2
+                    ),
                 )
             end_idx = len(static_world) - 1
             self.anchor_start_world = static_world[start_idx]
@@ -195,11 +195,7 @@ class AnchorMixin:
                 dj = distances[j]
                 if not math.isfinite(dj) or dj < self.min_orbit_radius_m:
                     continue
-                cost = (
-                    abs(di - desired)
-                    + abs(dj - desired)
-                    + balance_weight * abs(di - dj)
-                )
+                cost = abs(di - desired) + abs(dj - desired) + balance_weight * abs(di - dj)
                 if cost < best_cost:
                     best_cost = cost
                     best_pair = (i, j)
@@ -207,15 +203,9 @@ class AnchorMixin:
         return best_pair
 
     def _publish_anchor_points(self):
-        if (
-            not self.anchors_set
-            or self.anchor_start_idx is None
-            or self.anchor_end_idx is None
-        ):
+        if not self.anchors_set or self.anchor_start_idx is None or self.anchor_end_idx is None:
             return
-        static_world = [
-            self._rel_to_world(wp) for wp in self._scaled_static_waypoints()
-        ]
+        static_world = [self._rel_to_world(wp) for wp in self._scaled_static_waypoints()]
         if not static_world:
             return
         start_idx = int(max(0, min(self.anchor_start_idx, len(static_world) - 1)))
@@ -290,10 +280,7 @@ class AnchorMixin:
     def _publish_anchor_focus_distance(self):
         if self.anchor_distance_pub is None or self.anchor_focus_distance is None:
             return
-        if (
-            not math.isfinite(self.anchor_focus_distance)
-            or self.anchor_focus_distance <= 0.0
-        ):
+        if not math.isfinite(self.anchor_focus_distance) or self.anchor_focus_distance <= 0.0:
             return
         self.get_logger().info(
             f"Publishing anchor focus distance: {self.anchor_focus_distance:.3f} m "

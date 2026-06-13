@@ -1,7 +1,10 @@
 import math
+
 import numpy as np
 from constants import CinematicConstraints
+
 from ..utils.config_loader import ConfigLoader
+
 
 class KinematicsController:
     def __init__(self, config: ConfigLoader):
@@ -10,13 +13,23 @@ class KinematicsController:
         self.smooth_pos = None
         self.smooth_vel = np.zeros(3, dtype=float)
 
-    def next_kinematic_step(self, target_pos: np.ndarray, current_pos: np.ndarray, dt: float, has_focus: bool) -> np.ndarray:
+    def next_kinematic_step(
+        self, target_pos: np.ndarray, current_pos: np.ndarray, dt: float, has_focus: bool
+    ) -> np.ndarray:
         if self.smooth_pos is None:
             self.smooth_pos = current_pos.copy()
             self.smooth_vel = np.zeros(3, dtype=float)
 
-        max_vel = self.constraints.FOCUS_MAX_VELOCITY_MPS if has_focus else self.constraints.DEFAULT_MAX_VELOCITY_MPS
-        max_acc = self.constraints.FOCUS_MAX_ACCEL_MPS2 if has_focus else self.constraints.DEFAULT_MAX_ACCEL_MPS2
+        max_vel = (
+            self.constraints.FOCUS_MAX_VELOCITY_MPS
+            if has_focus
+            else self.constraints.DEFAULT_MAX_VELOCITY_MPS
+        )
+        max_acc = (
+            self.constraints.FOCUS_MAX_ACCEL_MPS2
+            if has_focus
+            else self.constraints.DEFAULT_MAX_ACCEL_MPS2
+        )
 
         disp = target_pos - self.smooth_pos
         dist = float(np.linalg.norm(disp))
@@ -48,7 +61,11 @@ class KinematicsController:
 
         step = next_pos - self.smooth_pos
         step_mag = float(np.linalg.norm(step))
-        if self.config.max_waypoint_step_m > 0.0 and step_mag > self.config.max_waypoint_step_m and step_mag > 0.0:
+        if (
+            self.config.max_waypoint_step_m > 0.0
+            and step_mag > self.config.max_waypoint_step_m
+            and step_mag > 0.0
+        ):
             next_pos = self.smooth_pos + (step / step_mag) * float(self.config.max_waypoint_step_m)
             next_vel = (next_pos - self.smooth_pos) / dt
 

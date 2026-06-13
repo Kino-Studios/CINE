@@ -122,12 +122,8 @@ class VisualizationMixin:
 
         if self.viz_arc_only and self.viz_data["cinematographic_waypoints"] is not None:
             arc_pts = self.viz_data["cinematographic_waypoints"]
-            arc_path_color = (
-                (0.0, 1.0, 0.0, 1.0) if self.framing_active else (1.0, 0.0, 0.0, 1.0)
-            )
-            arc_point_color = (
-                (0.0, 1.0, 0.0, 0.8) if self.framing_active else (1.0, 0.0, 0.0, 0.8)
-            )
+            arc_path_color = (0.0, 1.0, 0.0, 1.0) if self.framing_active else (1.0, 0.0, 0.0, 1.0)
+            arc_point_color = (0.0, 1.0, 0.0, 0.8) if self.framing_active else (1.0, 0.0, 0.0, 0.8)
             markers.markers.extend(
                 self._create_path_markers(
                     arc_pts,
@@ -234,11 +230,7 @@ class VisualizationMixin:
             )
 
         if self.viz_active_path and self.active_waypoints is not None:
-            origin = (
-                self.origin_offset
-                if self.origin_offset is not None
-                else (0.0, 0.0, 0.0)
-            )
+            origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
             active_world = [
                 (wp[0] + origin[0], wp[1] + origin[1], wp[2] + origin[2])
                 for wp in self.active_waypoints
@@ -276,10 +268,7 @@ class VisualizationMixin:
                         now,
                     )
                 )
-            if (
-                self.active_waypoints
-                and self.last_published_index >= self.current_target_index
-            ):
+            if self.active_waypoints and self.last_published_index >= self.current_target_index:
                 queued_world = active_world[
                     self.current_target_index : self.last_published_index + 1
                 ]
@@ -332,18 +321,14 @@ class VisualizationMixin:
         for pts, ns, color, width, base_id in paths:
             if not pts:
                 continue
-            markers.markers.extend(
-                self._create_path_markers(pts, ns, color, width, stamp, base_id)
-            )
+            markers.markers.extend(self._create_path_markers(pts, ns, color, width, stamp, base_id))
         self.transition_viz_pub.publish(markers)
 
     def _waypoint_diameter(self):
         """Convert the configured waypoint radius into the diameter expected by Marker scales."""
         return max(0.001, 2.0 * float(self.waypoint_radius_m))
 
-    def _create_path_markers(
-        self, waypoints, namespace, color, line_width, stamp, marker_id
-    ):
+    def _create_path_markers(self, waypoints, namespace, color, line_width, stamp, marker_id):
         markers = []
 
         line_marker = Marker()
@@ -370,9 +355,7 @@ class VisualizationMixin:
         markers.append(line_marker)
         return markers
 
-    def _create_waypoint_sphere(
-        self, position, marker_id, namespace, color, scale, stamp
-    ):
+    def _create_waypoint_sphere(self, position, marker_id, namespace, color, scale, stamp):
         marker = Marker()
         marker.header.stamp = stamp
         marker.header.frame_id = self.frame_id
@@ -400,7 +383,6 @@ class VisualizationMixin:
         markers = MarkerArray()
         now = self.get_clock().now().to_msg()
 
-
         scale = 0.2
 
         for i, wp in enumerate(self.sent_waypoints_history):
@@ -418,7 +400,6 @@ class VisualizationMixin:
             marker.scale.x = scale
             marker.scale.y = scale
             marker.scale.z = scale
-
 
             marker.color.r = 1.0
             marker.color.g = 1.0

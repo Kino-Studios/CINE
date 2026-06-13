@@ -39,4 +39,3 @@ class StateTracker:
         else:
             self.current_target_id += 1
         return int(self.current_target_id)
-

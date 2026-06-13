@@ -28,9 +28,7 @@ class WaypointIOMixin:
                             continue
             if waypoints:
                 self.static_waypoints = waypoints
-                self.get_logger().info(
-                    f"Loaded {len(waypoints)} waypoints from file: {path}"
-                )
+                self.get_logger().info(f"Loaded {len(waypoints)} waypoints from file: {path}")
             else:
                 self.get_logger().warn(f"No valid waypoints found in file: {path}")
 

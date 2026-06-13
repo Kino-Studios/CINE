@@ -9,16 +9,14 @@ launch-overridden) parameter values. The two are intentionally not merged --
 one owns file parsing, the other owns ROS parameter lifecycle.
 """
 
-import rclpy
-from rclpy.node import Node
-from typing import Dict, Any
-
 from constants import (
     CinematographyParams,
     LightAvoidanceParams,
     UserRequestedParams,
     WaypointParams,
 )
+from rclpy.node import Node
+
 
 class ConfigLoader:
     def __init__(self, node: Node):
@@ -64,21 +62,41 @@ class ConfigLoader:
         self.node.declare_parameter("light_vector_topic", self.params.LIGHT_VECTOR_TOPIC)
         self.node.declare_parameter("image_topic", self.params.IMAGE_TOPIC)
         self.node.declare_parameter("thirds_strength", UserRequestedParams.THIRDS_STRENGTH)
-        self.node.declare_parameter("thirds_use_nearest_anchor", UserRequestedParams.THIRDS_USE_NEAREST_ANCHOR)
-        self.node.declare_parameter("candidate_angle_window_rad", WaypointParams.CANDIDATE_ANGLE_WINDOW_RAD)
-        self.node.declare_parameter("candidate_angle_samples", WaypointParams.CANDIDATE_ANGLE_SAMPLES)
-        self.node.declare_parameter("candidate_radius_samples", WaypointParams.CANDIDATE_RADIUS_SAMPLES)
-        self.node.declare_parameter("candidate_radius_range_m", WaypointParams.CANDIDATE_RADIUS_RANGE_M)
+        self.node.declare_parameter(
+            "thirds_use_nearest_anchor", UserRequestedParams.THIRDS_USE_NEAREST_ANCHOR
+        )
+        self.node.declare_parameter(
+            "candidate_angle_window_rad", WaypointParams.CANDIDATE_ANGLE_WINDOW_RAD
+        )
+        self.node.declare_parameter(
+            "candidate_angle_samples", WaypointParams.CANDIDATE_ANGLE_SAMPLES
+        )
+        self.node.declare_parameter(
+            "candidate_radius_samples", WaypointParams.CANDIDATE_RADIUS_SAMPLES
+        )
+        self.node.declare_parameter(
+            "candidate_radius_range_m", WaypointParams.CANDIDATE_RADIUS_RANGE_M
+        )
         self.node.declare_parameter("max_waypoint_step_m", WaypointParams.MAX_WAYPOINT_STEP_M)
 
-        self.params.TARGET_FOCUS_DISTANCE_M = float(self.node.get_parameter("target_focus_distance_m").value)
-        self.params.MIN_FOCUS_DISTANCE_M = float(self.node.get_parameter("min_focus_distance_m").value)
-        self.params.CONSTANT_ALTITUDE_M = float(self.node.get_parameter("constant_altitude_m").value)
+        self.params.TARGET_FOCUS_DISTANCE_M = float(
+            self.node.get_parameter("target_focus_distance_m").value
+        )
+        self.params.MIN_FOCUS_DISTANCE_M = float(
+            self.node.get_parameter("min_focus_distance_m").value
+        )
+        self.params.CONSTANT_ALTITUDE_M = float(
+            self.node.get_parameter("constant_altitude_m").value
+        )
         self.params.ORBIT_RADIUS_M = float(self.node.get_parameter("orbit_radius_m").value)
-        self.params.ANGULAR_VELOCITY_RPS = float(self.node.get_parameter("angular_velocity_rps").value)
+        self.params.ANGULAR_VELOCITY_RPS = float(
+            self.node.get_parameter("angular_velocity_rps").value
+        )
         self.params.LOOK_DURATION_S = float(self.node.get_parameter("look_duration_s").value)
         self.params.WAYPOINT_RATE_HZ = float(self.node.get_parameter("waypoint_rate_hz").value)
-        self.params.NUM_INITIAL_WAYPOINTS = int(self.node.get_parameter("num_initial_waypoints").value)
+        self.params.NUM_INITIAL_WAYPOINTS = int(
+            self.node.get_parameter("num_initial_waypoints").value
+        )
         self.params.IMAGE_WIDTH = int(self.node.get_parameter("image_width").value)
         self.params.IMAGE_HEIGHT = int(self.node.get_parameter("image_height").value)
         self.params.CAMERA_FX = float(self.node.get_parameter("camera_fx").value)
@@ -94,9 +112,17 @@ class ConfigLoader:
         self.params.LIGHT_VECTOR_TOPIC = str(self.node.get_parameter("light_vector_topic").value)
         self.params.IMAGE_TOPIC = str(self.node.get_parameter("image_topic").value)
         self.thirds_strength = float(self.node.get_parameter("thirds_strength").value)
-        self.thirds_use_nearest_anchor = bool(self.node.get_parameter("thirds_use_nearest_anchor").value)
-        self.candidate_angle_window_rad = float(self.node.get_parameter("candidate_angle_window_rad").value)
+        self.thirds_use_nearest_anchor = bool(
+            self.node.get_parameter("thirds_use_nearest_anchor").value
+        )
+        self.candidate_angle_window_rad = float(
+            self.node.get_parameter("candidate_angle_window_rad").value
+        )
         self.candidate_angle_samples = int(self.node.get_parameter("candidate_angle_samples").value)
-        self.candidate_radius_samples = int(self.node.get_parameter("candidate_radius_samples").value)
-        self.candidate_radius_range_m = [float(v) for v in self.node.get_parameter("candidate_radius_range_m").value]
+        self.candidate_radius_samples = int(
+            self.node.get_parameter("candidate_radius_samples").value
+        )
+        self.candidate_radius_range_m = [
+            float(v) for v in self.node.get_parameter("candidate_radius_range_m").value
+        ]
         self.max_waypoint_step_m = float(self.node.get_parameter("max_waypoint_step_m").value)

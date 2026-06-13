@@ -12,12 +12,18 @@ class SimulatedLightPublisher(Node):
 
         self.frame_id = str(self.declare_parameter("frame_id", "world").value)
         self.publish_rate_hz = float(self.declare_parameter("publish_rate_hz", 10.0).value)
-        self.light_vector_xyz = tuple(float(v) for v in self.declare_parameter("light_vector_xyz", [5.5, 1.7, 1.8]).value)
+        self.light_vector_xyz = tuple(
+            float(v) for v in self.declare_parameter("light_vector_xyz", [5.5, 1.7, 1.8]).value
+        )
         self.light_distance_m = float(self.declare_parameter("light_distance_m", 4.8).value)
         self.topic = str(self.declare_parameter("topic", "/cinematography/light_vector").value)
-        self.light_point_topic = str(self.declare_parameter("light_point_topic", "/cinematography/light_point").value)
+        self.light_point_topic = str(
+            self.declare_parameter("light_point_topic", "/cinematography/light_point").value
+        )
         self.use_start_position = bool(self.declare_parameter("use_start_position", True).value)
-        self.odom_topic = str(self.declare_parameter("odom_topic", "/drone_0_visual_slam/odom").value)
+        self.odom_topic = str(
+            self.declare_parameter("odom_topic", "/drone_0_visual_slam/odom").value
+        )
 
         self.start_position = None
         self.current_position = None
@@ -47,7 +53,6 @@ class SimulatedLightPublisher(Node):
         point.header.frame_id = self.frame_id
 
         if self.start_position is None:
-
             lx, ly, lz = self.light_vector_xyz
             ln = math.sqrt(lx * lx + ly * ly + lz * lz)
             scale = self.light_distance_m / ln if ln > 1e-6 and self.light_distance_m > 0.0 else 1.0
@@ -60,7 +65,11 @@ class SimulatedLightPublisher(Node):
         else:
             base_x, base_y, base_z = self.start_position
             lx, ly, lz = self.light_vector_xyz
-            scale = self.light_distance_m / math.sqrt(lx * lx + ly * ly + lz * lz) if self.light_distance_m > 0.0 else 1.0
+            scale = (
+                self.light_distance_m / math.sqrt(lx * lx + ly * ly + lz * lz)
+                if self.light_distance_m > 0.0
+                else 1.0
+            )
             target_x = base_x + lx * scale
             target_y = base_y + ly * scale
             target_z = base_z + lz * scale

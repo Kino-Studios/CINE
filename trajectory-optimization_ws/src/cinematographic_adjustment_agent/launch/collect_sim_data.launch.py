@@ -1,8 +1,8 @@
-from launch import LaunchDescription
-from launch_ros.actions import Node
-import os
 import sys
 from pathlib import Path
+
+from launch import LaunchDescription
+from launch_ros.actions import Node
 
 here = Path(__file__).resolve()
 for parent in [here] + list(here.parents):
@@ -14,24 +14,29 @@ for parent in [here] + list(here.parents):
 
 from constants import SimulationParams
 
+
 def generate_launch_description():
     drone_id = SimulationParams.DRONE_ID
     odom_topic = f"/drone_{drone_id}_visual_slam/odom"
     baseline_topic = f"/drone_{drone_id}_planning/bspline"
     cinematic_topic = f"/drone_{drone_id}_planning/cinematic_bspline"
-    
+
     trajectory_logger = Node(
-        package='cinematographic_adjustment_agent',
-        executable='trajectory_data_logger',
-        name='trajectory_data_logger',
-        output='screen',
-        parameters=[{
-            'odom_topic': odom_topic,
-            'baseline_bspline_topic': baseline_topic,
-            'cinematic_bspline_topic': cinematic_topic,
-        }]
+        package="cinematographic_adjustment_agent",
+        executable="trajectory_data_logger",
+        name="trajectory_data_logger",
+        output="screen",
+        parameters=[
+            {
+                "odom_topic": odom_topic,
+                "baseline_bspline_topic": baseline_topic,
+                "cinematic_bspline_topic": cinematic_topic,
+            }
+        ],
     )
-    
-    return LaunchDescription([
-        trajectory_logger,
-    ])
+
+    return LaunchDescription(
+        [
+            trajectory_logger,
+        ]
+    )

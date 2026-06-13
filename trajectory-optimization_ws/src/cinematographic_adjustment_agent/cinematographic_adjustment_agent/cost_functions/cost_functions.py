@@ -31,13 +31,13 @@ add_config_path()
 
 import rclpy
 from cinematography_msgs.msg import CinematographyCosts
+from constants import CinematographyParams, LightAvoidanceParams
 from geometry_msgs.msg import PointStamped, PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float32, Bool
+from std_msgs.msg import Bool, Float32
 
-from constants import CinematographyParams, LightAvoidanceParams
 from .cost_calculator import CostCalculator
 
 
@@ -46,9 +46,7 @@ class CostFunctionCalculatorNode(Node):
         super().__init__("cost_function_calculator")
         self.params = CinematographyParams()
         self.light_avoidance_enabled = bool(
-            self.declare_parameter(
-                "light_avoidance_enabled", LightAvoidanceParams.ENABLED
-            ).value
+            self.declare_parameter("light_avoidance_enabled", LightAvoidanceParams.ENABLED).value
         )
         self._framing_active = False
         self.cost_calculator = CostCalculator(self)
@@ -81,9 +79,13 @@ class CostFunctionCalculatorNode(Node):
         publish_rate_hz = float(self.get_parameter("publish_rate_hz").value)
 
         self._depth_sub = self.create_subscription(Image, depth_topic, self._depth_cb, 10)
-        self._center_sub = self.create_subscription(PolygonStamped, center_topic, self._center_cb, 10)
+        self._center_sub = self.create_subscription(
+            PolygonStamped, center_topic, self._center_cb, 10
+        )
         self._bbox_sub = self.create_subscription(PolygonStamped, bbox_topic, self._bbox_cb, 10)
-        self._dims_sub = self.create_subscription(PolygonStamped, dimensions_topic, self._dims_cb, 10)
+        self._dims_sub = self.create_subscription(
+            PolygonStamped, dimensions_topic, self._dims_cb, 10
+        )
         self._odom_sub = self.create_subscription(Odometry, odom_topic, self._odom_cb, 10)
         if self.light_avoidance_enabled:
             self._light_sub = self.create_subscription(
@@ -94,9 +96,15 @@ class CostFunctionCalculatorNode(Node):
 
         self._pub = self.create_publisher(CinematographyCosts, publish_topic, 10)
         self._focus_depth_pub = self.create_publisher(Float32, "/cinematography/focus_depth_m", 10)
-        self._focus_center_depth_pub = self.create_publisher(Float32, "/cinematography/focus_center_depth_m", 10)
-        self._focus_roi_depth_pub = self.create_publisher(Float32, "/cinematography/focus_roi_depth_median_m", 10)
-        self._target_world_pub = self.create_publisher(PointStamped, "/cinematography/target_world", 10)
+        self._focus_center_depth_pub = self.create_publisher(
+            Float32, "/cinematography/focus_center_depth_m", 10
+        )
+        self._focus_roi_depth_pub = self.create_publisher(
+            Float32, "/cinematography/focus_roi_depth_median_m", 10
+        )
+        self._target_world_pub = self.create_publisher(
+            PointStamped, "/cinematography/target_world", 10
+        )
         self._timer = self.create_timer(1.0 / max(1.0, publish_rate_hz), self._tick)
         self._framing_sub = self.create_subscription(
             Bool,
@@ -211,7 +219,10 @@ class CostFunctionCalculatorNode(Node):
             return None
         if self._last_odom is None:
             return None
-        if self.cost_calculator.center_point is None or len(self.cost_calculator.center_point.polygon.points) == 0:
+        if (
+            self.cost_calculator.center_point is None
+            or len(self.cost_calculator.center_point.polygon.points) == 0
+        ):
             return None
 
         u = float(self.cost_calculator.center_point.polygon.points[0].x)

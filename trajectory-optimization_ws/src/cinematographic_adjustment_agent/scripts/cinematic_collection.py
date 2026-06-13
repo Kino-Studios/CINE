@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-from cinematographic_adjustment_agent.data_collection.collection_launcher import run_cinematic_collection
+from cinematographic_adjustment_agent.data_collection.collection_launcher import (
+    run_cinematic_collection,
+)
 
 
 def main() -> None:

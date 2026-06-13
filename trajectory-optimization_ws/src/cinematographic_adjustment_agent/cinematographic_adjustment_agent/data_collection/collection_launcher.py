@@ -246,7 +246,9 @@ def _safety_cleanup() -> None:
         subprocess.run(["pkill", "-f", target], capture_output=True)
 
 
-def _ros2_run_cmd(executable: str, drone_ns: str, extra_params: Optional[dict[str, str]] = None) -> list[str]:
+def _ros2_run_cmd(
+    executable: str, drone_ns: str, extra_params: Optional[dict[str, str]] = None
+) -> list[str]:
     cmd = ["ros2", "run", _ROS_PACKAGE, executable, "--ros-args"]
     for key, val in (extra_params or {}).items():
         cmd.extend(["-p", f"{key}:={val}"])
@@ -259,17 +261,27 @@ def _declare_common_params(node: Node, defaults: dict[str, Any]) -> None:
         node.declare_parameter(name, default_value)
 
 
-def _resolve_common_params(node: Node, drone_ns: str, default_topics: dict[str, str]) -> CollectionParams:
+def _resolve_common_params(
+    node: Node, drone_ns: str, default_topics: dict[str, str]
+) -> CollectionParams:
     return CollectionParams(
         odom_topic=_resolve_param(node, "odom_topic", default_topics["odom"]),
         baseline_topic=_resolve_param(node, "baseline_bspline_topic", default_topics["baseline"]),
-        cinematic_topic=_resolve_param(node, "cinematic_bspline_topic", default_topics["cinematic"]),
+        cinematic_topic=_resolve_param(
+            node, "cinematic_bspline_topic", default_topics["cinematic"]
+        ),
         frame_id=_resolve_param(node, "frame_id", WaypointParams.FRAME_ID, env_key="FRAME_ID"),
         target_xyz=_resolve_param(
-            node, "target_xyz", SimulationParams.TARGET_XYZ, env_key="TARGET_XYZ", parser=_parse_target_xyz
+            node,
+            "target_xyz",
+            SimulationParams.TARGET_XYZ,
+            env_key="TARGET_XYZ",
+            parser=_parse_target_xyz,
         ),
         focus_depth_m=float(
-            _resolve_param(node, "focus_depth_m", SimulationParams.FOCUS_DEPTH_M, env_key="FOCUS_DEPTH_M")
+            _resolve_param(
+                node, "focus_depth_m", SimulationParams.FOCUS_DEPTH_M, env_key="FOCUS_DEPTH_M"
+            )
         ),
         waypoints_topic=node.get_parameter("waypoints_topic").value or "",
         waypoints_file=node.get_parameter("waypoints_file").value or "",
@@ -334,18 +346,28 @@ def _launch_focus_publisher(params: CollectionParams) -> subprocess.Popen:
 
 def _launch_logger(params: CollectionParams, mode: str) -> subprocess.Popen:
     cmd = [
-        "ros2", "run", _ROS_PACKAGE, "trajectory_data_logger",
-        "--mode", mode,
+        "ros2",
+        "run",
+        _ROS_PACKAGE,
+        "trajectory_data_logger",
+        "--mode",
+        mode,
         "--ros-args",
-        "-p", f"odom_topic:={params.odom_topic}",
-        "-p", f"baseline_bspline_topic:={params.baseline_topic}",
-        "-p", f"cinematic_bspline_topic:={params.cinematic_topic}",
-        "-r", f"__ns:={params.drone_ns}",
+        "-p",
+        f"odom_topic:={params.odom_topic}",
+        "-p",
+        f"baseline_bspline_topic:={params.baseline_topic}",
+        "-p",
+        f"cinematic_bspline_topic:={params.cinematic_topic}",
+        "-r",
+        f"__ns:={params.drone_ns}",
     ]
     return _start_process(cmd, "trajectory_data_logger")
 
 
-def _launch_waypoint_generator(params: CollectionParams, extra_params: Optional[dict[str, str]] = None) -> subprocess.Popen:
+def _launch_waypoint_generator(
+    params: CollectionParams, extra_params: Optional[dict[str, str]] = None
+) -> subprocess.Popen:
     ros_params = {"odom_topic": params.odom_topic}
     if extra_params:
         ros_params.update(extra_params)
@@ -380,7 +402,9 @@ def _run_collection(
     extra_node_params: Optional[dict[str, Any]] = None,
     env_file: Optional[Path] = None,
     ros_log_dir: Optional[Path] = None,
-    build_procs_fn: Optional[Callable[[CollectionParams, Node], list[subprocess.Popen | None]]] = None,
+    build_procs_fn: Optional[
+        Callable[[CollectionParams, Node], list[subprocess.Popen | None]]
+    ] = None,
     args: Optional[list[str]] = None,
 ) -> None:
     workspace_root = _find_workspace_root(Path(__file__).resolve())
@@ -388,7 +412,9 @@ def _run_collection(
     if env_file and env_file.is_file():
         _parse_env_file(env_file)
 
-    logging_severity = os.environ.get("LOGGING_SEVERITY") or SimulationParams.LOGGING_SEVERITY or "DEBUG"
+    logging_severity = (
+        os.environ.get("LOGGING_SEVERITY") or SimulationParams.LOGGING_SEVERITY or "DEBUG"
+    )
     _prepare_environment(logging_severity, ros_log_dir)
     _cleanup_cyclonedds()
     time.sleep(2)
@@ -465,12 +491,18 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
 
     def _build_procs(params: CollectionParams, node: Node) -> list[subprocess.Popen | None]:
         use_simulated_focus = _resolve_param(
-            node, "use_simulated_focus",
-            SimulationParams.USE_SIMULATED_FOCUS, env_key="USE_SIMULATED_FOCUS", parser=_parse_bool,
+            node,
+            "use_simulated_focus",
+            SimulationParams.USE_SIMULATED_FOCUS,
+            env_key="USE_SIMULATED_FOCUS",
+            parser=_parse_bool,
         )
         use_simulated_light = _resolve_param(
-            node, "use_simulated_light",
-            SimulationParams.USE_SIMULATED_LIGHT, env_key="USE_SIMULATED_LIGHT", parser=_parse_bool,
+            node,
+            "use_simulated_light",
+            SimulationParams.USE_SIMULATED_LIGHT,
+            env_key="USE_SIMULATED_LIGHT",
+            parser=_parse_bool,
         )
 
         procs: list[subprocess.Popen | None] = []
@@ -519,9 +551,7 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
         procs.append(_launch_logger(params, "constrained"))
         time.sleep(2)
 
-        procs.append(
-            _launch_waypoint_generator(params, extra_params={"frame_id": params.frame_id})
-        )
+        procs.append(_launch_waypoint_generator(params, extra_params={"frame_id": params.frame_id}))
         return procs
 
     _run_collection(

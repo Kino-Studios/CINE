@@ -6,11 +6,10 @@ import math
 from typing import Optional
 
 import numpy as np
+from constants import Constraints
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
-
-from constants import Constraints
 
 
 class TrapezoidalProfile:
@@ -18,8 +17,9 @@ class TrapezoidalProfile:
         self.max_velocity = max_velocity
         self.max_acceleration = max_acceleration
 
-    def compute_profile(self, start_pos: np.ndarray, target_pos: np.ndarray,
-                       current_vel: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
+    def compute_profile(
+        self, start_pos: np.ndarray, target_pos: np.ndarray, current_vel: np.ndarray, dt: float
+    ) -> tuple[np.ndarray, np.ndarray]:
 
         displacement = target_pos - start_pos
         distance = np.linalg.norm(displacement)
@@ -52,73 +52,67 @@ class TrapezoidalProfile:
 
         return next_pos, next_vel
 
+
 class TrapezoidalSetpointFilter:
-    def __init__(self, node: Node,
-                 input_topic: str = "/position_cmd",
-                 output_topic: str = "/position_cmd_smooth",
-                 max_velocity: Optional[float] = None,
-                 max_acceleration: Optional[float] = None):
+    def __init__(
+        self,
+        node: Node,
+        input_topic: str = "/position_cmd",
+        output_topic: str = "/position_cmd_smooth",
+        max_velocity: Optional[float] = None,
+        max_acceleration: Optional[float] = None,
+    ):
 
         self.node = node
 
         max_vel = max_velocity if max_velocity is not None else Constraints.MAX_VELOCITY
-        max_accel = max_acceleration if max_acceleration is not None else Constraints.MAX_ACCELERATION
+        max_accel = (
+            max_acceleration if max_acceleration is not None else Constraints.MAX_ACCELERATION
+        )
 
         self.profile = TrapezoidalProfile(max_vel, max_accel)
         self.current_pos = np.array([0.0, 0.0, 0.0])
         self.current_vel = np.array([0.0, 0.0, 0.0])
         self.has_odom = False
 
-        self.odom_sub = node.create_subscription(
-            Odometry,
-            '/odometry',
-            self.odom_callback,
-            20
-        )
+        self.odom_sub = node.create_subscription(Odometry, "/odometry", self.odom_callback, 20)
         self.cmd_sub = node.create_subscription(
-            PoseStamped,
-            '/cinematographic/pos_cmd_geo',
-            self.position_cmd_callback,
-            10
+            PoseStamped, "/cinematographic/pos_cmd_geo", self.position_cmd_callback, 10
         )
-        self.cmd_pub = node.create_publisher(
-            PoseStamped,
-            '/cinematographic/trap_pos_cmd_geo',
-            10
-        )
+        self.cmd_pub = node.create_publisher(PoseStamped, "/cinematographic/trap_pos_cmd_geo", 10)
 
         self.publish_rate = 50.0
         self.timer = node.create_timer(1.0 / self.publish_rate, self.timer_callback)
         self.target_cmd: Optional[PoseStamped] = None
 
     def odom_callback(self, msg: Odometry):
-        self.current_pos = np.array([
-            msg.pose.pose.position.x,
-            msg.pose.pose.position.y,
-            msg.pose.pose.position.z
-        ])
-        self.current_vel = np.array([
-            msg.twist.twist.linear.x,
-            msg.twist.twist.linear.y,
-            msg.twist.twist.linear.z
-        ])
+        self.current_pos = np.array(
+            [msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z]
+        )
+        self.current_vel = np.array(
+            [msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z]
+        )
         self.has_odom = True
 
     def position_cmd_callback(self, msg: PoseStamped):
-        if not (math.isnan(msg.pose.position.x) or
-                math.isnan(msg.pose.position.y) or
-                math.isnan(msg.pose.position.z)):
+        if not (
+            math.isnan(msg.pose.position.x)
+            or math.isnan(msg.pose.position.y)
+            or math.isnan(msg.pose.position.z)
+        ):
             self.target_cmd = msg
 
     def timer_callback(self):
         if not self.has_odom or self.target_cmd is None:
             return
 
-        target_pos = np.array([
-            self.target_cmd.pose.position.x,
-            self.target_cmd.pose.position.y,
-            self.target_cmd.pose.position.z
-        ])
+        target_pos = np.array(
+            [
+                self.target_cmd.pose.position.x,
+                self.target_cmd.pose.position.y,
+                self.target_cmd.pose.position.z,
+            ]
+        )
 
         dt = 1.0 / self.publish_rate
         next_pos, next_vel = self.profile.compute_profile(

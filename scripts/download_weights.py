@@ -1,7 +1,6 @@
 import argparse
 import hashlib
 import json
-import os
 import sys
 import urllib.request
 from pathlib import Path
@@ -18,7 +17,7 @@ REPO = "fishnos/CINE"
 WEIGHTS_FILES = ["mlp_correction.onnx", "mlp_correction.onnx.data", "scaler.json"]
 
 API_LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
-API_BY_TAG  = "https://api.github.com/repos/{repo}/releases/tags/{tag}"
+API_BY_TAG = "https://api.github.com/repos/{repo}/releases/tags/{tag}"
 
 
 def _fetch_json(url: str) -> dict:
@@ -53,17 +52,18 @@ def _download(url: str, dest: Path, expected_digest: str | None) -> None:
 
     prefix = "sha256:"
     if not expected_digest.startswith(prefix):
-        print(f"  WARNING: unrecognised digest format {expected_digest!r} for {dest.name} — skipping")
+        print(
+            f"  WARNING: unrecognised digest format {expected_digest!r} for {dest.name} — skipping"
+        )
         return
 
-    expected_hex = expected_digest[len(prefix):]
+    expected_hex = expected_digest[len(prefix) :]
     actual_hex = _sha256_of(dest)
 
     if actual_hex != expected_hex:
         dest.unlink(missing_ok=True)
         raise ValueError(
-            f"SHA-256 mismatch for {dest.name}: "
-            f"expected {expected_hex}, got {actual_hex}"
+            f"SHA-256 mismatch for {dest.name}: expected {expected_hex}, got {actual_hex}"
         )
 
 

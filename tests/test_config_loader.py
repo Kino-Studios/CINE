@@ -44,9 +44,7 @@ def test_missing_config_file_raises_filenotfounderror(monkeypatch, tmp_path):
     fake_root = tmp_path
     (fake_root / "VERSION").write_text("0.0.0\n")
 
-    monkeypatch.setattr(
-        config_loader_module, "repo_root_from", lambda _file: str(fake_root)
-    )
+    monkeypatch.setattr(config_loader_module, "repo_root_from", lambda _file: str(fake_root))
 
     with pytest.raises(FileNotFoundError) as excinfo:
         ConfigLoader()

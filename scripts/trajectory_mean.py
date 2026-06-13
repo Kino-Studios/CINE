@@ -3,7 +3,8 @@ from __future__ import annotations
 import argparse
 import csv
 import math
-from collections import defaultdict, OrderedDict
+import sys
+from collections import OrderedDict, defaultdict
 from pathlib import Path
 from typing import Sequence, Tuple
 
@@ -115,9 +116,7 @@ def aggregate_runs(
     for run in runs:
         resampled = resample_run(run, grid)
         for column, values in resampled.items():
-            stats = column_stats.setdefault(
-                column, np.zeros((grid_len, 3))
-            )
+            stats = column_stats.setdefault(column, np.zeros((grid_len, 3)))
             # Use vectorized operations with masking for NaN values
             mask = ~np.isnan(values)
             if not np.any(mask):
@@ -151,7 +150,11 @@ def write_mean_std_csv(
     column_stats: dict[str, np.ndarray],
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    columns = ["time", *(f"{col}_mean" for col in columns_order), *(f"{col}_std" for col in columns_order)]
+    columns = [
+        "time",
+        *(f"{col}_mean" for col in columns_order),
+        *(f"{col}_std" for col in columns_order),
+    ]
     with output_path.open("w", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(columns)
@@ -248,9 +251,7 @@ def main() -> int:
         combined_candidates.extend(csv_paths)
         output_path = output_dir / f"{dataset}_mean_std_trajectory.csv"
         try:
-            written_path = process_dataset(
-                dataset, csv_paths, output_path, args.time_step
-            )
+            written_path = process_dataset(dataset, csv_paths, output_path, args.time_step)
         except FileNotFoundError as exc:
             print(f"Error for {dataset}: {exc}")
             exit_status = 1

@@ -2,8 +2,8 @@
 
 Run before and after extraction to verify behavior preservation (TDD red/green harness).
 """
+
 import sys
-import math
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -18,17 +18,25 @@ for _p in (_package_root, _configs_path, _scripts_path):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from unittest.mock import MagicMock
 
 # Mock ROS 2 / RCL imports required by constants.py (not needed at test time)
 _ros_mocks = [
-    "rclpy", "rclpy.node", "rclpy.qos",
-    "geometry_msgs", "geometry_msgs.msg",
-    "nav_msgs", "nav_msgs.msg",
-    "sensor_msgs", "sensor_msgs.msg",
-    "std_msgs", "std_msgs.msg",
-    "cinematography_msgs", "cinematography_msgs.msg",
-    "traj_utils", "cv_bridge", "cv2",
+    "rclpy",
+    "rclpy.node",
+    "rclpy.qos",
+    "geometry_msgs",
+    "geometry_msgs.msg",
+    "nav_msgs",
+    "nav_msgs.msg",
+    "sensor_msgs",
+    "sensor_msgs.msg",
+    "std_msgs",
+    "std_msgs.msg",
+    "cinematography_msgs",
+    "cinematography_msgs.msg",
+    "traj_utils",
+    "cv_bridge",
+    "cv2",
 ]
 for _mod in _ros_mocks:
     if _mod not in sys.modules:
@@ -36,22 +44,21 @@ for _mod in _ros_mocks:
 
 import numpy as np
 import pytest
-
+from constants import CinematicConstraints
 from trajectory_sim_common import (
+    CONSTRAINED_CONTROL_POINTS,
+    FINITE_DIFF_STEP,
+    ORBIT_ALTITUDE_M,
+    ORBIT_RADIUS_M,
+    TRAJECTORY_SAMPLE_COUNT,
     BSplineTrajectory,
     TrajectorySimulator,
-    ORBIT_RADIUS_M,
-    ORBIT_ALTITUDE_M,
-    FINITE_DIFF_STEP,
-    CONSTRAINED_CONTROL_POINTS,
-    TRAJECTORY_SAMPLE_COUNT,
 )
-from constants import CinematicConstraints
-
 
 # ---------------------------------------------------------------------------
 # BSplineTrajectory — math properties
 # ---------------------------------------------------------------------------
+
 
 class TestBSplineKnots:
     def test_knot_vector_length(self):
@@ -166,6 +173,7 @@ class TestBSplineSampleTrajectory:
 # Module constants
 # ---------------------------------------------------------------------------
 
+
 class TestModuleConstants:
     def test_orbit_radius_positive(self):
         assert ORBIT_RADIUS_M > 0
@@ -186,12 +194,13 @@ class TestModuleConstants:
 # TrajectorySimulator
 # ---------------------------------------------------------------------------
 
+
 def _make_simulator(focus_regions=None) -> TrajectorySimulator:
     pts = np.array([[float(i), 0.0, 0.0] for i in range(6)])
     spl = BSplineTrajectory(pts, degree=3)
     constraints = CinematicConstraints()
     sim = TrajectorySimulator(spl, constraints)
-    for u_start, u_end in (focus_regions or []):
+    for u_start, u_end in focus_regions or []:
         sim.add_focus_region(u_start, u_end)
     return sim
 
@@ -217,10 +226,21 @@ class TestTrajectorySimulatorFocusRegions:
 
 class TestSimulateBaseline:
     def test_returns_dataframe_with_required_columns(self):
-        import pandas as pd
         sim = _make_simulator()
         df = sim.simulate_baseline(dt=0.1)
-        required = {"time", "u", "x", "y", "z", "vx", "vy", "vz", "speed", "has_focus", "constraint_mode"}
+        required = {
+            "time",
+            "u",
+            "x",
+            "y",
+            "z",
+            "vx",
+            "vy",
+            "vz",
+            "speed",
+            "has_focus",
+            "constraint_mode",
+        }
         assert required.issubset(set(df.columns))
 
     def test_constraint_mode_is_baseline(self):
@@ -251,7 +271,19 @@ class TestSimulateConstrained:
     def test_returns_dataframe_with_required_columns(self):
         sim = _make_simulator()
         df = sim.simulate_constrained(dt=0.1)
-        required = {"time", "u", "x", "y", "z", "vx", "vy", "vz", "speed", "has_focus", "constraint_mode"}
+        required = {
+            "time",
+            "u",
+            "x",
+            "y",
+            "z",
+            "vx",
+            "vy",
+            "vz",
+            "speed",
+            "has_focus",
+            "constraint_mode",
+        }
         assert required.issubset(set(df.columns))
 
     def test_focus_mode_label(self):

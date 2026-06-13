@@ -3,15 +3,16 @@
 Generates and compares baseline vs. velocity-constrained B-spline trajectories
 for simple, orbit, and zigzag scenarios. Saves CSV data and comparison plots.
 """
+
 import logging
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import List, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 # -- repo-root path bootstrap to find 'configs' --
 _here = Path(__file__).resolve()
@@ -24,11 +25,10 @@ for _parent in [_here] + list(_here.parents):
 
 from constants import CinematicConstraints
 from trajectory_sim_common import (
+    ORBIT_ALTITUDE_M,
+    ORBIT_RADIUS_M,
     BSplineTrajectory,
     TrajectorySimulator,
-    ORBIT_RADIUS_M,
-    ORBIT_ALTITUDE_M,
-    TRAJECTORY_SAMPLE_COUNT,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,35 +50,41 @@ class DataCollector:
     ) -> Tuple[BSplineTrajectory, List[Tuple[float, float]]]:
         """Build a BSplineTrajectory and focus-region list for a named scenario."""
         if scenario == "simple":
-            waypoints = np.array([
-                [0.0, 0.0, DEFAULT_ALTITUDE_M],
-                [2.0, 0.0, DEFAULT_ALTITUDE_M],
-                [4.0, 0.0, DEFAULT_ALTITUDE_M],
-                [6.0, 0.0, DEFAULT_ALTITUDE_M],
-                [8.0, 0.0, DEFAULT_ALTITUDE_M],
-            ])
+            waypoints = np.array(
+                [
+                    [0.0, 0.0, DEFAULT_ALTITUDE_M],
+                    [2.0, 0.0, DEFAULT_ALTITUDE_M],
+                    [4.0, 0.0, DEFAULT_ALTITUDE_M],
+                    [6.0, 0.0, DEFAULT_ALTITUDE_M],
+                    [8.0, 0.0, DEFAULT_ALTITUDE_M],
+                ]
+            )
             focus_regions = [(0.4, 0.6)]
 
         elif scenario == "orbit":
             n_points = 8
             angles = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
 
-            waypoints = np.array([
-                [ORBIT_RADIUS_M * np.cos(a), ORBIT_RADIUS_M * np.sin(a), ORBIT_ALTITUDE_M]
-                for a in angles
-            ])
+            waypoints = np.array(
+                [
+                    [ORBIT_RADIUS_M * np.cos(a), ORBIT_RADIUS_M * np.sin(a), ORBIT_ALTITUDE_M]
+                    for a in angles
+                ]
+            )
             focus_regions = [(0.2, 0.3), (0.7, 0.8)]
 
         elif scenario == "zigzag":
-            waypoints = np.array([
-                [0.0, 0.0, DEFAULT_ALTITUDE_M],
-                [1.0, 1.0, DEFAULT_ALTITUDE_M],
-                [2.0, 0.0, DEFAULT_ALTITUDE_M],
-                [3.0, 1.0, DEFAULT_ALTITUDE_M],
-                [4.0, 0.0, DEFAULT_ALTITUDE_M],
-                [5.0, 1.0, DEFAULT_ALTITUDE_M],
-                [6.0, 0.0, DEFAULT_ALTITUDE_M],
-            ])
+            waypoints = np.array(
+                [
+                    [0.0, 0.0, DEFAULT_ALTITUDE_M],
+                    [1.0, 1.0, DEFAULT_ALTITUDE_M],
+                    [2.0, 0.0, DEFAULT_ALTITUDE_M],
+                    [3.0, 1.0, DEFAULT_ALTITUDE_M],
+                    [4.0, 0.0, DEFAULT_ALTITUDE_M],
+                    [5.0, 1.0, DEFAULT_ALTITUDE_M],
+                    [6.0, 0.0, DEFAULT_ALTITUDE_M],
+                ]
+            )
             focus_regions = [(0.3, 0.4), (0.6, 0.7)]
 
         else:
@@ -134,16 +140,33 @@ class DataCollector:
         focus_mask_baseline = baseline_df["has_focus"]
 
         ax = axes[0, 0]
-        ax.plot(baseline_df["x"], baseline_df["y"], baseline_df["z"],
-                "b-", label="Baseline", alpha=0.7, linewidth=2)
-        ax.plot(constrained_df["x"], constrained_df["y"], constrained_df["z"],
-                "r--", label="Constrained", alpha=0.7, linewidth=2)
+        ax.plot(
+            baseline_df["x"],
+            baseline_df["y"],
+            baseline_df["z"],
+            "b-",
+            label="Baseline",
+            alpha=0.7,
+            linewidth=2,
+        )
+        ax.plot(
+            constrained_df["x"],
+            constrained_df["y"],
+            constrained_df["z"],
+            "r--",
+            label="Constrained",
+            alpha=0.7,
+            linewidth=2,
+        )
         if focus_mask_baseline.any():
             ax.scatter(
                 baseline_df.loc[focus_mask_baseline, "x"],
                 baseline_df.loc[focus_mask_baseline, "y"],
                 baseline_df.loc[focus_mask_baseline, "z"],
-                c="orange", s=20, alpha=0.3, label="Focus Region",
+                c="orange",
+                s=20,
+                alpha=0.3,
+                label="Focus Region",
             )
         ax.set_xlabel("X (m)")
         ax.set_ylabel("Y (m)")
@@ -154,13 +177,22 @@ class DataCollector:
 
         ax = axes[0, 1]
         ax.plot(baseline_df["x"], baseline_df["y"], "b-", label="Baseline", alpha=0.7, linewidth=2)
-        ax.plot(constrained_df["x"], constrained_df["y"], "r--", label="Constrained",
-                alpha=0.7, linewidth=2)
+        ax.plot(
+            constrained_df["x"],
+            constrained_df["y"],
+            "r--",
+            label="Constrained",
+            alpha=0.7,
+            linewidth=2,
+        )
         if focus_mask_baseline.any():
             ax.scatter(
                 baseline_df.loc[focus_mask_baseline, "x"],
                 baseline_df.loc[focus_mask_baseline, "y"],
-                c="orange", s=30, alpha=0.3, label="Focus Region",
+                c="orange",
+                s=30,
+                alpha=0.3,
+                label="Focus Region",
             )
         ax.set_xlabel("X (m)")
         ax.set_ylabel("Y (m)")
@@ -171,14 +203,34 @@ class DataCollector:
 
         constraints = CinematicConstraints()
         ax = axes[1, 0]
-        ax.plot(baseline_df["time"], baseline_df["speed"], "b-", label="Baseline",
-                alpha=0.7, linewidth=2)
-        ax.plot(constrained_df["time"], constrained_df["speed"], "r--", label="Constrained",
-                alpha=0.7, linewidth=2)
-        ax.axhline(y=constraints.DEFAULT_MAX_VELOCITY_MPS, color="g", linestyle=":",
-                   label=f"Default Max ({constraints.DEFAULT_MAX_VELOCITY_MPS} m/s)")
-        ax.axhline(y=constraints.FOCUS_MAX_VELOCITY_MPS, color="orange", linestyle=":",
-                   label=f"Focus Max ({constraints.FOCUS_MAX_VELOCITY_MPS} m/s)")
+        ax.plot(
+            baseline_df["time"],
+            baseline_df["speed"],
+            "b-",
+            label="Baseline",
+            alpha=0.7,
+            linewidth=2,
+        )
+        ax.plot(
+            constrained_df["time"],
+            constrained_df["speed"],
+            "r--",
+            label="Constrained",
+            alpha=0.7,
+            linewidth=2,
+        )
+        ax.axhline(
+            y=constraints.DEFAULT_MAX_VELOCITY_MPS,
+            color="g",
+            linestyle=":",
+            label=f"Default Max ({constraints.DEFAULT_MAX_VELOCITY_MPS} m/s)",
+        )
+        ax.axhline(
+            y=constraints.FOCUS_MAX_VELOCITY_MPS,
+            color="orange",
+            linestyle=":",
+            label=f"Focus Max ({constraints.FOCUS_MAX_VELOCITY_MPS} m/s)",
+        )
         for i in range(len(baseline_df)):
             if baseline_df.loc[i, "has_focus"]:
                 t_start = baseline_df.loc[i, "time"]
@@ -192,10 +244,20 @@ class DataCollector:
 
         ax = axes[1, 1]
         for comp, style in [("vx", "b"), ("vy", "g"), ("vz", "r")]:
-            ax.plot(baseline_df["time"], baseline_df[comp], f"{style}-",
-                    label=f"{comp.upper()} Baseline", alpha=0.5)
-            ax.plot(constrained_df["time"], constrained_df[comp], f"{style}--",
-                    label=f"{comp.upper()} Constrained", alpha=0.5)
+            ax.plot(
+                baseline_df["time"],
+                baseline_df[comp],
+                f"{style}-",
+                label=f"{comp.upper()} Baseline",
+                alpha=0.5,
+            )
+            ax.plot(
+                constrained_df["time"],
+                constrained_df[comp],
+                f"{style}--",
+                label=f"{comp.upper()} Constrained",
+                alpha=0.5,
+            )
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Velocity (m/s)")
         ax.set_title("Velocity Components")
@@ -252,8 +314,10 @@ class DataCollector:
 
         logger.info(
             "OVERALL: Baseline mean=%.3f m/s max=%.3f m/s | Constrained mean=%.3f m/s max=%.3f m/s",
-            baseline_df["speed"].mean(), baseline_df["speed"].max(),
-            constrained_df["speed"].mean(), constrained_df["speed"].max(),
+            baseline_df["speed"].mean(),
+            baseline_df["speed"].max(),
+            constrained_df["speed"].mean(),
+            constrained_df["speed"].max(),
         )
 
         baseline_focus = baseline_df[baseline_df["has_focus"]]
@@ -264,9 +328,12 @@ class DataCollector:
             logger.info(
                 "FOCUS: Baseline mean=%.3f max=%.3f | Constrained mean=%.3f max=%.3f | "
                 "Reduction=%.3f m/s (%.1f%%)",
-                baseline_focus["speed"].mean(), baseline_focus["speed"].max(),
-                constrained_focus["speed"].mean(), constrained_focus["speed"].max(),
-                reduction, pct,
+                baseline_focus["speed"].mean(),
+                baseline_focus["speed"].max(),
+                constrained_focus["speed"].mean(),
+                constrained_focus["speed"].max(),
+                reduction,
+                pct,
             )
 
         baseline_nofocus = baseline_df[~baseline_df["has_focus"]]

@@ -1,19 +1,19 @@
 import atexit
 import csv
 import math
-import os
+import signal
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
 import rclpy
 import rclpy.time
+from geometry_msgs.msg import PointStamped
+from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from traj_utils.msg import Bspline
-from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PointStamped
 from std_msgs.msg import Bool, Float32
-import numpy as np
-from pathlib import Path
-from datetime import datetime
-import signal
+from traj_utils.msg import Bspline
 
 from cinematographic_adjustment_agent.utils.paths import add_config_path
 
@@ -23,7 +23,6 @@ from constants import CinematicConstraints, SimulationParams, WaypointParams
 
 
 class UniformBspline:
-
     def __init__(self, control_points, order, knots):
         self.control_points = control_points
         self.p = order
@@ -34,13 +33,11 @@ class UniformBspline:
     def evaluateDeBoor(self, u):
         ub = np.clip(u, self.u[self.p], self.u[self.m - self.p])
 
-
         k = self.p
         while k < len(self.u) - 1:
             if self.u[k + 1] >= ub:
                 break
             k += 1
-
 
         d = []
         for i in range(self.p + 1):
@@ -49,7 +46,6 @@ class UniformBspline:
                 d.append(self.control_points[idx].copy())
             else:
                 d.append(np.zeros(3))
-
 
         for r in range(1, self.p + 1):
             for i in range(self.p, r - 1, -1):
@@ -85,16 +81,14 @@ class UniformBspline:
             else:
                 derivative_control_points[i] = np.zeros(3)
 
-
         derivative_knots = self.u[1:-1]
 
         return UniformBspline(derivative_control_points, self.p - 1, derivative_knots)
 
 
 class TrajectoryDataLogger(Node):
-
-    def __init__(self, mode='sim', run_number=None):
-        super().__init__('trajectory_data_logger')
+    def __init__(self, mode="sim", run_number=None):
+        super().__init__("trajectory_data_logger")
 
         self.constraints = CinematicConstraints()
         self.baseline_data = []
@@ -126,7 +120,6 @@ class TrajectoryDataLogger(Node):
         }
         self._framing_target_distance: float | None = None
 
-
         self._cinematic_framing_active = False
         self._framing_active = False
 
@@ -147,32 +140,23 @@ class TrajectoryDataLogger(Node):
 
         drone_id = SimulationParams.DRONE_ID
         self.declare_parameter("baseline_bspline_topic", f"/drone_{drone_id}_planning/bspline")
-        self.declare_parameter("cinematic_bspline_topic", f"/drone_{drone_id}_planning/cinematic_bspline")
+        self.declare_parameter(
+            "cinematic_bspline_topic", f"/drone_{drone_id}_planning/cinematic_bspline"
+        )
         self.declare_parameter("odom_topic", f"/drone_{drone_id}_visual_slam/odom")
         baseline_topic = str(self.get_parameter("baseline_bspline_topic").value)
         cinematic_topic = str(self.get_parameter("cinematic_bspline_topic").value)
         odom_topic = str(self.get_parameter("odom_topic").value)
 
         self.baseline_bspline_sub = self.create_subscription(
-            Bspline,
-            baseline_topic,
-            self.baseline_bspline_callback,
-            10
+            Bspline, baseline_topic, self.baseline_bspline_callback, 10
         )
 
         self.constrained_bspline_sub = self.create_subscription(
-            Bspline,
-            cinematic_topic,
-            self.constrained_bspline_callback,
-            10
+            Bspline, cinematic_topic, self.constrained_bspline_callback, 10
         )
 
-        self.odom_sub = self.create_subscription(
-            Odometry,
-            odom_topic,
-            self.odom_callback,
-            50
-        )
+        self.odom_sub = self.create_subscription(Odometry, odom_topic, self.odom_callback, 50)
 
         self.target_world_sub = self.create_subscription(
             PointStamped,
@@ -180,7 +164,6 @@ class TrajectoryDataLogger(Node):
             self.target_world_callback,
             10,
         )
-
 
         self.cinematic_framing_sub = self.create_subscription(
             Bool,
@@ -221,10 +204,10 @@ class TrajectoryDataLogger(Node):
         self._autosave_timer = self.create_timer(0.05, self._autosave)
         atexit.register(lambda: self._save_on_exit("process exit"))
 
-        self.get_logger().info('Trajectory data logger initialized')
-        self.get_logger().info(f'Output directory: {self.output_dir}')
-        self.get_logger().info(f'Mode: {self.mode}')
-        self.get_logger().info('Sampling rate: 50 Hz (every 0.02s)')
+        self.get_logger().info("Trajectory data logger initialized")
+        self.get_logger().info(f"Output directory: {self.output_dir}")
+        self.get_logger().info(f"Mode: {self.mode}")
+        self.get_logger().info("Sampling rate: 50 Hz (every 0.02s)")
 
     def baseline_bspline_callback(self, msg):
         """Store latest baseline B-spline and start logging"""
@@ -233,12 +216,14 @@ class TrajectoryDataLogger(Node):
             self.logging_active = True
             self.global_start_time = self.get_clock().now()
             self.get_logger().info(
-                f'[LOGGER] Received first B-spline! Started logging trajectory data. '
-                f'B-spline has {len(msg.pos_pts)} control points'
+                f"[LOGGER] Received first B-spline! Started logging trajectory data. "
+                f"B-spline has {len(msg.pos_pts)} control points"
             )
         else:
             if len(self.baseline_data) % 100 == 0:
-                self.get_logger().debug(f'[LOGGER] Received B-spline #{len(self.baseline_data)//100}')
+                self.get_logger().debug(
+                    f"[LOGGER] Received B-spline #{len(self.baseline_data) // 100}"
+                )
 
     def constrained_bspline_callback(self, msg):
         """Store latest constrained B-spline"""
@@ -250,14 +235,16 @@ class TrajectoryDataLogger(Node):
         if not self.logging_active:
             self.logging_active = True
             self.global_start_time = self.get_clock().now()
-            pos = np.array([
-                msg.pose.pose.position.x,
-                msg.pose.pose.position.y,
-                msg.pose.pose.position.z,
-            ])
+            pos = np.array(
+                [
+                    msg.pose.pose.position.x,
+                    msg.pose.pose.position.y,
+                    msg.pose.pose.position.z,
+                ]
+            )
             self.start_position = pos.copy()
             self.get_logger().info(
-                f'[LOGGER] Received first odometry; origin set to ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})'
+                f"[LOGGER] Received first odometry; origin set to ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})"
             )
         if self._global_start_ros_time is None:
             header_stamp = msg.header.stamp
@@ -266,7 +253,7 @@ class TrajectoryDataLogger(Node):
                     self._global_start_ros_time = rclpy.time.Time.from_msg(header_stamp)
                 except (AttributeError, TypeError, ValueError) as error:
                     self.get_logger().debug(
-                        f'[LOGGER] ROS-time parse failed; wall-clock fallback: {error}'
+                        f"[LOGGER] ROS-time parse failed; wall-clock fallback: {error}"
                     )
 
     def log_data(self):
@@ -283,7 +270,7 @@ class TrajectoryDataLogger(Node):
                 odom_time = rclpy.time.Time.from_msg(header_stamp)
             except (AttributeError, TypeError, ValueError) as error:
                 self.get_logger().debug(
-                    f'[LOGGER] ROS-time parse failed; wall-clock fallback: {error}'
+                    f"[LOGGER] ROS-time parse failed; wall-clock fallback: {error}"
                 )
                 odom_time = None
         if self._global_start_ros_time is None:
@@ -296,63 +283,74 @@ class TrajectoryDataLogger(Node):
             global_elapsed = 0.0
 
         msg = self.current_odom
-        pos = np.array([
-            msg.pose.pose.position.x,
-            msg.pose.pose.position.y,
-            msg.pose.pose.position.z,
-        ])
-        vel = np.array([
-            msg.twist.twist.linear.x,
-            msg.twist.twist.linear.y,
-            msg.twist.twist.linear.z,
-        ])
+        pos = np.array(
+            [
+                msg.pose.pose.position.x,
+                msg.pose.pose.position.y,
+                msg.pose.pose.position.z,
+            ]
+        )
+        vel = np.array(
+            [
+                msg.twist.twist.linear.x,
+                msg.twist.twist.linear.y,
+                msg.twist.twist.linear.z,
+            ]
+        )
 
         if self.start_position is None:
             self.start_position = pos.copy()
-            self.get_logger().info(f'[LOGGER] Origin set to: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})')
+            self.get_logger().info(
+                f"[LOGGER] Origin set to: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})"
+            )
 
         rel_pos = pos - self.start_position
         speed = np.linalg.norm(vel)
         planned_pos = None
         planned_vel = None
         if self.current_baseline_bspline is not None:
-            planned_pos, planned_vel = self._evaluate_bspline(self.current_baseline_bspline, current_time)
+            planned_pos, planned_vel = self._evaluate_bspline(
+                self.current_baseline_bspline, current_time
+            )
         if planned_pos is not None and self.start_position is not None:
             planned_pos = planned_pos - self.start_position
 
         odom_entry = {
-            'time': global_elapsed,
-            'odom_x': rel_pos[0],
-            'odom_y': rel_pos[1],
-            'odom_z': rel_pos[2],
-            'odom_vx': vel[0],
-            'odom_vy': vel[1],
-            'odom_vz': vel[2],
-            'odom_speed': speed,
-            'planned_x': planned_pos[0] if planned_pos is not None else None,
-            'planned_y': planned_pos[1] if planned_pos is not None else None,
-            'planned_z': planned_pos[2] if planned_pos is not None else None,
-            'planned_vx': planned_vel[0] if planned_vel is not None else None,
-            'planned_vy': planned_vel[1] if planned_vel is not None else None,
-            'planned_vz': planned_vel[2] if planned_vel is not None else None,
-            'planned_speed': float(np.linalg.norm(planned_vel)) if planned_vel is not None else None,
-            'cinematic_framing_active': self._cinematic_framing_active,
+            "time": global_elapsed,
+            "odom_x": rel_pos[0],
+            "odom_y": rel_pos[1],
+            "odom_z": rel_pos[2],
+            "odom_vx": vel[0],
+            "odom_vy": vel[1],
+            "odom_vz": vel[2],
+            "odom_speed": speed,
+            "planned_x": planned_pos[0] if planned_pos is not None else None,
+            "planned_y": planned_pos[1] if planned_pos is not None else None,
+            "planned_z": planned_pos[2] if planned_pos is not None else None,
+            "planned_vx": planned_vel[0] if planned_vel is not None else None,
+            "planned_vy": planned_vel[1] if planned_vel is not None else None,
+            "planned_vz": planned_vel[2] if planned_vel is not None else None,
+            "planned_speed": float(np.linalg.norm(planned_vel))
+            if planned_vel is not None
+            else None,
+            "cinematic_framing_active": self._cinematic_framing_active,
         }
         self.baseline_data.append(odom_entry)
 
-
         if self._framing_active and self.target_world is not None:
-            framing_mode = 'cinematic' if self._cinematic_framing_active else 'baseline'
+            framing_mode = "cinematic" if self._cinematic_framing_active else "baseline"
             self._record_distance_entry(global_elapsed, pos, framing_mode)
 
         if len(self.baseline_data) % 500 == 0:
             constrained_info = (
-                f'Constrained: {len(self.constrained_data)} samples' if self.constrained_data else 'No constrained data'
+                f"Constrained: {len(self.constrained_data)} samples"
+                if self.constrained_data
+                else "No constrained data"
             )
             framing_status = "FRAMING" if self._framing_active else "not framing"
             framing_type = " (cinematic)" if self._framing_active else ""
             self.get_logger().info(
-                f'Logged {len(self.baseline_data)} baseline samples | {constrained_info} | {framing_status}{framing_type}'
+                f"Logged {len(self.baseline_data)} baseline samples | {constrained_info} | {framing_status}{framing_type}"
             )
 
     def _evaluate_bspline(self, bspline_msg, current_ros_time):
@@ -364,22 +362,16 @@ class TrajectoryDataLogger(Node):
             if len(control_points) == 0:
                 return None, None
 
-
             bspline_start = rclpy.time.Time.from_msg(bspline_msg.start_time)
             time_offset = (current_ros_time - bspline_start).nanoseconds / 1e9
 
-
             pos_bspline = UniformBspline(control_points, order, knots)
-
 
             time_sum = pos_bspline.getTimeSum()
             if time_offset < 0 or time_offset > time_sum:
-
                 return None, None
 
-
             position = pos_bspline.evaluateDeBoorT(time_offset)
-
 
             vel_bspline = pos_bspline.getDerivative()
             velocity = vel_bspline.evaluateDeBoorT(time_offset)
@@ -387,7 +379,7 @@ class TrajectoryDataLogger(Node):
             return position, velocity
 
         except (AttributeError, ValueError, IndexError, ZeroDivisionError, TypeError) as error:
-            self.get_logger().error(f'Error evaluating B-spline: {error}')
+            self.get_logger().error(f"Error evaluating B-spline: {error}")
             return None, None
 
     def target_world_callback(self, msg: PointStamped):
@@ -434,7 +426,6 @@ class TrajectoryDataLogger(Node):
         self.get_logger().info(f"Received anchor focus distance: {distance:.3f}m")
         self._expected_target_distance = distance
 
-
         if self._framing_active:
             if self._framing_target_distance is None:
                 self._framing_target_distance = distance
@@ -444,19 +435,16 @@ class TrajectoryDataLogger(Node):
         """Update overall framing state based on cinematic framing status"""
         current_overall = self._cinematic_framing_active
 
-
         if current_overall and not prev_overall:
             self._framing_target_distance = self._expected_target_distance
-            framing_type = 'cinematic'
+            framing_type = "cinematic"
             self.get_logger().info(
                 f"ENTERING FRAMING ({framing_type}) - target distance: {self._framing_target_distance}"
             )
 
-
         elif not current_overall and prev_overall:
-            framing_type = 'cinematic'
+            framing_type = "cinematic"
             self.get_logger().info(f"EXITING FRAMING ({framing_type})")
-
 
         self._framing_active = current_overall
 
@@ -482,7 +470,6 @@ class TrajectoryDataLogger(Node):
 
         self._expected_target_distance = expected
 
-
         if self._framing_active and expected is not None:
             if self._framing_target_distance is None:
                 self._framing_target_distance = expected
@@ -499,7 +486,6 @@ class TrajectoryDataLogger(Node):
 
         target_distance = self._framing_target_distance
         if target_distance is None:
-
             target_distance = distance
             self._framing_target_distance = target_distance
             self.get_logger().info(
@@ -510,21 +496,23 @@ class TrajectoryDataLogger(Node):
         abs_error = abs(error)
         within = abs_error <= self.distance_tolerance_m
 
-        self._distance_rows.append([
-            framing_mode,  # 'cinematic' or 'baseline'
-            f"{time_value:.9f}",
-            f"{drone_pos[0]:.9f}",
-            f"{drone_pos[1]:.9f}",
-            f"{drone_pos[2]:.9f}",
-            f"{self.target_world[0]:.9f}",
-            f"{self.target_world[1]:.9f}",
-            f"{self.target_world[2]:.9f}",
-            f"{distance:.9f}",
-            f"{target_distance:.9f}",
-            f"{error:.9f}",
-            f"{abs_error:.9f}",
-            '1' if within else '0',
-        ])
+        self._distance_rows.append(
+            [
+                framing_mode,  # 'cinematic' or 'baseline'
+                f"{time_value:.9f}",
+                f"{drone_pos[0]:.9f}",
+                f"{drone_pos[1]:.9f}",
+                f"{drone_pos[2]:.9f}",
+                f"{self.target_world[0]:.9f}",
+                f"{self.target_world[1]:.9f}",
+                f"{self.target_world[2]:.9f}",
+                f"{distance:.9f}",
+                f"{target_distance:.9f}",
+                f"{error:.9f}",
+                f"{abs_error:.9f}",
+                "1" if within else "0",
+            ]
+        )
 
         stats = self._distance_stats
         stats["count"] += 1
@@ -560,7 +548,6 @@ class TrajectoryDataLogger(Node):
             writer.writerow(fieldnames)
             writer.writerows(self._distance_rows)
 
-
         if self._saved_once:
             self._log_distance_summary()
 
@@ -576,9 +563,9 @@ class TrajectoryDataLogger(Node):
         max_violation = stats["max_tolerance_violation"]
 
         self.get_logger().info(
-            f"\n{'='*70}\n"
+            f"\n{'=' * 70}\n"
             f"DISTANCE ANALYSIS SUMMARY (mode={self.mode})\n"
-            f"{'='*70}\n"
+            f"{'=' * 70}\n"
             f"  Samples:              {stats['count']}\n"
             f"  Mean |error|:         {avg_abs:.4f} m\n"
             f"  Max |error|:          {stats['abs_error_max']:.4f} m\n"
@@ -586,49 +573,53 @@ class TrajectoryDataLogger(Node):
             f"  Outside tolerance:    {outside_pct:.1f}%\n"
             f"  Max violation:        {max_violation:.4f} m\n"
             f"  Output:               {self.distance_output_path.name}\n"
-            f"{'='*70}"
+            f"{'=' * 70}"
         )
 
     def save_data(self):
 
-        if self.mode == 'constrained':
+        if self.mode == "constrained":
             if len(self.constrained_data) == 0 and len(self.baseline_data) == 0:
-                self.get_logger().warn('No data to save')
+                self.get_logger().warn("No data to save")
                 self._write_distance_csv()
                 return
 
             filename = (
-                f'cinematic_sim_{self.timestamp}.csv'
+                f"cinematic_sim_{self.timestamp}.csv"
                 if self.run_number is None
-                else f'cinematic_replay_run{self.run_number}_{self.timestamp}.csv'
+                else f"cinematic_replay_run{self.run_number}_{self.timestamp}.csv"
             )
-            data_to_save = self.constrained_data if len(self.constrained_data) > 0 else self.baseline_data
+            data_to_save = (
+                self.constrained_data if len(self.constrained_data) > 0 else self.baseline_data
+            )
             path = self.output_dir / filename
             self._write_csv(path, data_to_save)
-            self.get_logger().info(f'Saved {len(data_to_save)} cinematic data points to: {path}')
+            self.get_logger().info(f"Saved {len(data_to_save)} cinematic data points to: {path}")
             self._write_distance_csv()
             return
 
         if len(self.baseline_data) == 0:
-            self.get_logger().warn('No data to save')
+            self.get_logger().warn("No data to save")
             self._write_distance_csv()
             return
 
-
-        if self.mode == 'baseline' and self.run_number is not None:
-            filename = f'baseline_replay_run{self.run_number}_{self.timestamp}.csv'
+        if self.mode == "baseline" and self.run_number is not None:
+            filename = f"baseline_replay_run{self.run_number}_{self.timestamp}.csv"
         else:
-            filename = f'baseline_sim_{self.timestamp}.csv'
+            filename = f"baseline_sim_{self.timestamp}.csv"
 
         baseline_path = self.output_dir / filename
         self._write_csv(baseline_path, self.baseline_data)
-        self.get_logger().info(f'Saved {len(self.baseline_data)} baseline data points to: {baseline_path}')
-
+        self.get_logger().info(
+            f"Saved {len(self.baseline_data)} baseline data points to: {baseline_path}"
+        )
 
         if len(self.constrained_data) > 0:
-            constrained_path = self.output_dir / f'constrained_sim_{self.timestamp}.csv'
+            constrained_path = self.output_dir / f"constrained_sim_{self.timestamp}.csv"
             self._write_csv(constrained_path, self.constrained_data)
-            self.get_logger().info(f'Saved {len(self.constrained_data)} constrained data points to: {constrained_path}')
+            self.get_logger().info(
+                f"Saved {len(self.constrained_data)} constrained data points to: {constrained_path}"
+            )
 
         self._write_distance_csv()
 
@@ -663,21 +654,22 @@ class TrajectoryDataLogger(Node):
 def main(args=None):
     import argparse
 
-
-    parser = argparse.ArgumentParser(description='Log trajectory data')
-    parser.add_argument('--mode', type=str, default='sim',
-                       choices=['sim', 'baseline', 'constrained'],
-                       help='Logging mode: sim (normal), baseline (replay), or constrained (replay)')
-    parser.add_argument('--run-number', type=int, default=None,
-                       help='Run number for replay mode')
+    parser = argparse.ArgumentParser(description="Log trajectory data")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="sim",
+        choices=["sim", "baseline", "constrained"],
+        help="Logging mode: sim (normal), baseline (replay), or constrained (replay)",
+    )
+    parser.add_argument("--run-number", type=int, default=None, help="Run number for replay mode")
     parsed_args, ros_args = parser.parse_known_args(args=args)
 
     rclpy.init(args=ros_args)
     logger = TrajectoryDataLogger(mode=parsed_args.mode, run_number=parsed_args.run_number)
 
-
     def signal_handler(sig, frame):
-        logger.get_logger().info('Received shutdown signal...')
+        logger.get_logger().info("Received shutdown signal...")
         logger._save_on_exit(f"signal {sig}")
         if rclpy.ok():
             rclpy.shutdown()
@@ -688,10 +680,10 @@ def main(args=None):
     try:
         rclpy.spin(logger)
     except KeyboardInterrupt:
-        logger.get_logger().info('Shutting down...')
+        logger.get_logger().info("Shutting down...")
         logger._save_on_exit("KeyboardInterrupt")
     except ExternalShutdownException:
-        logger.get_logger().info('External shutdown requested')
+        logger.get_logger().info("External shutdown requested")
     finally:
         logger._save_on_exit("finalizer")
         logger.destroy_node()
@@ -699,5 +691,5 @@ def main(args=None):
             rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

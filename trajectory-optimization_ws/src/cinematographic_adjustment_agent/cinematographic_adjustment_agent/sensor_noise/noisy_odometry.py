@@ -9,10 +9,10 @@ from cinematographic_adjustment_agent.utils.paths import add_config_path
 add_config_path()
 
 import rclpy
+from constants import SensorNoiseParams
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 
-from constants import SensorNoiseParams
 
 class NoisyOdometryNode(Node):
     def __init__(self):
@@ -25,9 +25,7 @@ class NoisyOdometryNode(Node):
             ).value
         )
         self.linear_noise_std = float(
-            self.declare_parameter(
-                "linear_noise_std_m", SensorNoiseParams.LINEAR_NOISE_STD_M
-            ).value
+            self.declare_parameter("linear_noise_std_m", SensorNoiseParams.LINEAR_NOISE_STD_M).value
         )
         self.angular_noise_std = float(
             self.declare_parameter(
@@ -35,21 +33,15 @@ class NoisyOdometryNode(Node):
             ).value
         )
         self.raw_topic = str(
-            self.declare_parameter(
-                "raw_odom_topic", SensorNoiseParams.RAW_ODOM_TOPIC
-            ).value
+            self.declare_parameter("raw_odom_topic", SensorNoiseParams.RAW_ODOM_TOPIC).value
         )
         self.noisy_topic = str(
-            self.declare_parameter(
-                "noisy_odom_topic", SensorNoiseParams.NOISY_ODOM_TOPIC
-            ).value
+            self.declare_parameter("noisy_odom_topic", SensorNoiseParams.NOISY_ODOM_TOPIC).value
         )
 
         self._rng = random.Random()
         self._odom_pub = self.create_publisher(Odometry, self.noisy_topic, 30)
-        self._odom_sub = self.create_subscription(
-            Odometry, self.raw_topic, self._odom_callback, 30
-        )
+        self._odom_sub = self.create_subscription(Odometry, self.raw_topic, self._odom_callback, 30)
 
     def _add_noise(self, value: float, std: float) -> float:
         if not self.enable_noise or std <= 0.0:
@@ -71,27 +63,15 @@ class NoisyOdometryNode(Node):
             orientation.w = w / norm
 
     def _apply_noise(self, msg: Odometry) -> None:
-        msg.pose.pose.position.x = self._add_noise(
-            msg.pose.pose.position.x, self.linear_noise_std
-        )
-        msg.pose.pose.position.y = self._add_noise(
-            msg.pose.pose.position.y, self.linear_noise_std
-        )
-        msg.pose.pose.position.z = self._add_noise(
-            msg.pose.pose.position.z, self.linear_noise_std
-        )
+        msg.pose.pose.position.x = self._add_noise(msg.pose.pose.position.x, self.linear_noise_std)
+        msg.pose.pose.position.y = self._add_noise(msg.pose.pose.position.y, self.linear_noise_std)
+        msg.pose.pose.position.z = self._add_noise(msg.pose.pose.position.z, self.linear_noise_std)
 
         self._apply_orientation_noise(msg.pose.pose.orientation)
 
-        msg.twist.twist.linear.x = self._add_noise(
-            msg.twist.twist.linear.x, self.linear_noise_std
-        )
-        msg.twist.twist.linear.y = self._add_noise(
-            msg.twist.twist.linear.y, self.linear_noise_std
-        )
-        msg.twist.twist.linear.z = self._add_noise(
-            msg.twist.twist.linear.z, self.linear_noise_std
-        )
+        msg.twist.twist.linear.x = self._add_noise(msg.twist.twist.linear.x, self.linear_noise_std)
+        msg.twist.twist.linear.y = self._add_noise(msg.twist.twist.linear.y, self.linear_noise_std)
+        msg.twist.twist.linear.z = self._add_noise(msg.twist.twist.linear.z, self.linear_noise_std)
 
         msg.twist.twist.angular.x = self._add_noise(
             msg.twist.twist.angular.x, self.angular_noise_std

@@ -3,6 +3,7 @@
 Both trajectory_data_collector.py and simple_trajectory_collector.py use
 these classes. Extracted to eliminate duplication while preserving all behavior.
 """
+
 import logging
 from typing import List, Tuple
 
@@ -50,9 +51,9 @@ class BSplineTrajectory:
 
         knots[: self.degree + 1] = 0
         if n_internal > 0:
-            knots[self.degree + 1 : self.degree + 1 + n_internal] = (
-                np.linspace(0, 1, n_internal + 2)[1:-1]
-            )
+            knots[self.degree + 1 : self.degree + 1 + n_internal] = np.linspace(
+                0, 1, n_internal + 2
+            )[1:-1]
         knots[-(self.degree + 1) :] = 1
 
         return knots
@@ -75,9 +76,7 @@ class BSplineTrajectory:
 
         term2 = 0.0
         if denom2 > 1e-10:
-            term2 = (
-                (self.knots[i + k + 1] - u) / denom2 * self._basis_function(i + 1, k - 1, u)
-            )
+            term2 = (self.knots[i + k + 1] - u) / denom2 * self._basis_function(i + 1, k - 1, u)
 
         return term1 + term2
 
@@ -112,9 +111,9 @@ class BSplineTrajectory:
             if u + h > 1.0 or u - h < 0.0:
                 return np.zeros(3)
             else:
-                return (
-                    self.evaluate(u + h) - 2 * self.evaluate(u) + self.evaluate(u - h)
-                ) / (h * h)
+                return (self.evaluate(u + h) - 2 * self.evaluate(u) + self.evaluate(u - h)) / (
+                    h * h
+                )
 
         else:
             raise ValueError(f"Derivative order {order} not supported")
@@ -144,7 +143,7 @@ class TrajectorySimulator:
     elsewhere `DEFAULT_MAX_VELOCITY_MPS` is used.
     """
 
-    def __init__(self, bspline: BSplineTrajectory, constraints: "CinematicConstraints") -> None:
+    def __init__(self, bspline: BSplineTrajectory, constraints: "CinematicConstraints") -> None:  # noqa: F821  # ros-injected
         self.bspline = bspline
         self.constraints = constraints
         self.focus_regions: List[Tuple[float, float]] = []
@@ -163,9 +162,7 @@ class TrajectorySimulator:
         total_length = np.sum(np.linalg.norm(np.diff(positions, axis=0), axis=1))
         return total_length / self.constraints.DEFAULT_MAX_VELOCITY_MPS
 
-    def simulate_baseline(
-        self, dt: float = 0.05, total_time: float = None
-    ) -> pd.DataFrame:
+    def simulate_baseline(self, dt: float = 0.05, total_time: float = None) -> pd.DataFrame:
         """Simulate the raw B-spline trajectory without velocity constraints.
 
         Args:
@@ -192,25 +189,25 @@ class TrajectorySimulator:
             speed = np.linalg.norm(vel)
             has_focus = self.is_focus_active(u)
 
-            data.append({
-                "time": t,
-                "u": u,
-                "x": pos[0],
-                "y": pos[1],
-                "z": pos[2],
-                "vx": vel[0],
-                "vy": vel[1],
-                "vz": vel[2],
-                "speed": speed,
-                "has_focus": has_focus,
-                "constraint_mode": "baseline",
-            })
+            data.append(
+                {
+                    "time": t,
+                    "u": u,
+                    "x": pos[0],
+                    "y": pos[1],
+                    "z": pos[2],
+                    "vx": vel[0],
+                    "vy": vel[1],
+                    "vz": vel[2],
+                    "speed": speed,
+                    "has_focus": has_focus,
+                    "constraint_mode": "baseline",
+                }
+            )
 
         return pd.DataFrame(data)
 
-    def simulate_constrained(
-        self, dt: float = 0.05, total_time: float = None
-    ) -> pd.DataFrame:
+    def simulate_constrained(self, dt: float = 0.05, total_time: float = None) -> pd.DataFrame:
         """Simulate trajectory with cinematographic velocity constraints applied.
 
         Re-samples `CONSTRAINED_CONTROL_POINTS` control points from the original
@@ -246,25 +243,25 @@ class TrajectorySimulator:
             speed = np.linalg.norm(vel)
             has_focus = self.is_focus_active(u)
 
-            data.append({
-                "time": t,
-                "u": u,
-                "x": pos[0],
-                "y": pos[1],
-                "z": pos[2],
-                "vx": vel[0],
-                "vy": vel[1],
-                "vz": vel[2],
-                "speed": speed,
-                "has_focus": has_focus,
-                "constraint_mode": "focus" if has_focus else "default",
-            })
+            data.append(
+                {
+                    "time": t,
+                    "u": u,
+                    "x": pos[0],
+                    "y": pos[1],
+                    "z": pos[2],
+                    "vx": vel[0],
+                    "vy": vel[1],
+                    "vz": vel[2],
+                    "speed": speed,
+                    "has_focus": has_focus,
+                    "constraint_mode": "focus" if has_focus else "default",
+                }
+            )
 
         return pd.DataFrame(data)
 
-    def _enforce_velocity_constraints(
-        self, pos_pts: np.ndarray, dt: float
-    ) -> np.ndarray:
+    def _enforce_velocity_constraints(self, pos_pts: np.ndarray, dt: float) -> np.ndarray:
         """Clip inter-point velocity to the applicable per-region maximum.
 
         Iterates control points in order; if the step from point i-1 to point i

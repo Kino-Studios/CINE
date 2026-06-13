@@ -25,9 +25,7 @@ class SimulationMixin:
         self.simulated_detection_active = True
         self.use_dynamic_waypoints = True
         self.pending_detection_merge = True
-        self._set_anchors(
-            target_world=self.target_world, obj_depth=self.detected_object["depth"]
-        )
+        self._set_anchors(target_world=self.target_world, obj_depth=self.detected_object["depth"])
         if self.dynamic_waypoints is None or not self.use_dynamic_waypoints:
             self._rebuild_active_with_detection()
 
@@ -73,7 +71,6 @@ class SimulationMixin:
     def _insert_simulated_object_orbit(self, waypoints):
         if not waypoints:
             return waypoints
-
 
         idx_max_y = max(range(len(waypoints)), key=lambda i: waypoints[i][1])
         anchor_wp = waypoints[idx_max_y]

@@ -17,7 +17,6 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import NamedTuple
 
-
 # Directories that contain third-party or generated manifests, not ours.
 SKIP_DIRS = {
     "venv",

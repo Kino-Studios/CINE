@@ -1,12 +1,14 @@
+from typing import List, Optional, Tuple
+
 import rclpy
+from geometry_msgs.msg import PoseStamped
 from rclpy.exceptions import (
     ParameterAlreadyDeclaredException,
     ParameterNotDeclaredException,
 )
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
-from geometry_msgs.msg import PoseStamped
-from typing import List, Optional, Tuple
+from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
+
 
 class WaypointPublisher:
     def __init__(self, node: Node, topic_name: str = "/move_base_simple/goal"):
@@ -26,9 +28,9 @@ class WaypointPublisher:
                 durability=DurabilityPolicy.VOLATILE,
                 history=HistoryPolicy.KEEP_LAST,
                 depth=10,
-            )
+            ),
         )
-    
+
     def publish_single_waypoint(self, x: float, y: float, z: float):
         msg = PoseStamped()
         msg.header.stamp = self.node.get_clock().now().to_msg()

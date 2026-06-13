@@ -1,8 +1,7 @@
 import math
 
 from geometry_msgs.msg import PointStamped, Vector3Stamped
-from std_msgs.msg import Float32
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32, Float32MultiArray
 
 
 class DetectionMixin:
@@ -64,9 +63,7 @@ class DetectionMixin:
             return
 
         try:
-            self._set_anchors(
-                target_world=self.target_world, obj_depth=self.focus_depth_m
-            )
+            self._set_anchors(target_world=self.target_world, obj_depth=self.focus_depth_m)
         except (AttributeError, TypeError, ValueError, IndexError) as error:
             self.get_logger().warn(f"anchor update failed; nulling target world: {error}")
             self.target_world = None

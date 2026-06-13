@@ -5,14 +5,15 @@ here = Path(__file__).resolve().parent
 if str(here) not in sys.path:
     sys.path.insert(0, str(here))
 
-from constants import SimulationParams, WaypointParams, CinematicConstraints, CinematographyParams
+from constants import CinematicConstraints, CinematographyParams, SimulationParams, WaypointParams
+
 
 def main():
     if len(sys.argv) < 2:
         sys.exit(1)
-    
+
     param_name = sys.argv[1]
-    
+
     for cls in [SimulationParams, WaypointParams, CinematicConstraints, CinematographyParams]:
         if hasattr(cls, param_name):
             val = getattr(cls, param_name)
@@ -23,9 +24,10 @@ def main():
                 print(val)
 
             return
-            
+
     print(f"error: {param_name} not found", file=sys.stderr)
     sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

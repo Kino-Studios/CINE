@@ -20,8 +20,13 @@ venv/
 
 # Python bytecode
 __pycache__/
+*.py[cod]
 *.pyc
 *.pyo
+
+# Python packaging / test caches
+*.egg-info/
+.pytest_cache/
 
 # IDE / OS generated
 .vscode/
