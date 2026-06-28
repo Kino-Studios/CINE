@@ -20,18 +20,11 @@ venv/
 
 # Python bytecode
 __pycache__/
-*.py[cod]
 *.pyc
 *.pyo
 
-# Python packaging / test caches
-*.egg-info/
-.pytest_cache/
-
 # IDE / OS generated
 .vscode/
-!.vscode/settings.json
-!.vscode/c_cpp_properties.json
 .DS_Store
 **/.DS_Store
 *.db
@@ -91,6 +84,8 @@ ros_logs/
 context-text
 bashrc
 
+# Empty external deps
+Depth-Anything/
 
 *~
 
