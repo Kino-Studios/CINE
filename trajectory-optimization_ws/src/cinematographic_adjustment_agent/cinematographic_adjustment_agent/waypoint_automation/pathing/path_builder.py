@@ -15,12 +15,14 @@ class PathBuilderMixin:
             z = self.orbit_altitude_m + 0.6 * math.sin(t)
             z = max(self.min_altitude_m, min(self.max_altitude_m, z))
             pts.append((x, y, z))
+
         return pts
 
     def _estimate_waypoint_cost(self, candidate_world, target_world, reference_world):
         logger = self.get_logger()
         if not bool(self.enable_cost_optimization):
             logger.debug("Waypoint cost optimization disabled, using fallback cost")
+
             return self._fallback_waypoint_cost(candidate_world, target_world, reference_world)
         if candidate_world is None or target_world is None or reference_world is None:
             logger.debug(
@@ -29,9 +31,11 @@ class PathBuilderMixin:
                 target_world,
                 reference_world,
             )
+
             return self._fallback_waypoint_cost(candidate_world, target_world, reference_world)
         if self.cost_calculator is None:
             logger.debug("Cost calculator unavailable, using fallback cost")
+
             return self._fallback_waypoint_cost(candidate_world, target_world, reference_world)
 
         cost = self.cost_calculator.estimate_position_cost_at_position(
@@ -54,7 +58,9 @@ class PathBuilderMixin:
                 cost,
                 fallback_cost,
             )
+
             return fallback_cost
+
         return cost
 
     def _fallback_waypoint_cost(self, candidate_world, target_world, reference_world):
@@ -71,6 +77,7 @@ class PathBuilderMixin:
                 total += math.dist(candidate_world, reference_world)
             except (ValueError, TypeError) as error:
                 self.get_logger().debug(f"fallback cost skipped reference distance: {error}")
+
         return total
 
     def _sample_cubic_bezier(self, p0, p1, p2, p3, n_points):
@@ -93,6 +100,7 @@ class PathBuilderMixin:
                     b0 * p0[2] + b1 * p1[2] + b2 * p2[2] + b3 * p3[2],
                 )
             )
+
         return out
 
     def _build_bezier_transition(self, p0, p3, prev_point=None, next_point=None):
@@ -139,6 +147,7 @@ class PathBuilderMixin:
         self.get_logger().debug(
             f"Bezier transition: p0={p0} p3={p3} blend={self.bezier_blend_length_m:.2f} points={len(transition)}"
         )
+
         return [self._clamp_waypoint_to_bounds(wp) for wp in transition]
 
     def _resolve_focus_distance(self, obj_depth, use_anchor=True):
@@ -152,6 +161,7 @@ class PathBuilderMixin:
             return float(self.focus_depth_m)
         if obj_depth is not None and obj_depth > 0.0:
             return float(obj_depth)
+
         return float(max(self.min_focus_distance_m, self.min_orbit_radius_m))
 
     def _path_length_between(self, static_world, start_idx, end_idx):
@@ -165,6 +175,7 @@ class PathBuilderMixin:
             dy = float(b[1]) - float(a[1])
             dz = float(b[2]) - float(a[2])
             length += math.sqrt(dx * dx + dy * dy + dz * dz)
+
         return float(length)
 
     def _resolve_framing_altitude_from_anchors(
@@ -174,6 +185,7 @@ class PathBuilderMixin:
             return float(self.focus_altitude_m)
         z = 0.5 * (float(start_wp[2]) + float(end_wp[2]))
         z = max(z, self.min_altitude_m)
+
         return float(z)
 
     def _build_anchor_arc(
@@ -220,12 +232,14 @@ class PathBuilderMixin:
             if n <= 1e-6:
                 return candidate
             scale = desired / n
+
             return (tx + dx * scale, ty + dy * scale, tz + dz * scale)
 
         if theta < 1e-6:
             candidate = _project_to_sphere(
                 (tx + v0n[0] * desired, ty + v0n[1] * desired, tz + v0n[2] * desired)
             )
+
             return [self._clamp_waypoint_to_bounds(candidate)]
 
         sin_theta = math.sin(theta)
@@ -242,6 +256,7 @@ class PathBuilderMixin:
             candidate = _project_to_sphere(candidate)
             candidate = self._clamp_waypoint_to_bounds(candidate)
             arc_pts.append(candidate)
+
         return arc_pts
 
     def _score_arc_points(self, arc_pts, target_world):
@@ -273,6 +288,7 @@ class PathBuilderMixin:
                 return float("inf")
             total += float(cost)
             ref = wp
+
         return float(total)
 
     def _resolve_framing_altitude(self, base_pos):
@@ -280,6 +296,7 @@ class PathBuilderMixin:
             return float(self.focus_altitude_m)
         if base_pos is None:
             return float(self.orbit_altitude_m)
+
         return float(base_pos[2])
 
     def _enforce_focus_distance(
@@ -326,6 +343,7 @@ class PathBuilderMixin:
         if desired_xy < self.min_orbit_radius_m:
             desired_xy = float(self.min_orbit_radius_m)
         scale = desired_xy / max(xy_dist, 1e-6)
+
         return (tx + dx * scale, ty + dy * scale, z)
 
     def generate_cinematographic_waypoints(self):
@@ -485,6 +503,7 @@ class PathBuilderMixin:
                     scale = radius_xy / xy_dist if radius_xy > 1e-6 else 0.0
                     candidate = (tx + dx * scale, ty + dy * scale, base_z)
                     candidate = self._clamp_waypoint_to_bounds(candidate)
+
             return candidate
 
         arc_start = _project_to_circle(start_wp)
@@ -598,6 +617,7 @@ class PathBuilderMixin:
             self.get_logger().debug(
                 f"Cinematic arc unavailable (start={start_idx} end={end_idx}) using static path len={len(static_world)}"
             )
+
             return
         else:
             if suffix:
@@ -699,6 +719,7 @@ class PathBuilderMixin:
             x = center_world[0] + best_radius * math.cos(t)
             y = center_world[1] + best_radius * math.sin(t)
             waypoints.append(self._clamp_waypoint_to_bounds((x, y, z)))
+
         return waypoints
 
     def _merge_framing_with_static(self, rel_waypoints, detection):
@@ -739,6 +760,7 @@ class PathBuilderMixin:
                 dz = wp[2] - o[2]
                 if (dx * dx + dy * dy + dz * dz) ** 0.5 < overlap_thresh:
                     return True
+
             return False
 
         head = [wp for wp in wps_world[: idx_anchor + 1] if not too_close(wp)]

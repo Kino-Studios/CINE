@@ -4,6 +4,7 @@ class GeometryMixin:
         n = (x * x + y * y + z * z) ** 0.5
         if n <= 1e-9:
             return (0.0, 0.0, 0.0), 0.0
+
         return (x / n, y / n, z / n), n
 
     def _clamp_waypoint_to_bounds(self, wp):
@@ -29,6 +30,7 @@ class GeometryMixin:
                 self.get_logger().debug(f"Z clamped from {original_z:.2f} to {z:.2f}")
         else:
             z = max(self.world_bounds_min[2], max(self.min_altitude_m, float(z)))
+
         return (x, y, z)
 
     def _rel_to_world(self, target_rel):
@@ -38,12 +40,14 @@ class GeometryMixin:
             target_rel[1] + origin[1],
             target_rel[2] + origin[2],
         )
+
         return self._clamp_waypoint_to_bounds(target_world)
 
     def _distance_to(self, target_world):
         dx = self.current_pos[0] - target_world[0]
         dy = self.current_pos[1] - target_world[1]
         dz = self.current_pos[2] - target_world[2]
+
         return (dx * dx + dy * dy + dz * dz) ** 0.5
 
     def _closest_waypoint_index(self, target_world):
@@ -65,4 +69,5 @@ class GeometryMixin:
             if dist_sq < best_dist_sq:
                 best_dist_sq = dist_sq
                 best_idx = i
+
         return best_idx

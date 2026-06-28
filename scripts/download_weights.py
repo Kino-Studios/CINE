@@ -32,6 +32,7 @@ def _sha256_of(path: Path) -> str:
     with open(path, "rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
             digest.update(chunk)
+
     return digest.hexdigest()
 
 
@@ -48,6 +49,7 @@ def _download(url: str, dest: Path, expected_digest: str | None) -> None:
 
     if not expected_digest:
         print(f"  WARNING: no digest for {dest.name} — integrity could not be verified")
+
         return
 
     prefix = "sha256:"
@@ -55,6 +57,7 @@ def _download(url: str, dest: Path, expected_digest: str | None) -> None:
         print(
             f"  WARNING: unrecognised digest format {expected_digest!r} for {dest.name} — skipping"
         )
+
         return
 
     expected_hex = expected_digest[len(prefix) :]
@@ -62,6 +65,7 @@ def _download(url: str, dest: Path, expected_digest: str | None) -> None:
 
     if actual_hex != expected_hex:
         dest.unlink(missing_ok=True)
+
         raise ValueError(
             f"SHA-256 mismatch for {dest.name}: expected {expected_hex}, got {actual_hex}"
         )

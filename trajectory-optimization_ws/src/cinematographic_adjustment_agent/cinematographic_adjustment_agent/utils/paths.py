@@ -11,7 +11,9 @@ def add_config_path() -> None:
             python_constants_path = configs_dir / "python-constants"
             if str(python_constants_path) not in sys.path:
                 sys.path.insert(0, str(python_constants_path))
+
             return
+
     raise RuntimeError("Unable to locate configs/python-constants for constants import.")
 
 
@@ -31,6 +33,7 @@ def repo_root_from(file_path: str, max_levels_up: int = 12) -> str:
             break
 
         cur = parent
+
     return os.path.abspath(os.path.dirname(file_path))
 
 

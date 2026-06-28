@@ -9,6 +9,7 @@ def find_bright_region(image_path, output_path, blur_size=(11, 11), threshold_ra
     img = cv2.imread(image_path)
     if img is None:
         print(f"Error: Could not read image at {image_path}")
+
         return False
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -24,6 +25,7 @@ def find_bright_region(image_path, output_path, blur_size=(11, 11), threshold_ra
 
     if not contours:
         print("No bright regions found.")
+
         return False
 
     largest_contour = max(contours, key=cv2.contourArea)

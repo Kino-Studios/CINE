@@ -118,6 +118,7 @@ class CostFunctionCalculatorNode(Node):
             from cv_bridge import CvBridge, CvBridgeError
         except ImportError:
             self.get_logger().warn("cv_bridge unavailable; skipping depth update")
+
             return
 
         try:
@@ -129,6 +130,7 @@ class CostFunctionCalculatorNode(Node):
             self.cost_calculator.update_depth_image(depth)
         except CvBridgeError as error:
             self.get_logger().warn(f"depth image conversion failed: {error}")
+
             return
 
     def _center_cb(self, msg: PolygonStamped):
@@ -247,6 +249,7 @@ class CostFunctionCalculatorNode(Node):
             float(drone_pos.y) - x_cam,
             float(drone_pos.z) - y_cam,
         )
+
         return target_world
 
 

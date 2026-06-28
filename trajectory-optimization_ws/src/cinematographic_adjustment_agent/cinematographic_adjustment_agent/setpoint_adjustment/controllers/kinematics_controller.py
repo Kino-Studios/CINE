@@ -35,6 +35,7 @@ class KinematicsController:
         dist = float(np.linalg.norm(disp))
         if dist < 1e-6:
             self.smooth_vel = np.zeros(3, dtype=float)
+
             return self.smooth_pos.copy()
 
         direction = disp / dist
@@ -75,4 +76,5 @@ class KinematicsController:
 
         self.smooth_pos = next_pos
         self.smooth_vel = next_vel
+
         return next_pos.copy()

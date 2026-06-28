@@ -80,6 +80,7 @@ def collect_statistics(files: Iterable[Path]) -> OrderedDict[str, ColumnSummary]
 def format_float(value: float) -> str:
     if math.isnan(value):
         return "nan"
+
     return f"{value:.6e}"
 
 
@@ -106,6 +107,7 @@ def summarize_dataset(dataset_path: Path) -> OrderedDict[str, ColumnSummary]:
     csv_files = sorted(dataset_path.glob("*.csv"))
     if not csv_files:
         raise FileNotFoundError(f"No CSV files found inside {dataset_path}")
+
     return collect_statistics(csv_files)
 
 
@@ -151,6 +153,7 @@ def main() -> int:
         output_path = output_dir / f"{dataset}_stats.csv"
         emit_csv(output_path, summary)
         print(f"Wrote summary for {dataset} to {output_path}")
+
     return status
 
 

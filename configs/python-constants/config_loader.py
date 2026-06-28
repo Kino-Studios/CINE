@@ -7,6 +7,7 @@ try:
 except (ImportError, ValueError):
     from paths import repo_root_from
 
+
 class ConfigLoader:
     _instance = None
     _configs: Dict[str, Any] = {}
@@ -21,7 +22,7 @@ class ConfigLoader:
     def _load_all_configs(self):
         root = repo_root_from(__file__)
         config_dir = os.path.join(root, "configs", "json_constants")
-        
+
         config_files = {
             "camera": "camera/camera-params.json",
             "costs": "cost_functions/cost-params.json",
@@ -39,7 +40,7 @@ class ConfigLoader:
             full_path = os.path.join(config_dir, relative_path)
 
             if os.path.exists(full_path):
-                with open(full_path, 'r') as f:
+                with open(full_path, "r") as f:
                     try:
                         self._configs[key] = json.load(f)
                     except json.JSONDecodeError:
@@ -50,12 +51,7 @@ class ConfigLoader:
                 self._configs[key] = {}
 
     def get(self, config_key: str, section: str, key: str, default: Any = None) -> Any:
-        return self._configs \
-            .get(config_key, {}) \
-            .get(section, {}) \
-            .get(key, default)
+        return self._configs.get(config_key, {}).get(section, {}).get(key, default)
 
     def get_section(self, config_key: str, section: str) -> Dict[str, Any]:
-        return self._configs \
-            .get(config_key, {}) \
-            .get(section, {})
+        return self._configs.get(config_key, {}).get(section, {})

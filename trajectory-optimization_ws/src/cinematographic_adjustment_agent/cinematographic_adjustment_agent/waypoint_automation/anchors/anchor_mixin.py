@@ -80,6 +80,7 @@ class AnchorMixin:
             dx = x - tx
             dy = y - ty
             dz = z - tz
+
             return math.sqrt(dx * dx + dy * dy + dz * dz), (x, y, z)
 
         d0, _ = _dist_at(0.0)
@@ -91,9 +92,11 @@ class AnchorMixin:
             return None
         if abs(f0) <= 1e-6:
             _, p = _dist_at(0.0)
+
             return p
         if abs(f1) <= 1e-6:
             _, p = _dist_at(1.0)
+
             return p
         if f0 * f1 > 0.0:
             return None
@@ -111,6 +114,7 @@ class AnchorMixin:
                 t0 = tm
                 f0 = fm
         _, p = _dist_at(0.5 * (t0 + t1))
+
         return p
 
     def _compute_anchor_crossings(self, static_world, target_world, desired_distance):
@@ -361,4 +365,5 @@ class AnchorMixin:
     def _is_framing_idx(self, idx):
         if self.framing_start_idx is None or self.framing_end_idx is None:
             return False
+
         return self.framing_start_idx <= idx <= self.framing_end_idx

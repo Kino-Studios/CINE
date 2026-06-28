@@ -48,6 +48,7 @@ class TargetComputer:
         vv = int(round((1.0 - strength) * v + strength * ay))
         uu = max(0, min(uu, w - 1))
         vv = max(0, min(vv, h - 1))
+
         return (uu, vv)
 
     def compute_target_xy(self) -> Optional[Tuple[float, float, float]]:

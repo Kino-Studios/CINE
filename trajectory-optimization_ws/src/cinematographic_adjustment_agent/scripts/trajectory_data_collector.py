@@ -91,6 +91,7 @@ class DataCollector:
             raise ValueError(f"Unknown scenario: {scenario}")
 
         bspline = BSplineTrajectory(waypoints)
+
         return bspline, focus_regions
 
     def collect_comparison_data(

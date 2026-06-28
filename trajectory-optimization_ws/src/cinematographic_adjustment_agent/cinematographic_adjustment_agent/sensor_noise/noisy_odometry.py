@@ -46,6 +46,7 @@ class NoisyOdometryNode(Node):
     def _add_noise(self, value: float, std: float) -> float:
         if not self.enable_noise or std <= 0.0:
             return value
+
         return value + self._rng.gauss(0.0, std)
 
     def _apply_orientation_noise(self, orientation):

@@ -209,6 +209,7 @@ class CostCalculator:
         try:
             width = float(self.node.get_parameter("image_width").value)
             height = float(self.node.get_parameter("image_height").value)
+
             return max(1.0, width), max(1.0, height)
         except PARAMETER_READ_ERRORS:
             return float(self.ImageParams.IMAGE_WIDTH), float(self.ImageParams.IMAGE_HEIGHT)
@@ -217,6 +218,7 @@ class CostCalculator:
         if not self._light_avoidance_enabled():
             self.light_vector = None
             self.light_distance = None
+
             return
 
         vector = np.array([msg.vector.x, msg.vector.y, msg.vector.z], dtype=float)
@@ -332,6 +334,7 @@ class CostCalculator:
 
         forward = np.array([r02, r12, r22], dtype=float)
         norm_f = np.linalg.norm(forward)
+
         return forward / norm_f if norm_f > 0 else None
 
     def _quaternion_to_euler(self, quat: np.ndarray) -> Optional[np.ndarray]:
@@ -365,6 +368,7 @@ class CostCalculator:
 
     def _angle_diff(self, target: float, current: float) -> float:
         delta = target - current
+
         return math.atan2(math.sin(delta), math.cos(delta))
 
     def _deadband_error(self, error: float, deadband: float) -> float:
@@ -404,6 +408,7 @@ class CostCalculator:
         dy = float(self.target_world[1]) - self.position[1]
         if abs(dx) < self.SimulationParams.EPSILON and abs(dy) < self.SimulationParams.EPSILON:
             return None
+
         return math.atan2(dy, dx)
 
     def get_depth_at_point(self, x, y):
@@ -497,6 +502,7 @@ class CostCalculator:
         if delta is None:
             delta = float(self.CostParams.HUBER_DELTA_PX)
         a = abs(r)
+
         return 0.5 * math.pow(a, 2) if a <= delta else delta * (a - 0.5 * delta)
 
     def _calculate_saturation_fraction(self) -> float:
@@ -572,16 +578,19 @@ class CostCalculator:
         anchor_distance = getattr(self.node, "anchor_focus_distance", None)
         if anchor_distance is not None and anchor_distance > 0.0:
             return float(anchor_distance)
+
         return float(self.UserRequestedParams.DESIRED_FOCUS_DISTANCE_M)
 
     def calculate_cost(self) -> Optional[Dict[str, float]]:
         logger = self.node.get_logger()
         if self.depth_image is None:
             logger.debug("CostCalculator: waiting for depth image input")
+
             return None
 
         if self.bounding_box is None and self.center_point is None:
             logger.debug("CostCalculator: waiting for bounding box or center point")
+
             return None
 
         current_time = None
@@ -635,6 +644,7 @@ class CostCalculator:
         if Z is None:
             if self.center_depth is None:
                 logger.debug("CostCalculator: depth unknown (no median or center depth)")
+
                 return None
 
             Z = float(self.center_depth)
@@ -906,6 +916,7 @@ class CostCalculator:
             include_framing=include_framing,
             include_lighting=include_lighting,
         )
+
         return float(depth_cost + lighting_cost + smoothness_cost)
 
     def _is_waypoint_occluded(

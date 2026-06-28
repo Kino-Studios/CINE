@@ -156,9 +156,11 @@ class CinematographicPlannerNode(Node):
         now_s = self.get_clock().now().nanoseconds / 1e9
         if self.last_tick_time_s is None:
             self.last_tick_time_s = now_s
+
             return 1.0 / max(1.0, self.config.params.WAYPOINT_RATE_HZ)
         dt = now_s - self.last_tick_time_s
         self.last_tick_time_s = now_s
+
         return float(max(1e-3, min(dt, 0.5)))
 
     def publish_costs(self):

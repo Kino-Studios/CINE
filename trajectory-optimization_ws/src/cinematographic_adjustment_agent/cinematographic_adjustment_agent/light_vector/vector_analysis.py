@@ -85,12 +85,14 @@ class LightVectorAnalysisNode(Node):
             import cv2
         except ImportError:
             self.get_logger().warn("cv2 unavailable; skipping light vector analysis")
+
             return
 
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         except CvBridgeError as error:
             self.get_logger().warn(f"cv_bridge conversion failed: {error}")
+
             return
 
         if cv_image.ndim == 3 and cv_image.shape[2] == 3:

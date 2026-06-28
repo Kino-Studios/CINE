@@ -68,7 +68,6 @@ class install_data(_install_data):
 
 cmdclass = {"install_data": install_data}
 if _symlink_data is not None:
-
     class symlink_data(_symlink_data):
         def run(self):
             _cleanup_existing_targets(self)

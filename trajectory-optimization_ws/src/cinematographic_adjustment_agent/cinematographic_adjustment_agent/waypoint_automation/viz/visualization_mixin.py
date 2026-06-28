@@ -43,6 +43,7 @@ class VisualizationMixin:
         if not arc_pts:
             marker.action = Marker.DELETE
             self.arc_marker_pub.publish(marker)
+
             return
 
         marker.type = Marker.LINE_STRIP
@@ -326,6 +327,7 @@ class VisualizationMixin:
 
     def _waypoint_diameter(self):
         """Convert the configured waypoint radius into the diameter expected by Marker scales."""
+
         return max(0.001, 2.0 * float(self.waypoint_radius_m))
 
     def _create_path_markers(self, waypoints, namespace, color, line_width, stamp, marker_id):
@@ -353,6 +355,7 @@ class VisualizationMixin:
             line_marker.points.append(p)
 
         markers.append(line_marker)
+
         return markers
 
     def _create_waypoint_sphere(self, position, marker_id, namespace, color, scale, stamp):
@@ -374,6 +377,7 @@ class VisualizationMixin:
         marker.color.g = float(color[1])
         marker.color.b = float(color[2])
         marker.color.a = float(color[3])
+
         return marker
 
     def _publish_sent_waypoints_dots(self):
@@ -430,4 +434,5 @@ class VisualizationMixin:
         marker.color.b = float(color[2])
         marker.color.a = float(color[3])
         marker.text = text
+
         return marker

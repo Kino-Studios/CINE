@@ -159,9 +159,11 @@ class DepthPublisherNode(Node):
         self.get_logger().info("Received image callback")
         if self.processing:
             self.get_logger().debug("Skipping frame")
+
             return
         if self.depth_model is None:
             self.get_logger().error("Depth failure!")
+
             return
 
         try:
