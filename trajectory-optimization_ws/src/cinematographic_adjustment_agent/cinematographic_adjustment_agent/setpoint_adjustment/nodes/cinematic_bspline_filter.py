@@ -126,6 +126,7 @@ class CinematicBsplineFilter(Node):
     def detections_callback(self, msg: Float32MultiArray):
         if len(msg.data) < 1:
             self.has_focus = False
+
             return
 
         num_objects = int(msg.data[0])
@@ -364,6 +365,7 @@ class CinematicBsplineFilter(Node):
         scaled = np.empty_like(knots)
         scaled[0] = knots[0]
         scaled[1:] = knots[0] + np.cumsum(diffs)
+
         return scaled
 
     def _enforce_velocity_acc_limits(

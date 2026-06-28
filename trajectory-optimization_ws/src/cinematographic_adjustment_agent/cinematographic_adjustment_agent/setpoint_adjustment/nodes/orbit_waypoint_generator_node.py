@@ -108,6 +108,7 @@ class OrbitWaypointGenerator(Node):
         d_min = float(self.get_parameter("min_focus_distance_m").value)
         j_dist = (dist - d_star) ** 2
         j_near = (d_min - dist) ** 2 if dist < d_min else 0.0
+
         return float(j_dist + 10.0 * j_near)
 
     def generate_waypoints(self):

@@ -63,6 +63,7 @@ class SimulatedFocusPublisher(Node):
             return self._target_world
         p = self._last_odom.pose.pose.position
         ox, oy, oz = self.target_offset_xyz
+
         return (float(p.x) + ox, float(p.y) + oy, float(p.z) + oz)
 
     def _tick(self):

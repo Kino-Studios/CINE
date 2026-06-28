@@ -70,6 +70,7 @@ def mock_node():
 
     node.get_parameter.side_effect = lambda name: MagicMock(value=param_mapping.get(name, 0.0))
     node.get_clock().now().nanoseconds = 10**9
+
     return node
 
 
@@ -154,6 +155,7 @@ def test_calibration_parameter_integration(mock_node):
             "w_stab": CostParams.W_STAB,
             "w_smooth": CostParams.W_SMOOTH,
         }
+
         return MagicMock(value=params.get(name, 1.0))
 
     mock_node.get_parameter.side_effect = get_param_double_fx

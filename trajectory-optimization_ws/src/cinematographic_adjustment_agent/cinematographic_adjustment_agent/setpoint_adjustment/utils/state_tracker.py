@@ -16,6 +16,7 @@ class StateTracker:
 
     def should_switch_target(self) -> bool:
         now_s = time.time()
+
         return (now_s - self.last_target_switch_time_s) >= self.look_duration_s
 
     def set_target_observation(self, center_uv: Tuple[float, float]):
@@ -29,6 +30,7 @@ class StateTracker:
     def get_smoothed_depth(self) -> Optional[float]:
         if len(self.recent_depth_samples) == 0:
             return None
+
         return float(np.median(np.array(self.recent_depth_samples)))
 
     def rotate_to_next_target(self) -> int:
@@ -38,4 +40,5 @@ class StateTracker:
             self.current_target_id = 0
         else:
             self.current_target_id += 1
+
         return int(self.current_target_id)

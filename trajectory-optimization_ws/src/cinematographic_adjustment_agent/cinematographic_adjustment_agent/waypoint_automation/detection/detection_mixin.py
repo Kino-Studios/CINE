@@ -9,6 +9,7 @@ class DetectionMixin:
         if not self.light_avoidance_enabled:
             self.light_vector = None
             self.light_distance = None
+
             return
 
         vec = (float(msg.vector.x), float(msg.vector.y), float(msg.vector.z))
@@ -32,6 +33,7 @@ class DetectionMixin:
         last = self._last_published_target_stamp
         if last is None:
             return False
+
         return last.sec == stamp.sec and last.nanosec == stamp.nanosec
 
     def _publish_target_world(self):
@@ -51,6 +53,7 @@ class DetectionMixin:
     def target_world_callback(self, msg: PointStamped):
         if self._is_published_target(msg.header.stamp):
             self._last_published_target_stamp = None
+
             return
         try:
             p = msg.point
@@ -60,6 +63,7 @@ class DetectionMixin:
             self.get_logger().warn(f"target world parse failed: {error}")
             self.target_world = None
             self.last_target_world = None
+
             return
 
         try:
@@ -105,6 +109,7 @@ class DetectionMixin:
             depth_m = data[2]
             if not (depth_m > 0.1 and math.isfinite(depth_m)):
                 return None
+
             return {
                 "center_x": x_center,
                 "center_y": y_center,
@@ -148,6 +153,7 @@ class DetectionMixin:
         world_dy = sin_yaw * obj_x_m + cos_yaw * obj_y_m
         center_world = (base_pos[0] + world_dx, base_pos[1] + world_dy, base_pos[2])
         self.last_target_world = center_world
+
         return center_world, obj_depth
 
     def detection_callback(self, msg: Float32MultiArray):

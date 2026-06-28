@@ -27,7 +27,9 @@ def _add_config_path() -> None:
             python_constants_path = configs_dir / "python-constants"
             if str(python_constants_path) not in sys.path:
                 sys.path.insert(0, str(python_constants_path))
+
             return
+
     raise RuntimeError("Unable to locate configs/python-constants for constants import.")
 
 
@@ -71,6 +73,7 @@ def _find_workspace_root(start: Path) -> Path:
     for parent in [start] + list(start.parents):
         if (parent / "start_simulation.sh").is_file():
             return parent
+
     raise RuntimeError("Unable to locate trajectory-optimization_ws (start_simulation.sh missing).")
 
 
@@ -97,6 +100,7 @@ def _ensure_display(env: dict[str, str]) -> None:
                         parts = line.split()
                         if len(parts) >= 2:
                             env["DISPLAY"] = f"{parts[1]}:0"
+
                             return
         except OSError:
             pass
@@ -133,6 +137,7 @@ def _parse_env_file(path: Path) -> None:
 def _parse_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
+
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -148,12 +153,14 @@ def _parse_target_xyz(value: Any) -> Any:
                 return value
             if isinstance(parsed, (list, tuple)):
                 return [float(v) for v in parsed]
+
     return value
 
 
 def _format_ros_value(value: Any) -> str:
     if isinstance(value, (list, tuple)):
         return "[" + ",".join(str(v) for v in value) + "]"
+
     return str(value)
 
 
@@ -194,10 +201,13 @@ def _ros2_node_list() -> list[str]:
         if result.returncode != 0:
             if result.stderr:
                 _logger.warning("ros2 node list error: %s", result.stderr.strip())
+
             return []
+
         return [line.strip() for line in result.stdout.splitlines() if line.strip()]
     except (OSError, subprocess.SubprocessError) as error:
         _logger.warning("failed to run ros2 node list: %s", error)
+
         return []
 
 
@@ -211,11 +221,13 @@ def _wait_for_node(node_name: str, timeout_s: float = 30.0) -> bool:
         print(".", end="", flush=True)
         time.sleep(1.0)
     print()
+
     return False
 
 
 def _start_process(cmd: Iterable[str], label: str) -> subprocess.Popen:
     _logger.info("launching %s: %s", label, " ".join(cmd))
+
     return subprocess.Popen(list(cmd), env=os.environ, start_new_session=True)
 
 
@@ -253,6 +265,7 @@ def _ros2_run_cmd(
     for key, val in (extra_params or {}).items():
         cmd.extend(["-p", f"{key}:={val}"])
     cmd.extend(["-r", f"__ns:={drone_ns}"])
+
     return cmd
 
 
@@ -321,9 +334,11 @@ def _launch_simulation(
         _logger.error("simulation failed to start; check %s", log_path)
         sim_proc.terminate()
         log_handle.close()
+
         return sim_proc, log_handle, False
 
     _logger.info("simulation initialized successfully! log: %s", log_path)
+
     return sim_proc, log_handle, True
 
 
@@ -362,6 +377,7 @@ def _launch_logger(params: CollectionParams, mode: str) -> subprocess.Popen:
         "-r",
         f"__ns:={params.drone_ns}",
     ]
+
     return _start_process(cmd, "trajectory_data_logger")
 
 
@@ -376,6 +392,7 @@ def _launch_waypoint_generator(
         cmd.extend(["-p", f"waypoints_topic:={params.waypoints_topic}"])
     if params.waypoints_file:
         cmd.extend(["-p", f"waypoints_file:={params.waypoints_file}"])
+
     return _start_process(cmd, "cinematic_waypoint_generator")
 
 
@@ -446,6 +463,7 @@ def _run_collection(
     if not sim_ok:
         node.destroy_node()
         rclpy.shutdown()
+
         return
 
     child_procs: list[subprocess.Popen | None] = []
@@ -472,6 +490,7 @@ def run_baseline_collection(args: Optional[list[str]] = None) -> None:
         focus = _launch_focus_publisher(params)
         time.sleep(2)
         waypoints = _launch_waypoint_generator(params, extra_params={"baseline_mode": "True"})
+
         return [logger, focus, waypoints]
 
     _run_collection(
@@ -552,6 +571,7 @@ def run_cinematic_collection(args: Optional[list[str]] = None) -> None:
         time.sleep(2)
 
         procs.append(_launch_waypoint_generator(params, extra_params={"frame_id": params.frame_id}))
+
         return procs
 
     _run_collection(

@@ -6,6 +6,7 @@ from traj_utils.msg import Bspline
 def msg_to_arrays(msg: Bspline):
     pos_pts = np.array([[p.x, p.y, p.z] for p in msg.pos_pts], dtype=float)
     knots = np.array(msg.knots, dtype=float)
+
     return pos_pts, knots
 
 

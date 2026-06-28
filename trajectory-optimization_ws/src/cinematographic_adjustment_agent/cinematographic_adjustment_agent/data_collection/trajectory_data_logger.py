@@ -61,11 +61,9 @@ class UniformBspline:
         return d[self.p]
 
     def evaluateDeBoorT(self, t):
-
         return self.evaluateDeBoor(t + self.u[self.p])
 
     def getTimeSum(self):
-
         return self.u[self.m - self.p] - self.u[self.p]
 
     def getDerivative(self):
@@ -380,6 +378,7 @@ class TrajectoryDataLogger(Node):
 
         except (AttributeError, ValueError, IndexError, ZeroDivisionError, TypeError) as error:
             self.get_logger().error(f"Error evaluating B-spline: {error}")
+
             return None, None
 
     def target_world_callback(self, msg: PointStamped):
@@ -555,6 +554,7 @@ class TrajectoryDataLogger(Node):
         stats = self._distance_stats
         if stats["count"] == 0:
             self.get_logger().info("No distance data recorded during framing")
+
             return
 
         avg_abs = stats["abs_error_sum"] / stats["count"]
@@ -577,11 +577,11 @@ class TrajectoryDataLogger(Node):
         )
 
     def save_data(self):
-
         if self.mode == "constrained":
             if len(self.constrained_data) == 0 and len(self.baseline_data) == 0:
                 self.get_logger().warn("No data to save")
                 self._write_distance_csv()
+
                 return
 
             filename = (
@@ -596,11 +596,13 @@ class TrajectoryDataLogger(Node):
             self._write_csv(path, data_to_save)
             self.get_logger().info(f"Saved {len(data_to_save)} cinematic data points to: {path}")
             self._write_distance_csv()
+
             return
 
         if len(self.baseline_data) == 0:
             self.get_logger().warn("No data to save")
             self._write_distance_csv()
+
             return
 
         if self.mode == "baseline" and self.run_number is not None:

@@ -39,6 +39,7 @@ class SimulationMixin:
             x = obj_world[0] + radius * math.cos(t)
             y = obj_world[1] + radius * math.sin(t)
             waypoints.append(self._clamp_waypoint_to_bounds((x, y, z)))
+
         return waypoints
 
     def _compute_simulated_object_position(self, anchor_wp):
@@ -66,6 +67,7 @@ class SimulationMixin:
             obj_world[1],
             max(self.min_altitude_m, min(self.max_altitude_m, obj_world[2])),
         )
+
         return obj_world
 
     def _insert_simulated_object_orbit(self, waypoints):
@@ -85,4 +87,5 @@ class SimulationMixin:
             prev_wp=prev_wp,
             next_wp=next_wp,
         )
+
         return waypoints[: idx_max_y + 1] + orbit + waypoints[idx_max_y + 1 :]

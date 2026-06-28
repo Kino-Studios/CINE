@@ -33,6 +33,7 @@ class WaypointSequencerMixin:
             self.get_logger().debug(
                 f"Scaling static path (count={len(self.static_waypoints)}): xy_scale={sx:.2f} y_extra={self.waypoint_y_extra_scale:.2f} z_scale={sz:.2f}"
             )
+
         return waypoints
 
     def _initialize_waypoint_sequence(self):
@@ -166,6 +167,7 @@ class WaypointSequencerMixin:
             for s in range(1, steps + 1):
                 t = s / steps
                 out.append((prev[0] + t * dx, prev[1] + t * dy, prev[2] + t * dz))
+
         return out
 
     def _insert_focus_entry_waypoints(self):
@@ -206,6 +208,7 @@ class WaypointSequencerMixin:
             z = start_z + t * (target_z - start_z)
             wp = adjusted[start_idx + i]
             adjusted[start_idx + i] = (wp[0], wp[1], z)
+
         return adjusted
 
     def _deduplicate_waypoints(self, waypoints, min_separation=0.3):
@@ -222,6 +225,7 @@ class WaypointSequencerMixin:
                     continue
             out.append(wp)
             prev = wp
+
         return out
 
     def _remove_anchor_points_from_waypoints(self, waypoints, origin=None):
@@ -253,6 +257,7 @@ class WaypointSequencerMixin:
             for anchor in normalized_anchors:
                 if math.dist(wp, anchor) <= tolerance:
                     return True
+
             return False
 
         return [wp for wp in waypoints if not _is_anchor(wp)]
@@ -264,7 +269,9 @@ class WaypointSequencerMixin:
                 float(self.arc_waypoint_spacing_m) if self.arc_waypoint_spacing_m > 0.0 else radius
             )
             arc_threshold = max(radius, min(0.9 * spacing, spacing))
+
             return max(arc_threshold, self.min_goal_distance_m)
+
         return max(radius, self.min_goal_distance_m)
 
     def _light_avoidance_weight(self) -> float:
@@ -278,6 +285,7 @@ class WaypointSequencerMixin:
             self.light_influence_distance_m - self.light_distance
         ) / self.light_influence_distance_m
         weight = max(0.0, min(1.0, weight))
+
         return math.sqrt(weight)
 
     def _light_avoidance_yaw(self):
@@ -295,6 +303,7 @@ class WaypointSequencerMixin:
         if weight >= 1.0:
             return target
         diff = ((target - base + math.pi) % (2.0 * math.pi)) - math.pi
+
         return base + diff * weight
 
     def _current_target_reached(self):
@@ -303,6 +312,7 @@ class WaypointSequencerMixin:
         if self.current_target_index >= len(self.active_waypoints):
             return True
         target_world = self._rel_to_world(self.active_waypoints[self.current_target_index])
+
         return self._distance_to(target_world) <= self._current_distance_threshold()
 
     def _publish_framing_active(self, active):
@@ -413,11 +423,13 @@ class WaypointSequencerMixin:
     def _step_waypoint_sequence(self):
         if self.active_waypoints is None or self.current_pos is None:
             self._publish_framing_states(False)
+
             return
 
         if self.current_target_index >= len(self.active_waypoints):
             self.waypoints_sent = True
             self._publish_framing_states(False)
+
             return
 
         framing_active = self._is_framing_idx(self.current_target_index)
@@ -456,6 +468,7 @@ class WaypointSequencerMixin:
                     self.last_progress_dist = None
                     self.stuck_attempts = 0
                     self._prefill_waypoint_queue()
+
                     return
 
         if dist <= threshold:
@@ -473,6 +486,7 @@ class WaypointSequencerMixin:
             self._prefill_waypoint_queue()
             if self.current_target_index >= len(self.active_waypoints):
                 self.waypoints_sent = True
+
             return
 
         self._prefill_waypoint_queue()

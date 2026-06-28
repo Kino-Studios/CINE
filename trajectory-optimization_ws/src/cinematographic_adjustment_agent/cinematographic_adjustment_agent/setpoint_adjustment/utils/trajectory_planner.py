@@ -23,6 +23,7 @@ def generate_orbit_waypoints_xy(
         y = cy + radius_m * math.sin(theta)
         waypoints.append((x, y, altitude_m, dt))
         theta += 2.0 * math.pi * angular_velocity_rps * dt
+
     return waypoints
 
 
@@ -117,10 +118,12 @@ def pixel_to_camera_xy(
 ) -> Tuple[float, float]:
     x = (u - cx) * depth_m / fx
     y = (v - cy) * depth_m / fy
+
     return float(x), float(y)
 
 
 def clamp_depth_to_preference(depth_m: float | None, preferred_m: float, min_m: float) -> float:
     if depth_m is None:
         return max(preferred_m, min_m)
+
     return max(depth_m, min_m)

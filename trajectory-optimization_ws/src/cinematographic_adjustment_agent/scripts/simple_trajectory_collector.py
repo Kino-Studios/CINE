@@ -53,6 +53,7 @@ def generate_room_orbit_trajectory() -> Tuple[BSplineTrajectory, List[Tuple[floa
 
     focus_regions = [(0.0, 1.0)]
     bspline = BSplineTrajectory(waypoints)
+
     return bspline, focus_regions
 
 

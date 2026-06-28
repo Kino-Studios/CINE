@@ -20,6 +20,7 @@ class MLPLoader:
 
         if not os.path.isfile(onnx_path):
             logger.warning("ONNX model not found at %s, switching to passthrough", onnx_path)
+
             return
 
         with open(scaler_path) as f:
@@ -52,4 +53,5 @@ class MLPLoader:
         x = (x - self._scaler_mean) / self._scaler_std
 
         delta = self._session.run(None, {self._input_name: x})[0]
+
         return pos_pts + delta.astype(np.float32)

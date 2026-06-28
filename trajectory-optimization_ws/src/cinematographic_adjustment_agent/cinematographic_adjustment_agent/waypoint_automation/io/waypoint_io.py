@@ -9,6 +9,7 @@ class WaypointIOMixin:
         path_obj = Path(path)
         if not path_obj.is_file():
             self.get_logger().error(f"Waypoints file not found: {path}")
+
             return
 
         try:

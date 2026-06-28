@@ -51,6 +51,7 @@ def read_run(
         points.sort(key=lambda pair: pair[0])
         times, values = zip(*points)
         column_series[column] = (list(times), list(values))
+
     return column_series, min_time, max_time
 
 
@@ -69,6 +70,7 @@ def load_runs(
         runs.append(run_data)
         min_time = min(min_time, run_min)
         max_time = max(max_time, run_max)
+
     return runs, columns_order, min_time, max_time
 
 
@@ -81,6 +83,7 @@ def build_time_grid(min_time: float, max_time: float, step: float) -> list[float
     grid = [min_time + i * step for i in range(count + 1)]
     if grid[-1] < max_time - 1e-12:
         grid.append(max_time)
+
     return grid
 
 
@@ -100,6 +103,7 @@ def resample_run(
             continue
         interpolated = np.interp(grid, times, values, left=np.nan, right=np.nan)
         resampled[column] = interpolated
+
     return resampled
 
 
@@ -125,6 +129,7 @@ def aggregate_runs(
             stats[mask, 0] += v
             stats[mask, 1] += v * v
             stats[mask, 2] += 1
+
     return column_stats
 
 
@@ -140,6 +145,7 @@ def compute_mean(
     if not grid:
         raise FileNotFoundError("Unable to construct a time grid from the provided data.")
     column_stats = aggregate_runs(runs, grid, columns_order)
+
     return grid, columns_order, column_stats
 
 
@@ -192,6 +198,7 @@ def process_dataset(
 ) -> Path:
     grid, columns_order, column_stats = compute_mean(csv_paths, time_step)
     write_mean_std_csv(output_path, grid, columns_order, column_stats)
+
     return output_path
 
 
@@ -199,6 +206,7 @@ def discover_csvs(root: Path, dataset: str) -> list[Path]:
     dataset_path = root / dataset
     if not dataset_path.is_dir():
         return []
+
     return sorted(dataset_path.glob("*.csv"))
 
 
@@ -276,6 +284,7 @@ def main() -> int:
                 exit_status = 1
             else:
                 print(f"Wrote combined time-aligned mean+std trajectory to {combined_path}")
+
     return exit_status
 
 
