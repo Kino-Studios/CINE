@@ -1,0 +1,22 @@
+line-length = 100
+target-version = "py310"
+
+extend-exclude = [
+    "sensing_ws/src/VINS-Fusion-ROS2-humble-arm",
+    "sensing_ws/ceres-solver-2.1.0",
+    "sensing_ws/eigen-3.4.0",
+    "venv",
+    ".venv",
+    "sensing_ws/install",
+    "sensing_ws/build",
+    "sensing_ws/log",
+]
+
+[lint]
+select = ["E", "F", "W", "I"]
+ignore = [
+    "E501",   # line length handled by formatter
+    "E402",   # module-level import not at top: legitimate for sys.path / matplotlib.use() patterns
+    "F841",   # local variable assigned but never used: plot handles kept for API symmetry
+    "E741",   # ambiguous variable name: tolerate single-letter loop vars in viz scripts
+]
