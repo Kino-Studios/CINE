@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export ROS_DOMAIN_ID=0
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+if [ -z "${DISPLAY:-}" ]; then
+  if [ -f /etc/resolv.conf ]; then
+    export DISPLAY="$(grep -m1 nameserver /etc/resolv.conf | awk '{print $2}'):0"
+  else
+    export DISPLAY=":0"
+  fi
+fi
+unset ROS_LOCALHOST_ONLY
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+
+cd "${REPO_ROOT}"
+
+if set -o | grep -q 'nounset *on'; then
+  _SAVED_NOUNSET=1
+  set +u
+fi
+
+AMENT_TRACE_SETUP_FILES=${AMENT_TRACE_SETUP_FILES-}
+AMENT_PYTHON_EXECUTABLE=${AMENT_PYTHON_EXECUTABLE-}
+COLCON_TRACE=${COLCON_TRACE-}
+COLCON_PYTHON_EXECUTABLE=${COLCON_PYTHON_EXECUTABLE-}
+export AMENT_TRACE_SETUP_FILES AMENT_PYTHON_EXECUTABLE COLCON_TRACE COLCON_PYTHON_EXECUTABLE
+
+source /opt/ros/jazzy/setup.bash
+if [ -f "${SCRIPT_DIR}/install/setup.bash" ]; then
+  source "${SCRIPT_DIR}/install/setup.bash"
+elif [ -f "${REPO_ROOT}/install/setup.bash" ]; then
+  source "${REPO_ROOT}/install/setup.bash"
+else
+  echo "Could not find install/setup.bash under ${SCRIPT_DIR} or ${REPO_ROOT}" >&2
+  exit 1
+fi
+
+if [ "${_SAVED_NOUNSET-}" = "1" ]; then
+  set -u
+  unset _SAVED_NOUNSET
+fi
+
+rm -rf /tmp/cyclonedds* ~/.local/share/cyclonedds* 2>/dev/null
+sleep 2
+
+GET_CONFIG="python3 ${REPO_ROOT}/configs/python-constants/get_config.py"
+
+DRONE_ID=$($GET_CONFIG DRONE_ID)
+TRAJECTORY_DATA_DIR="${REPO_ROOT}/$($GET_CONFIG TRAJECTORY_DATA_DIR)"
+TARGET_XYZ="${TARGET_XYZ:-$($GET_CONFIG TARGET_XYZ)}"
+FOCUS_DEPTH_M="${FOCUS_DEPTH_M:-$($GET_CONFIG FOCUS_DEPTH_M)}"
+FRAME_ID="${FRAME_ID:-$($GET_CONFIG FRAME_ID)}"
+
+LOGGING_SEVERITY="${LOGGING_SEVERITY:-$($GET_CONFIG LOGGING_SEVERITY)}"
+LOGGING_SEVERITY="${LOGGING_SEVERITY:-DEBUG}"
+export RCUTILS_LOGGING_SEVERITY="${LOGGING_SEVERITY^^}"
+
+ODOM_TOPIC="/drone_${DRONE_ID}_visual_slam/odom"
+BASELINE_TOPIC="/drone_${DRONE_ID}_planning/bspline"
+CINEMATIC_TOPIC="/drone_${DRONE_ID}_planning/cinematic_bspline"
+
+SIM_PID=""
+TAIL_PID=""
+LOGGER_PID=""
+WAYPOINT_PID=""
+SIMULATED_FOCUS_PID=""
+
+if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
+  SIM_LOG=$(mktemp /tmp/ego_planner_baseline.XXXXXX)
+  LOG_FILE="${SIM_LOG}"
+  "${SCRIPT_DIR}/start_simulation.sh" baseline > "$SIM_LOG" 2>&1 &
+  SIM_PID=$!
+
+  tail -f "$SIM_LOG" &
+  TAIL_PID=$!
+
+  for _ in {1..30}; do
+    if ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
+      echo "Simulation initialized successfully!"
+      break
+    fi
+    echo -n "."
+    sleep 1
+  done
+
+  if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
+    echo "Simulation failed to start; check $LOG_FILE"
+    kill $SIM_PID $TAIL_PID 2>/dev/null
+    exit 1
+  fi
+fi
+
+ros2 run cine_agent trajectory_data_logger --ros-args \
+  -p odom_topic:=${ODOM_TOPIC} \
+  -p baseline_bspline_topic:=${BASELINE_TOPIC} \
+  -p baseline_mode:=true \
+  -p cinematic_bspline_topic:=${CINEMATIC_TOPIC} &
+LOGGER_PID=$!
+sleep 2
+
+ros2 run cine_agent simulated_focus_publisher --ros-args \
+  -p odom_topic:=${ODOM_TOPIC} \
+  -p frame_id:=${FRAME_ID} \
+  -p target_offset_xyz:="${TARGET_XYZ}" \
+  -p target_xyz:="${TARGET_XYZ}" \
+  -p focus_depth_m:=${FOCUS_DEPTH_M} &
+SIMULATED_FOCUS_PID=$!
+sleep 2
+
+ros2 run cine_agent cinematic_waypoint_generator --ros-args -p odom_topic:=${ODOM_TOPIC} -p baseline_mode:=true &
+WAYPOINT_PID=$!
+
+cleanup() {
+  echo ""
+  echo "stopping data collection."
+  if [ -n "${LOGGER_PID:-}" ]; then
+    kill -INT "${LOGGER_PID}" 2>/dev/null || true
+    wait "${LOGGER_PID}" 2>/dev/null || true
+  fi
+
+  for pid in "${WAYPOINT_PID:-}" "${TAIL_PID:-}" "${SIM_PID:-}" "${SIMULATED_FOCUS_PID:-}"; do
+    if [ -n "${pid}" ]; then
+      kill "${pid}" 2>/dev/null || true
+    fi
+  done
+  exit 0
+}
+
+trap 'cleanup' INT TERM
+
+wait

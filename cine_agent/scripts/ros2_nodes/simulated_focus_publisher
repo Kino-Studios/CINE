@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from cine_agent.object_detection.simulated_focus_publisher import main
+
+if __name__ == "__main__":
+    main()

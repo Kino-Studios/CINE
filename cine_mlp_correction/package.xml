@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd"
+            schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cine_mlp_correction</name>
+  <version>1.0.0</version>
+  <description>
+    MLP setpoint correction interceptor node for cinematic drone trajectory control.
+    Subscribes to /drone_0_planning/cinematic_bspline, applies learned position
+    correction, and publishes /mlp/corrected_bspline.
+  </description>
+  <maintainer email="todo@todo.com">TODO</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>traj_utils</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-onnxruntime-pip</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

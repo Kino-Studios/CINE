@@ -1,5 +1,0 @@
-#!/usr/bin/env python3
-from cinematographic_adjustment_agent.sensor_noise.noisy_odometry import main
-
-if __name__ == "__main__":
-    main()

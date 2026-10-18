@@ -32,7 +32,7 @@ _EXCLUDE_PARTS = (
     "/__pycache__/",
     "/.ruff_cache/",
     "/log/",
-    "/ego-planner-swarm/",
+    "/third_party/",
 )
 
 
