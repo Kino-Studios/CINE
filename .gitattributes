@@ -1,5 +1,4 @@
-.vscode/browse.vc.db filter=lfs diff=lfs merge=lfs -text
-.vscode/browse.vc.db-shm filter=lfs diff=lfs merge=lfs -text
-*.db filter=lfs diff=lfs merge=lfs -text
-*.db-shm filter=lfs diff=lfs merge=lfs -text
-.vscode/browse.vc.db-wal filter=lfs diff=lfs merge=lfs -text
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pt binary
