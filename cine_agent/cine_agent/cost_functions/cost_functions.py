@@ -30,7 +30,6 @@ from cine_agent.utils.paths import add_config_path
 add_config_path()
 
 import rclpy
-from cine_msgs.msg import CinematographyCosts
 from constants import CinematographyParams, LightAvoidanceParams
 from geometry_msgs.msg import PointStamped, PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
@@ -38,45 +37,47 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import Bool, Float32
 
+from cine_msgs.msg import CinematographyCosts
+
 from .cost_calculator import CostCalculator
 
 
 class CostFunctionCalculatorNode(Node):
     def __init__(self):
-        super().__init__("cost_function_calculator")
+        super().__init__('cost_function_calculator')
         self.params = CinematographyParams()
         self.light_avoidance_enabled = bool(
-            self.declare_parameter("light_avoidance_enabled", LightAvoidanceParams.ENABLED).value
+            self.declare_parameter('light_avoidance_enabled', LightAvoidanceParams.ENABLED).value
         )
         self._framing_active = False
         self.cost_calculator = CostCalculator(self)
         self.cost_calculator.update_framing_active(self._framing_active)
         self._last_odom: Odometry | None = None
-        self.declare_parameter("frame_id", "map")
+        self.declare_parameter('frame_id', 'map')
 
-        self.declare_parameter("image_width", self.params.IMAGE_WIDTH)
-        self.declare_parameter("image_height", self.params.IMAGE_HEIGHT)
-        self.declare_parameter("camera_fx", self.params.CAMERA_FX)
-        self.declare_parameter("camera_fy", self.params.CAMERA_FY)
-        self.declare_parameter("camera_cx", self.params.CAMERA_CX)
-        self.declare_parameter("camera_cy", self.params.CAMERA_CY)
-        self.declare_parameter("depth_topic", self.params.DEPTH_TOPIC)
-        self.declare_parameter("center_topic", self.params.CENTER_TOPIC)
-        self.declare_parameter("bbox_topic", self.params.BBOX_TOPIC)
-        self.declare_parameter("dimensions_topic", self.params.DIMENSIONS_TOPIC)
-        self.declare_parameter("odom_topic", self.params.ODOM_TOPIC)
-        self.declare_parameter("light_vector_topic", self.params.LIGHT_VECTOR_TOPIC)
-        self.declare_parameter("publish_topic", "/cinematography/cinematography_costs")
-        self.declare_parameter("publish_rate_hz", 10.0)
+        self.declare_parameter('image_width', self.params.IMAGE_WIDTH)
+        self.declare_parameter('image_height', self.params.IMAGE_HEIGHT)
+        self.declare_parameter('camera_fx', self.params.CAMERA_FX)
+        self.declare_parameter('camera_fy', self.params.CAMERA_FY)
+        self.declare_parameter('camera_cx', self.params.CAMERA_CX)
+        self.declare_parameter('camera_cy', self.params.CAMERA_CY)
+        self.declare_parameter('depth_topic', self.params.DEPTH_TOPIC)
+        self.declare_parameter('center_topic', self.params.CENTER_TOPIC)
+        self.declare_parameter('bbox_topic', self.params.BBOX_TOPIC)
+        self.declare_parameter('dimensions_topic', self.params.DIMENSIONS_TOPIC)
+        self.declare_parameter('odom_topic', self.params.ODOM_TOPIC)
+        self.declare_parameter('light_vector_topic', self.params.LIGHT_VECTOR_TOPIC)
+        self.declare_parameter('publish_topic', '/cinematography/cinematography_costs')
+        self.declare_parameter('publish_rate_hz', 10.0)
 
-        depth_topic = str(self.get_parameter("depth_topic").value)
-        center_topic = str(self.get_parameter("center_topic").value)
-        bbox_topic = str(self.get_parameter("bbox_topic").value)
-        dimensions_topic = str(self.get_parameter("dimensions_topic").value)
-        odom_topic = str(self.get_parameter("odom_topic").value)
-        light_vector_topic = str(self.get_parameter("light_vector_topic").value)
-        publish_topic = str(self.get_parameter("publish_topic").value)
-        publish_rate_hz = float(self.get_parameter("publish_rate_hz").value)
+        depth_topic = str(self.get_parameter('depth_topic').value)
+        center_topic = str(self.get_parameter('center_topic').value)
+        bbox_topic = str(self.get_parameter('bbox_topic').value)
+        dimensions_topic = str(self.get_parameter('dimensions_topic').value)
+        odom_topic = str(self.get_parameter('odom_topic').value)
+        light_vector_topic = str(self.get_parameter('light_vector_topic').value)
+        publish_topic = str(self.get_parameter('publish_topic').value)
+        publish_rate_hz = float(self.get_parameter('publish_rate_hz').value)
 
         self._depth_sub = self.create_subscription(Image, depth_topic, self._depth_cb, 10)
         self._center_sub = self.create_subscription(
@@ -95,20 +96,20 @@ class CostFunctionCalculatorNode(Node):
             self._light_sub = None
 
         self._pub = self.create_publisher(CinematographyCosts, publish_topic, 10)
-        self._focus_depth_pub = self.create_publisher(Float32, "/cinematography/focus_depth_m", 10)
+        self._focus_depth_pub = self.create_publisher(Float32, '/cinematography/focus_depth_m', 10)
         self._focus_center_depth_pub = self.create_publisher(
-            Float32, "/cinematography/focus_center_depth_m", 10
+            Float32, '/cinematography/focus_center_depth_m', 10
         )
         self._focus_roi_depth_pub = self.create_publisher(
-            Float32, "/cinematography/focus_roi_depth_median_m", 10
+            Float32, '/cinematography/focus_roi_depth_median_m', 10
         )
         self._target_world_pub = self.create_publisher(
-            PointStamped, "/cinematography/target_world", 10
+            PointStamped, '/cinematography/target_world', 10
         )
         self._timer = self.create_timer(1.0 / max(1.0, publish_rate_hz), self._tick)
         self._framing_sub = self.create_subscription(
             Bool,
-            "/cinematography/framing_active",
+            '/cinematography/framing_active',
             self._framing_cb,
             10,
         )
@@ -117,19 +118,19 @@ class CostFunctionCalculatorNode(Node):
         try:
             from cv_bridge import CvBridge, CvBridgeError
         except ImportError:
-            self.get_logger().warn("cv_bridge unavailable; skipping depth update")
+            self.get_logger().warn('cv_bridge unavailable; skipping depth update')
 
             return
 
         try:
-            bridge = getattr(self, "_bridge", None)
+            bridge = getattr(self, '_bridge', None)
             if bridge is None:
                 bridge = CvBridge()
                 self._bridge = bridge
-            depth = bridge.imgmsg_to_cv2(msg, desired_encoding="32FC1")
+            depth = bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1')
             self.cost_calculator.update_depth_image(depth)
         except CvBridgeError as error:
-            self.get_logger().warn(f"depth image conversion failed: {error}")
+            self.get_logger().warn(f'depth image conversion failed: {error}')
 
             return
 
@@ -156,7 +157,7 @@ class CostFunctionCalculatorNode(Node):
 
     def _tick(self):
         now_msg = self.get_clock().now().to_msg()
-        frame_id = str(self.get_parameter("frame_id").value)
+        frame_id = str(self.get_parameter('frame_id').value)
 
         center_depth = self.cost_calculator.center_depth
         if center_depth is not None:
@@ -194,25 +195,25 @@ class CostFunctionCalculatorNode(Node):
         msg = CinematographyCosts()
         msg.header.stamp = now_msg
         msg.header.frame_id = frame_id
-        msg.light_cost = float(result.get("lighting_cost", 0.0))
-        msg.framing_cost = float(result.get("framing_cost", 0.0))
-        msg.smoothness_cost = float(result.get("smoothness_cost", 0.0))
-        msg.distance_cost = float(result.get("distance_cost", 0.0))
-        msg.total_cost = float(result.get("total_cost", 0.0))
-        msg.yaw_setpoint = float(result.get("yaw_setpoint", 0.0))
-        msg.has_cinematic_yaw = bool(result.get("has_cinematic_yaw", False))
-        msg.pitch_setpoint = float(result.get("pitch_setpoint", 0.0))
-        msg.roll_setpoint = float(result.get("roll_setpoint", 0.0))
-        msg.yaw_error = float(result.get("yaw_error", 0.0))
-        msg.pitch_error = float(result.get("pitch_error", 0.0))
-        msg.roll_error = float(result.get("roll_error", 0.0))
-        msg.actual_yaw = float(result.get("actual_yaw", 0.0))
-        msg.actual_pitch = float(result.get("actual_pitch", 0.0))
-        msg.actual_roll = float(result.get("actual_roll", 0.0))
+        msg.light_cost = float(result.get('lighting_cost', 0.0))
+        msg.framing_cost = float(result.get('framing_cost', 0.0))
+        msg.smoothness_cost = float(result.get('smoothness_cost', 0.0))
+        msg.distance_cost = float(result.get('distance_cost', 0.0))
+        msg.total_cost = float(result.get('total_cost', 0.0))
+        msg.yaw_setpoint = float(result.get('yaw_setpoint', 0.0))
+        msg.has_cinematic_yaw = bool(result.get('has_cinematic_yaw', False))
+        msg.pitch_setpoint = float(result.get('pitch_setpoint', 0.0))
+        msg.roll_setpoint = float(result.get('roll_setpoint', 0.0))
+        msg.yaw_error = float(result.get('yaw_error', 0.0))
+        msg.pitch_error = float(result.get('pitch_error', 0.0))
+        msg.roll_error = float(result.get('roll_error', 0.0))
+        msg.actual_yaw = float(result.get('actual_yaw', 0.0))
+        msg.actual_pitch = float(result.get('actual_pitch', 0.0))
+        msg.actual_roll = float(result.get('actual_roll', 0.0))
         self.get_logger().debug(
-            f"Attitude yaw(set={msg.yaw_setpoint:.2f}, act={msg.actual_yaw:.2f}), "
-            f"pitch(set={msg.pitch_setpoint:.2f}, act={msg.actual_pitch:.2f}), "
-            f"roll(set={msg.roll_setpoint:.2f}, act={msg.actual_roll:.2f})"
+            f'Attitude yaw(set={msg.yaw_setpoint:.2f}, act={msg.actual_yaw:.2f}), '
+            f'pitch(set={msg.pitch_setpoint:.2f}, act={msg.actual_pitch:.2f}), '
+            f'roll(set={msg.roll_setpoint:.2f}, act={msg.actual_roll:.2f})'
         )
         self._pub.publish(msg)
 
@@ -230,10 +231,10 @@ class CostFunctionCalculatorNode(Node):
         u = float(self.cost_calculator.center_point.polygon.points[0].x)
         v = float(self.cost_calculator.center_point.polygon.points[0].y)
 
-        fx = float(self.get_parameter("camera_fx").value)
-        fy = float(self.get_parameter("camera_fy").value)
-        cx = float(self.get_parameter("camera_cx").value)
-        cy = float(self.get_parameter("camera_cy").value)
+        fx = float(self.get_parameter('camera_fx').value)
+        fy = float(self.get_parameter('camera_fy').value)
+        cx = float(self.get_parameter('camera_cx').value)
+        cy = float(self.get_parameter('camera_cy').value)
 
         if fx <= 0.0 or fy <= 0.0:
             return None

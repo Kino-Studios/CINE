@@ -1,5 +1,3 @@
-from typing import List, Optional, Tuple
-
 import rclpy
 from geometry_msgs.msg import PoseStamped
 from rclpy.exceptions import (
@@ -11,15 +9,15 @@ from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPo
 
 
 class WaypointPublisher:
-    def __init__(self, node: Node, topic_name: str = "/move_base_simple/goal"):
+    def __init__(self, node: Node, topic_name: str = '/move_base_simple/goal'):
         self.node = node
         self.topic_name = topic_name
-        self.frame_id = "map"
+        self.frame_id = 'map'
         try:
-            node.declare_parameter("frame_id", "map")
-            self.frame_id = str(node.get_parameter("frame_id").value)
+            node.declare_parameter('frame_id', 'map')
+            self.frame_id = str(node.get_parameter('frame_id').value)
         except (ParameterAlreadyDeclaredException, ParameterNotDeclaredException):
-            self.frame_id = "map"
+            self.frame_id = 'map'
         self.goal_pub = node.create_publisher(
             PoseStamped,
             topic_name,
@@ -44,7 +42,7 @@ class WaypointPublisher:
         msg.pose.orientation.w = 1.0
         self.goal_pub.publish(msg)
 
-    def publish_waypoints_xyz(self, waypoints: List[Tuple[float, float, float, float]]):
+    def publish_waypoints_xyz(self, waypoints: list[tuple[float, float, float, float]]):
         if len(waypoints) == 0:
             return
 
@@ -56,16 +54,16 @@ class WaypointPublisher:
 
 class WaypointSenderNode(Node):
     def __init__(self):
-        super().__init__("waypoint_sender")
-        self.declare_parameter("input_topic", "/cinematographic/goal")
-        self.declare_parameter("output_topic", "/move_base_simple/goal")
+        super().__init__('waypoint_sender')
+        self.declare_parameter('input_topic', '/cinematographic/goal')
+        self.declare_parameter('output_topic', '/move_base_simple/goal')
 
-        input_topic = str(self.get_parameter("input_topic").value)
-        output_topic = str(self.get_parameter("output_topic").value)
+        input_topic = str(self.get_parameter('input_topic').value)
+        output_topic = str(self.get_parameter('output_topic').value)
 
         self._pub = self.create_publisher(PoseStamped, output_topic, 10)
         self._sub = self.create_subscription(PoseStamped, input_topic, self._cb, 10)
-        self._last: Optional[PoseStamped] = None
+        self._last: PoseStamped | None = None
 
     def _cb(self, msg: PoseStamped):
         self._last = msg

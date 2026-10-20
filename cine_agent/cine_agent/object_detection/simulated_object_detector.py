@@ -10,58 +10,58 @@ from std_msgs.msg import Bool, Float32MultiArray
 
 class SimulatedObjectDetector(Node):
     def __init__(self):
-        super().__init__("simulated_object_detector")
+        super().__init__('simulated_object_detector')
 
         self.bridge = CvBridge()
 
-        self.declare_parameter("cx", 576.0)
-        self.declare_parameter("cy", 324.0)
-        self.declare_parameter("fx", 525.0)
-        self.declare_parameter("fy", 525.0)
-        self.declare_parameter("width", 1152)
-        self.declare_parameter("height", 648)
+        self.declare_parameter('cx', 576.0)
+        self.declare_parameter('cy', 324.0)
+        self.declare_parameter('fx', 525.0)
+        self.declare_parameter('fy', 525.0)
+        self.declare_parameter('width', 1152)
+        self.declare_parameter('height', 648)
 
-        self.cx = self.get_parameter("cx").value
-        self.cy = self.get_parameter("cy").value
-        self.fx = self.get_parameter("fx").value
-        self.fy = self.get_parameter("fy").value
-        self.width = int(self.get_parameter("width").value)
-        self.height = int(self.get_parameter("height").value)
+        self.cx = self.get_parameter('cx').value
+        self.cy = self.get_parameter('cy').value
+        self.fx = self.get_parameter('fx').value
+        self.fy = self.get_parameter('fy').value
+        self.width = int(self.get_parameter('width').value)
+        self.height = int(self.get_parameter('height').value)
 
-        self.declare_parameter("min_object_area", 500)
-        self.declare_parameter("depth_threshold", 0.3)
-        self.declare_parameter("max_detection_range", 10.0)
+        self.declare_parameter('min_object_area', 500)
+        self.declare_parameter('depth_threshold', 0.3)
+        self.declare_parameter('max_detection_range', 10.0)
 
-        self.min_area = self.get_parameter("min_object_area").value
-        self.depth_thresh = self.get_parameter("depth_threshold").value
-        self.max_range = self.get_parameter("max_detection_range").value
+        self.min_area = self.get_parameter('min_object_area').value
+        self.depth_thresh = self.get_parameter('depth_threshold').value
+        self.max_range = self.get_parameter('max_detection_range').value
         self._last_primary_detection = None
         self._last_detection_time = None
         self._framing_active = False
 
-        self.depth_sub = self.create_subscription(Image, "depth/image_raw", self.depth_callback, 10)
+        self.depth_sub = self.create_subscription(Image, 'depth/image_raw', self.depth_callback, 10)
         self._framing_sub = self.create_subscription(
-            Bool, "/cinematography/framing_active", self._framing_cb, 10
+            Bool, '/cinematography/framing_active', self._framing_cb, 10
         )
 
-        self.detection_pub = self.create_publisher(Float32MultiArray, "object_detections", 10)
+        self.detection_pub = self.create_publisher(Float32MultiArray, 'object_detections', 10)
 
         self.center_pub = self.create_publisher(
-            PolygonStamped, "/object_detection/center_point", 10
+            PolygonStamped, '/object_detection/center_point', 10
         )
 
-        self.bbox_pub = self.create_publisher(PolygonStamped, "/object_detection/bounding_box", 10)
+        self.bbox_pub = self.create_publisher(PolygonStamped, '/object_detection/bounding_box', 10)
 
-        self.dims_pub = self.create_publisher(PolygonStamped, "/object_detection/dimensions", 10)
+        self.dims_pub = self.create_publisher(PolygonStamped, '/object_detection/dimensions', 10)
 
-        self.get_logger().info("Simulated Object Detector initialized")
+        self.get_logger().info('Simulated Object Detector initialized')
         self.get_logger().info(
-            f"Camera: {self.width}x{self.height}, f=({self.fx:.2f}, {self.fy:.2f})"
+            f'Camera: {self.width}x{self.height}, f=({self.fx:.2f}, {self.fy:.2f})'
         )
 
     def depth_callback(self, msg):
         try:
-            depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="32FC1")
+            depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1')
 
             detections = self.detect_objects(depth_image)
 
@@ -71,7 +71,7 @@ class SimulatedObjectDetector(Node):
                 self._republish_cached_detection()
 
         except (CvBridgeError, ValueError, cv2.error) as error:
-            self.get_logger().warn(f"Error processing depth image: {error}")
+            self.get_logger().warn(f'Error processing depth image: {error}')
 
     def detect_objects(self, depth_image):
         depth_clean = np.copy(depth_image)
@@ -132,18 +132,18 @@ class SimulatedObjectDetector(Node):
 
             detections.append(
                 {
-                    "center_x": float(center_x),
-                    "center_y": float(center_y),
-                    "depth": float(avg_depth),
-                    "area_pixels": float(area),
-                    "frame_coverage": float(frame_coverage),
-                    "centering_score": float(centering_score),
-                    "normalized_x": float(norm_x),
-                    "normalized_y": float(norm_y),
-                    "bbox_x": float(x),
-                    "bbox_y": float(y),
-                    "bbox_w": float(w),
-                    "bbox_h": float(h),
+                    'center_x': float(center_x),
+                    'center_y': float(center_y),
+                    'depth': float(avg_depth),
+                    'area_pixels': float(area),
+                    'frame_coverage': float(frame_coverage),
+                    'centering_score': float(centering_score),
+                    'normalized_x': float(norm_x),
+                    'normalized_y': float(norm_y),
+                    'bbox_x': float(x),
+                    'bbox_y': float(y),
+                    'bbox_w': float(w),
+                    'bbox_h': float(h),
                 }
             )
 
@@ -157,21 +157,21 @@ class SimulatedObjectDetector(Node):
         for det in detections:
             data.extend(
                 [
-                    det["center_x"],
-                    det["center_y"],
-                    det["depth"],
-                    det["area_pixels"],
-                    det["frame_coverage"],
-                    det["centering_score"],
-                    det["normalized_x"],
-                    det["normalized_y"],
+                    det['center_x'],
+                    det['center_y'],
+                    det['depth'],
+                    det['area_pixels'],
+                    det['frame_coverage'],
+                    det['centering_score'],
+                    det['normalized_x'],
+                    det['normalized_y'],
                 ]
             )
 
         msg.data = data
         self.detection_pub.publish(msg)
 
-        primary = max(detections, key=lambda d: d.get("area_pixels", 0.0))
+        primary = max(detections, key=lambda d: d.get('area_pixels', 0.0))
         if cache_last:
             self._last_primary_detection = dict(primary)
             self._last_detection_time = self.get_clock().now()
@@ -190,21 +190,21 @@ class SimulatedObjectDetector(Node):
 
         center = PolygonStamped()
         center.header.stamp = now
-        center.header.frame_id = "camera"
+        center.header.frame_id = 'camera'
         p = Point32()
-        p.x = float(det["center_x"])
-        p.y = float(det["center_y"])
-        p.z = float(det["depth"])
+        p.x = float(det['center_x'])
+        p.y = float(det['center_y'])
+        p.z = float(det['depth'])
         center.polygon.points = [p]
         self.center_pub.publish(center)
 
         bbox = PolygonStamped()
         bbox.header.stamp = now
-        bbox.header.frame_id = "camera"
-        x = float(det["bbox_x"])
-        y = float(det["bbox_y"])
-        w = float(det["bbox_w"])
-        h = float(det["bbox_h"])
+        bbox.header.frame_id = 'camera'
+        x = float(det['bbox_x'])
+        y = float(det['bbox_y'])
+        w = float(det['bbox_w'])
+        h = float(det['bbox_h'])
         p0 = Point32()
         p0.x, p0.y, p0.z = x, y, 0.0
         p1 = Point32()
@@ -214,11 +214,11 @@ class SimulatedObjectDetector(Node):
 
         dims = PolygonStamped()
         dims.header.stamp = now
-        dims.header.frame_id = "camera"
+        dims.header.frame_id = 'camera'
         d = Point32()
         d.x = float(w)
         d.y = float(h)
-        d.z = float(det["area_pixels"])
+        d.z = float(det['area_pixels'])
         dims.polygon.points = [d]
         self.dims_pub.publish(dims)
 
@@ -236,5 +236,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

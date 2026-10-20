@@ -1,5 +1,5 @@
 import math
-from typing import Callable, List, Optional, Tuple
+from collections.abc import Callable
 
 import numpy as np
 from rclpy.node import Node
@@ -21,26 +21,26 @@ class WaypointSelector:
         self.use_cost_optimization = True
         self.optimization_frequency = 2.0
         self.last_optimization_time = 0.0
-        self.optimized_center: Optional[Tuple[float, float]] = None
-        self.optimized_radius: Optional[float] = None
+        self.optimized_center: tuple[float, float] | None = None
+        self.optimized_radius: float | None = None
 
     def select_next_waypoint(
         self,
-        center_xy: Tuple[float, float],
+        center_xy: tuple[float, float],
         radius_m: float,
         altitude_m: float,
         target_world: np.ndarray,
         drone_position: np.ndarray,
         cost_estimation_func: Callable[
-            [float, float, float, float, float, float, float, float, float], Optional[float]
+            [float, float, float, float, float, float, float, float, float], float | None
         ],
         dt: float,
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
 
         cx, cy = center_xy
         tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
 
-        def cost_function(x: float, y: float, z: float) -> Optional[float]:
+        def cost_function(x: float, y: float, z: float) -> float | None:
             return cost_estimation_func(
                 x,
                 y,
@@ -79,7 +79,7 @@ class WaypointSelector:
         )
 
         best = None
-        best_cost = float("inf")
+        best_cost = float('inf')
 
         for da in angle_offsets:
             theta = self.phase_theta + float(da)
@@ -105,9 +105,9 @@ class WaypointSelector:
         target_world: np.ndarray,
         drone_position: np.ndarray,
         cost_estimation_func: Callable[
-            [float, float, float, float, float, float, float, float, float], Optional[float]
+            [float, float, float, float, float, float, float, float, float], float | None
         ],
-    ) -> List[Tuple[float, float, float, float]]:
+    ) -> list[tuple[float, float, float, float]]:
 
         tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
 
@@ -118,7 +118,7 @@ class WaypointSelector:
             center_xy = (tx, ty)
             radius = self.config.params.ORBIT_RADIUS_M
 
-        def cost_function(x: float, y: float, z: float) -> Optional[float]:
+        def cost_function(x: float, y: float, z: float) -> float | None:
             return cost_estimation_func(
                 x,
                 y,
@@ -150,7 +150,7 @@ class WaypointSelector:
 
                 return orbit
             except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as error:
-                self.node.get_logger().warn(f"Optimization cost failed: {error}")
+                self.node.get_logger().warn(f'Optimization cost failed: {error}')
 
         orbit = generate_orbit_waypoints_xy(
             center_xy_m=center_xy,
@@ -170,7 +170,7 @@ class WaypointSelector:
         target_world: np.ndarray,
         drone_position: np.ndarray,
         cost_estimation_func: Callable[
-            [float, float, float, float, float, float, float, float, float], Optional[float]
+            [float, float, float, float, float, float, float, float, float], float | None
         ],
     ) -> None:
         if (
@@ -181,7 +181,7 @@ class WaypointSelector:
 
         tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
 
-        def cost_function(x: float, y: float, z: float) -> Optional[float]:
+        def cost_function(x: float, y: float, z: float) -> float | None:
             return cost_estimation_func(
                 x,
                 y,
@@ -209,8 +209,8 @@ class WaypointSelector:
             self.optimized_radius = opt_radius
             self.last_optimization_time = current_time
             self.node.get_logger().info(
-                f"Optimized orbit: center=({opt_center[0]:.2f}, {opt_center[1]:.2f}), "
-                f"radius={opt_radius:.2f}m"
+                f'Optimized orbit: center=({opt_center[0]:.2f}, {opt_center[1]:.2f}), '
+                f'radius={opt_radius:.2f}m'
             )
         except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as error:
-            self.node.get_logger().warn(f"Orbit optimization failed: {error}")
+            self.node.get_logger().warn(f'Orbit optimization failed: {error}')

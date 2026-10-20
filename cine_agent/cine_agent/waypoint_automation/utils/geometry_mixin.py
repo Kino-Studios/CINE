@@ -27,7 +27,7 @@ class GeometryMixin:
             z = max(self.world_bounds_min[2], min(ceiling, float(z)))
             z = max(self.min_altitude_m, min(self.max_altitude_m, z))
             if abs(z - original_z) > 1e-6:
-                self.get_logger().debug(f"Z clamped from {original_z:.2f} to {z:.2f}")
+                self.get_logger().debug(f'Z clamped from {original_z:.2f} to {z:.2f}')
         else:
             z = max(self.world_bounds_min[2], max(self.min_altitude_m, float(z)))
 
@@ -54,7 +54,7 @@ class GeometryMixin:
         if self.active_waypoints is None:
             return None
         best_idx = None
-        best_dist_sq = float("inf")
+        best_dist_sq = float('inf')
         tx, ty, tz = (
             float(target_world[0]),
             float(target_world[1]),

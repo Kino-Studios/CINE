@@ -3,7 +3,6 @@ from cine_agent.utils.paths import add_config_path
 add_config_path()
 
 import math
-from typing import Optional
 
 import numpy as np
 from constants import Constraints
@@ -57,10 +56,10 @@ class TrapezoidalSetpointFilter:
     def __init__(
         self,
         node: Node,
-        input_topic: str = "/position_cmd",
-        output_topic: str = "/position_cmd_smooth",
-        max_velocity: Optional[float] = None,
-        max_acceleration: Optional[float] = None,
+        input_topic: str = '/position_cmd',
+        output_topic: str = '/position_cmd_smooth',
+        max_velocity: float | None = None,
+        max_acceleration: float | None = None,
     ):
 
         self.node = node
@@ -75,15 +74,15 @@ class TrapezoidalSetpointFilter:
         self.current_vel = np.array([0.0, 0.0, 0.0])
         self.has_odom = False
 
-        self.odom_sub = node.create_subscription(Odometry, "/odometry", self.odom_callback, 20)
+        self.odom_sub = node.create_subscription(Odometry, '/odometry', self.odom_callback, 20)
         self.cmd_sub = node.create_subscription(
-            PoseStamped, "/cinematographic/pos_cmd_geo", self.position_cmd_callback, 10
+            PoseStamped, '/cinematographic/pos_cmd_geo', self.position_cmd_callback, 10
         )
-        self.cmd_pub = node.create_publisher(PoseStamped, "/cinematographic/trap_pos_cmd_geo", 10)
+        self.cmd_pub = node.create_publisher(PoseStamped, '/cinematographic/trap_pos_cmd_geo', 10)
 
         self.publish_rate = 50.0
         self.timer = node.create_timer(1.0 / self.publish_rate, self.timer_callback)
-        self.target_cmd: Optional[PoseStamped] = None
+        self.target_cmd: PoseStamped | None = None
 
     def odom_callback(self, msg: Odometry):
         self.current_pos = np.array(

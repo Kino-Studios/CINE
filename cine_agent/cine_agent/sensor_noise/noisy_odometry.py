@@ -16,27 +16,27 @@ from rclpy.node import Node
 
 class NoisyOdometryNode(Node):
     def __init__(self):
-        super().__init__("noisy_odometry_node")
+        super().__init__('noisy_odometry_node')
 
         self.enable_noise = bool(
             self.declare_parameter(
-                "enable_sensor_noise",
+                'enable_sensor_noise',
                 SensorNoiseParams.ENABLE_SENSOR_NOISE,
             ).value
         )
         self.linear_noise_std = float(
-            self.declare_parameter("linear_noise_std_m", SensorNoiseParams.LINEAR_NOISE_STD_M).value
+            self.declare_parameter('linear_noise_std_m', SensorNoiseParams.LINEAR_NOISE_STD_M).value
         )
         self.angular_noise_std = float(
             self.declare_parameter(
-                "angular_noise_std_rad", SensorNoiseParams.ANGULAR_NOISE_STD_RAD
+                'angular_noise_std_rad', SensorNoiseParams.ANGULAR_NOISE_STD_RAD
             ).value
         )
         self.raw_topic = str(
-            self.declare_parameter("raw_odom_topic", SensorNoiseParams.RAW_ODOM_TOPIC).value
+            self.declare_parameter('raw_odom_topic', SensorNoiseParams.RAW_ODOM_TOPIC).value
         )
         self.noisy_topic = str(
-            self.declare_parameter("noisy_odom_topic", SensorNoiseParams.NOISY_ODOM_TOPIC).value
+            self.declare_parameter('noisy_odom_topic', SensorNoiseParams.NOISY_ODOM_TOPIC).value
         )
 
         self._rng = random.Random()

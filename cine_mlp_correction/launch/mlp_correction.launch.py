@@ -8,19 +8,19 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument(
-                "mlp_weights_path",
+                'mlp_weights_path',
                 description=(
-                    "Absolute path to the mlp/weights/ directory "
-                    "containing mlp_correction.onnx and scaler.json"
+                    'Absolute path to the mlp/weights/ directory '
+                    'containing mlp_correction.onnx and scaler.json'
                 ),
             ),
             Node(
-                package="cine_mlp_correction",
-                executable="mlp_node",
-                name="mlp_correction_node",
+                package='cine_mlp_correction',
+                executable='mlp_node',
+                name='mlp_correction_node',
                 parameters=[
                     {
-                        "mlp_weights_path": LaunchConfiguration("mlp_weights_path"),
+                        'mlp_weights_path': LaunchConfiguration('mlp_weights_path'),
                     }
                 ],
             ),

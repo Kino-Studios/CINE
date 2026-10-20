@@ -4,7 +4,6 @@ add_config_path()
 
 import numpy as np
 import rclpy
-from cine_msgs.msg import CinematographyCosts
 from constants import SensorNoiseParams
 from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import PolygonStamped, Vector3Stamped
@@ -16,6 +15,7 @@ from sensor_msgs.msg import Image
 from cine_agent.cost_functions.cost_calculator import CostCalculator
 from cine_agent.sensor_noise.noisy_odometry import NoisyOdometryNode
 from cine_agent.setpoint_sender.waypoint_sender import WaypointPublisher
+from cine_msgs.msg import CinematographyCosts
 
 from ..controllers.kinematics_controller import KinematicsController
 from ..controllers.target_computer import TargetComputer
@@ -26,7 +26,7 @@ from ..utils.state_tracker import StateTracker
 
 class CinematographicPlannerNode(Node):
     def __init__(self):
-        super().__init__("cinematographic_planner_node")
+        super().__init__('cinematographic_planner_node')
 
         self.bridge = CvBridge()
         self.has_odom = False
@@ -51,7 +51,7 @@ class CinematographicPlannerNode(Node):
 
         self.cost_pub = self.create_publisher(
             CinematographyCosts,
-            "/cinematography/cinematography_costs",
+            '/cinematography/cinematography_costs',
             10,
         )
         self.waypoint_pub_node = WaypointPublisher(self, self.config.params.WAYPOINTS_TOPIC)
@@ -126,18 +126,18 @@ class CinematographicPlannerNode(Node):
 
     def image_callback(self, msg: Image):
         try:
-            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
             self.cost_calculator.update_bgr_image(cv_image)
         except CvBridgeError:
             try:
-                cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+                cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
                 self.cost_calculator.update_bgr_image(cv_image)
             except CvBridgeError as error:
-                self.get_logger().warn(f"Image callback error: {error}")
+                self.get_logger().warn(f'Image callback error: {error}')
 
     def depth_callback(self, msg: Image):
         try:
-            depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding="32FC1")
+            depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1')
             self.cost_calculator.update_depth_image(depth)
 
             center_uv = self.target_computer.center_uv
@@ -150,7 +150,7 @@ class CinematographicPlannerNode(Node):
                 if z > 0 and not np.isnan(z):
                     self.tracker.record_depth(z)
         except (CvBridgeError, ValueError, IndexError) as error:
-            self.get_logger().warn(f"Depth callback error: {error}")
+            self.get_logger().warn(f'Depth callback error: {error}')
 
     def _dt(self) -> float:
         now_s = self.get_clock().now().nanoseconds / 1e9
@@ -166,14 +166,14 @@ class CinematographicPlannerNode(Node):
     def publish_costs(self):
         cost_result = self.cost_calculator.calculate_cost()
         if cost_result is not None and isinstance(cost_result, dict):
-            total_cost = cost_result.get("total_cost", 0.0)
+            total_cost = cost_result.get('total_cost', 0.0)
             msg = CinematographyCosts()
             msg.header.stamp = self.get_clock().now().to_msg()
-            msg.header.frame_id = "map"
-            msg.light_cost = float(cost_result.get("lighting_cost", 0.0))
-            msg.framing_cost = float(cost_result.get("framing_cost", 0.0))
-            msg.smoothness_cost = float(cost_result.get("smoothness_cost", 0.0))
-            msg.distance_cost = float(cost_result.get("distance_cost", 0.0))
+            msg.header.frame_id = 'map'
+            msg.light_cost = float(cost_result.get('lighting_cost', 0.0))
+            msg.framing_cost = float(cost_result.get('framing_cost', 0.0))
+            msg.smoothness_cost = float(cost_result.get('smoothness_cost', 0.0))
+            msg.distance_cost = float(cost_result.get('distance_cost', 0.0))
             msg.total_cost = float(total_cost)
             self.cost_pub.publish(msg)
 

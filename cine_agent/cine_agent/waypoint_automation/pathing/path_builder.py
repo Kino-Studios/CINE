@@ -21,12 +21,12 @@ class PathBuilderMixin:
     def _estimate_waypoint_cost(self, candidate_world, target_world, reference_world):
         logger = self.get_logger()
         if not bool(self.enable_cost_optimization):
-            logger.debug("Waypoint cost optimization disabled, using fallback cost")
+            logger.debug('Waypoint cost optimization disabled, using fallback cost')
 
             return self._fallback_waypoint_cost(candidate_world, target_world, reference_world)
         if candidate_world is None or target_world is None or reference_world is None:
             logger.debug(
-                "Waypoint cost missing world info (candidate=%s target=%s reference=%s)",
+                'Waypoint cost missing world info (candidate=%s target=%s reference=%s)',
                 candidate_world,
                 target_world,
                 reference_world,
@@ -34,7 +34,7 @@ class PathBuilderMixin:
 
             return self._fallback_waypoint_cost(candidate_world, target_world, reference_world)
         if self.cost_calculator is None:
-            logger.debug("Cost calculator unavailable, using fallback cost")
+            logger.debug('Cost calculator unavailable, using fallback cost')
 
             return self._fallback_waypoint_cost(candidate_world, target_world, reference_world)
 
@@ -54,7 +54,7 @@ class PathBuilderMixin:
                 candidate_world, target_world, reference_world
             )
             logger.debug(
-                "CostCalculator estimate invalid (%s), fallback cost=%s",
+                'CostCalculator estimate invalid (%s), fallback cost=%s',
                 cost,
                 fallback_cost,
             )
@@ -76,7 +76,7 @@ class PathBuilderMixin:
             try:
                 total += math.dist(candidate_world, reference_world)
             except (ValueError, TypeError) as error:
-                self.get_logger().debug(f"fallback cost skipped reference distance: {error}")
+                self.get_logger().debug(f'fallback cost skipped reference distance: {error}')
 
         return total
 
@@ -145,7 +145,7 @@ class PathBuilderMixin:
         )
         transition = self._sample_cubic_bezier(p0, p1, p2, p3, self.bezier_transition_points)
         self.get_logger().debug(
-            f"Bezier transition: p0={p0} p3={p3} blend={self.bezier_blend_length_m:.2f} points={len(transition)}"
+            f'Bezier transition: p0={p0} p3={p3} blend={self.bezier_blend_length_m:.2f} points={len(transition)}'
         )
 
         return [self._clamp_waypoint_to_bounds(wp) for wp in transition]
@@ -261,9 +261,9 @@ class PathBuilderMixin:
 
     def _score_arc_points(self, arc_pts, target_world):
         if target_world is None or self.cost_calculator is None:
-            return float("inf")
+            return float('inf')
         if not arc_pts or len(arc_pts) < 2:
-            return float("inf")
+            return float('inf')
 
         tx, ty, tz = (
             float(target_world[0]),
@@ -285,7 +285,7 @@ class PathBuilderMixin:
                 reference_drone_z=float(ref[2]),
             )
             if cost is None or not math.isfinite(cost):
-                return float("inf")
+                return float('inf')
             total += float(cost)
             ref = wp
 
@@ -373,16 +373,16 @@ class PathBuilderMixin:
             )
 
             self.detected_object = {
-                "center_x": float(self.cx),
-                "center_y": float(self.cy),
-                "depth": depth,
-                "norm_x": 0.5,
-                "norm_y": 0.5,
+                'center_x': float(self.cx),
+                'center_y': float(self.cy),
+                'depth': depth,
+                'norm_x': 0.5,
+                'norm_y': 0.5,
             }
 
         if self.anchor_start_idx is None or self.anchor_end_idx is None:
             self._set_anchors(
-                target_world=self.target_world, obj_depth=self.detected_object["depth"]
+                target_world=self.target_world, obj_depth=self.detected_object['depth']
             )
         if self.anchor_start_idx is None or self.anchor_end_idx is None:
             return
@@ -390,12 +390,12 @@ class PathBuilderMixin:
         obj_depth = (
             float(self.focus_depth_m)
             if self.focus_depth_m is not None
-            else float(self.detected_object["depth"])
+            else float(self.detected_object['depth'])
         )
-        center_x = float(self.detected_object["center_x"])
-        center_y = float(self.detected_object["center_y"])
-        norm_x = self.detected_object.get("norm_x", None)
-        norm_y = self.detected_object.get("norm_y", None)
+        center_x = float(self.detected_object['center_x'])
+        center_y = float(self.detected_object['center_y'])
+        norm_x = self.detected_object.get('norm_x', None)
+        norm_y = self.detected_object.get('norm_y', None)
 
         if norm_x is not None and norm_y is not None:
             u = float(norm_x) * float(self.image_width)
@@ -420,10 +420,10 @@ class PathBuilderMixin:
             target_world, _ = self._compute_object_world(self.detected_object)
 
         if target_world is None:
-            center_x = float(self.detected_object["center_x"])
-            center_y = float(self.detected_object["center_y"])
-            norm_x = self.detected_object.get("norm_x", None)
-            norm_y = self.detected_object.get("norm_y", None)
+            center_x = float(self.detected_object['center_x'])
+            center_y = float(self.detected_object['center_y'])
+            norm_x = self.detected_object.get('norm_x', None)
+            norm_y = self.detected_object.get('norm_y', None)
 
             if norm_x is not None and norm_y is not None:
                 u = float(norm_x) * float(self.image_width)
@@ -451,9 +451,9 @@ class PathBuilderMixin:
         static_world = [self._rel_to_world(wp) for wp in self._scaled_static_waypoints()]
         start_idx = int(max(0, min(self.anchor_start_idx, len(static_world) - 2)))
         end_idx = int(max(start_idx + 1, min(self.anchor_end_idx, len(static_world) - 1)))
-        self.viz_data["static_world"] = static_world
-        self.viz_data["start_idx"] = start_idx
-        self.viz_data["end_idx"] = end_idx
+        self.viz_data['static_world'] = static_world
+        self.viz_data['start_idx'] = start_idx
+        self.viz_data['end_idx'] = end_idx
 
         start_wp = static_world[start_idx]
         end_wp = static_world[end_idx]
@@ -508,8 +508,8 @@ class PathBuilderMixin:
 
         arc_start = _project_to_circle(start_wp)
         arc_end = _project_to_circle(end_wp)
-        self.viz_data["arc_start"] = arc_start
-        self.viz_data["arc_end"] = arc_end
+        self.viz_data['arc_start'] = arc_start
+        self.viz_data['arc_end'] = arc_end
 
         prev_static = static_world[start_idx - 1] if start_idx - 1 >= 0 else None
         next_static = static_world[end_idx + 1] if end_idx + 1 < len(static_world) else None
@@ -551,7 +551,7 @@ class PathBuilderMixin:
             self.anchor_start_world = arc_start
             self.anchor_end_world = arc_end
 
-        self.viz_data["cinematographic_waypoints"] = cinematographic_waypoints
+        self.viz_data['cinematographic_waypoints'] = cinematographic_waypoints
         self._debug_arc(cinematographic_waypoints, target_world, desired)
 
         actual_focus_distance = focus_distance
@@ -611,18 +611,18 @@ class PathBuilderMixin:
         if not has_cinematic_arc:
             self.last_cinematic_waypoints = []
             self.dynamic_waypoints = None
-            self.viz_data["transition_in"] = transition_in
-            self.viz_data["transition_out"] = transition_out
-            self.viz_data["combined_world"] = static_world
+            self.viz_data['transition_in'] = transition_in
+            self.viz_data['transition_out'] = transition_out
+            self.viz_data['combined_world'] = static_world
             self.get_logger().debug(
-                f"Cinematic arc unavailable (start={start_idx} end={end_idx}) using static path len={len(static_world)}"
+                f'Cinematic arc unavailable (start={start_idx} end={end_idx}) using static path len={len(static_world)}'
             )
 
             return
         else:
             if suffix:
-                suffix_altitudes = [f"{wp[2]:.3f}" for wp in suffix[:5]]
-                self.get_logger().info(f"Suffix altitudes (first 5): {suffix_altitudes}")
+                suffix_altitudes = [f'{wp[2]:.3f}' for wp in suffix[:5]]
+                self.get_logger().info(f'Suffix altitudes (first 5): {suffix_altitudes}')
 
             combined_world = (
                 static_world[:start_idx]
@@ -634,7 +634,7 @@ class PathBuilderMixin:
             if cinematographic_waypoints:
                 arc_altitudes = [wp[2] for wp in cinematographic_waypoints]
                 self.get_logger().info(
-                    f"Arc altitude range: {min(arc_altitudes):.3f} - {max(arc_altitudes):.3f} m"
+                    f'Arc altitude range: {min(arc_altitudes):.3f} - {max(arc_altitudes):.3f} m'
                 )
                 post_arc_start = (
                     len(static_world[:start_idx])
@@ -644,12 +644,12 @@ class PathBuilderMixin:
                 )
                 post_arc = combined_world[post_arc_start : post_arc_start + 5]
                 if post_arc:
-                    alt_list = [f"{wp[2]:.3f}" for wp in post_arc]
-                    self.get_logger().info(f"Post-arc waypoint altitudes: {alt_list}")
+                    alt_list = [f'{wp[2]:.3f}' for wp in post_arc]
+                    self.get_logger().info(f'Post-arc waypoint altitudes: {alt_list}')
 
-            self.viz_data["transition_in"] = transition_in
-            self.viz_data["transition_out"] = transition_out
-            self.viz_data["combined_world"] = combined_world
+            self.viz_data['transition_in'] = transition_in
+            self.viz_data['transition_out'] = transition_out
+            self.viz_data['combined_world'] = combined_world
 
         origin = self.origin_offset if self.origin_offset is not None else (0.0, 0.0, 0.0)
         combined_world = self._remove_anchor_points_from_waypoints(combined_world, origin=origin)
@@ -658,8 +658,8 @@ class PathBuilderMixin:
         ]
         self.last_cinematic_waypoints = cinematographic_waypoints
         self.get_logger().debug(
-            f"Dynamic arc details start_idx={start_idx} end_idx={end_idx} combined_len={len(combined_world)} "
-            f"arc_pts={len(cinematographic_waypoints)} transition_in={len(transition_in)} transition_out={len(transition_out)} focus_dist={float(focus_distance):.3f}"
+            f'Dynamic arc details start_idx={start_idx} end_idx={end_idx} combined_len={len(combined_world)} '
+            f'arc_pts={len(cinematographic_waypoints)} transition_in={len(transition_in)} transition_out={len(transition_out)} focus_dist={float(focus_distance):.3f}'
         )
 
     def _build_orbit_segment(self, center_world, radius, z, num_pts=16, reference_world=None):
@@ -689,7 +689,7 @@ class PathBuilderMixin:
                 else [r0]
             )
 
-            best_total = float("inf")
+            best_total = float('inf')
             for rr in radii:
                 total = 0.0
                 ref = reference
@@ -704,7 +704,7 @@ class PathBuilderMixin:
                     )
                     c = self._estimate_waypoint_cost(candidate, center_world, ref)
                     if c is None or not math.isfinite(c):
-                        total = float("inf")
+                        total = float('inf')
                         break
                     total += float(c)
                     ref = candidate

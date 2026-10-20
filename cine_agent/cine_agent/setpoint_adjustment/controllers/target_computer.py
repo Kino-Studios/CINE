@@ -1,5 +1,3 @@
-from typing import Optional, Tuple
-
 import numpy as np
 
 from ..cost_functions.cost_calculator import CostCalculator
@@ -15,7 +13,7 @@ class TargetComputer:
         self.config = config
         self.tracker = tracker
         self.cost_calculator = cost_calculator
-        self.center_uv: Optional[Tuple[int, int]] = None
+        self.center_uv: tuple[int, int] | None = None
 
     def update_center(self, u: int, v: int) -> None:
         """Update the raw target center point from bounding box or other sources, applying rule of thirds."""
@@ -23,7 +21,7 @@ class TargetComputer:
         self.center_uv = adjusted
         self.tracker.set_target_observation(adjusted)
 
-    def _apply_rule_of_thirds(self, uv: Tuple[int, int]) -> Tuple[int, int]:
+    def _apply_rule_of_thirds(self, uv: tuple[int, int]) -> tuple[int, int]:
         strength = float(max(0.0, min(1.0, self.config.thirds_strength)))
         if strength <= 0.0:
             return uv
@@ -51,7 +49,7 @@ class TargetComputer:
 
         return (uu, vv)
 
-    def compute_target_xy(self) -> Optional[Tuple[float, float, float]]:
+    def compute_target_xy(self) -> tuple[float, float, float] | None:
         if self.center_uv is None:
             return None
 
@@ -83,7 +81,7 @@ class TargetComputer:
 
     def compute_target_world_position(
         self, drone_position: np.ndarray, has_odom: bool
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         target_cam = self.compute_target_xy()
 
         if target_cam is None or not has_odom:

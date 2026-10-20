@@ -1,44 +1,43 @@
-from typing import Optional, Tuple
-
 import rclpy
-from cine_msgs.msg import CinematographyCosts
 from geometry_msgs.msg import PointStamped
 from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from std_msgs.msg import Float32
 
+from cine_msgs.msg import CinematographyCosts
+
 
 class SimulatedFocusPublisher(Node):
     def __init__(self):
-        super().__init__("simulated_focus_publisher")
+        super().__init__('simulated_focus_publisher')
 
-        self.frame_id = str(self.declare_parameter("frame_id", "world").value)
-        self.publish_rate_hz = float(self.declare_parameter("publish_rate_hz", 10.0).value)
+        self.frame_id = str(self.declare_parameter('frame_id', 'world').value)
+        self.publish_rate_hz = float(self.declare_parameter('publish_rate_hz', 10.0).value)
 
-        self.odom_topic = str(self.declare_parameter("odom_topic", "/odom").value)
-        self.use_odom = bool(self.declare_parameter("use_odom", True).value)
+        self.odom_topic = str(self.declare_parameter('odom_topic', '/odom').value)
+        self.use_odom = bool(self.declare_parameter('use_odom', True).value)
 
         self.target_xyz = tuple(
-            float(v) for v in self.declare_parameter("target_xyz", [2.34, 4.9, 1.35]).value
+            float(v) for v in self.declare_parameter('target_xyz', [2.34, 4.9, 1.35]).value
         )
         self.target_offset_xyz = tuple(
-            float(v) for v in self.declare_parameter("target_offset_xyz", [2.34, 4.9, 1.35]).value
+            float(v) for v in self.declare_parameter('target_offset_xyz', [2.34, 4.9, 1.35]).value
         )
 
-        self.focus_depth_m = float(self.declare_parameter("focus_depth_m", 1.5).value)
+        self.focus_depth_m = float(self.declare_parameter('focus_depth_m', 1.5).value)
 
-        self._last_odom: Optional[Odometry] = None
-        self._odom_origin: Optional[Tuple[float, float, float]] = None
-        self._target_world: Optional[Tuple[float, float, float]] = None
+        self._last_odom: Odometry | None = None
+        self._odom_origin: tuple[float, float, float] | None = None
+        self._target_world: tuple[float, float, float] | None = None
         self._odom_sub = self.create_subscription(Odometry, self.odom_topic, self._odom_cb, 10)
 
-        self._focus_depth_pub = self.create_publisher(Float32, "/cinematography/focus_depth_m", 10)
+        self._focus_depth_pub = self.create_publisher(Float32, '/cinematography/focus_depth_m', 10)
         self._target_world_pub = self.create_publisher(
-            PointStamped, "/cinematography/target_world", 10
+            PointStamped, '/cinematography/target_world', 10
         )
         self._costs_pub = self.create_publisher(
-            CinematographyCosts, "/cinematography/cinematography_costs", 10
+            CinematographyCosts, '/cinematography/cinematography_costs', 10
         )
 
         period = 1.0 / max(1.0, self.publish_rate_hz)
@@ -56,7 +55,7 @@ class SimulatedFocusPublisher(Node):
                 self._odom_origin[2] + oz,
             )
 
-    def _target_from_odom(self) -> Optional[Tuple[float, float, float]]:
+    def _target_from_odom(self) -> tuple[float, float, float] | None:
         if not self.use_odom or self._last_odom is None:
             return None
         if self._target_world is not None:

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 test_dir = Path(__file__).resolve().parent
 package_root = test_dir.parent
 repo_root = package_root.parent
-configs_path = repo_root / "configs" / "python-constants"
+configs_path = repo_root / 'configs' / 'python-constants'
 
 if str(package_root) not in sys.path:
     sys.path.insert(0, str(package_root))
@@ -14,22 +14,22 @@ if str(configs_path) not in sys.path:
     sys.path.insert(0, str(configs_path))
 
 mock_rclpy = MagicMock()
-sys.modules["rclpy"] = mock_rclpy
-sys.modules["rclpy.node"] = MagicMock()
-sys.modules["rclpy.qos"] = MagicMock()
-sys.modules["geometry_msgs"] = MagicMock()
-sys.modules["geometry_msgs.msg"] = MagicMock()
-sys.modules["nav_msgs"] = MagicMock()
-sys.modules["nav_msgs.msg"] = MagicMock()
-sys.modules["sensor_msgs"] = MagicMock()
-sys.modules["sensor_msgs.msg"] = MagicMock()
-sys.modules["std_msgs"] = MagicMock()
-sys.modules["std_msgs.msg"] = MagicMock()
-sys.modules["cine_msgs"] = MagicMock()
-sys.modules["cine_msgs.msg"] = MagicMock()
-sys.modules["traj_utils"] = MagicMock()
-sys.modules["cv_bridge"] = MagicMock()
-sys.modules["cv2"] = MagicMock()
+sys.modules['rclpy'] = mock_rclpy
+sys.modules['rclpy.node'] = MagicMock()
+sys.modules['rclpy.qos'] = MagicMock()
+sys.modules['geometry_msgs'] = MagicMock()
+sys.modules['geometry_msgs.msg'] = MagicMock()
+sys.modules['nav_msgs'] = MagicMock()
+sys.modules['nav_msgs.msg'] = MagicMock()
+sys.modules['sensor_msgs'] = MagicMock()
+sys.modules['sensor_msgs.msg'] = MagicMock()
+sys.modules['std_msgs'] = MagicMock()
+sys.modules['std_msgs.msg'] = MagicMock()
+sys.modules['cine_msgs'] = MagicMock()
+sys.modules['cine_msgs.msg'] = MagicMock()
+sys.modules['traj_utils'] = MagicMock()
+sys.modules['cv_bridge'] = MagicMock()
+sys.modules['cv2'] = MagicMock()
 
 import numpy as np
 import pytest
@@ -48,24 +48,24 @@ def mock_node():
     node.anchor_focus_distance = None
 
     param_mapping = {
-        "deadband_px": CostParams.DEADBAND_PX,
-        "huber_delta_px": CostParams.HUBER_DELTA_PX,
-        "w_framing": CostParams.W_FRAMING,
-        "w_dist": CostParams.W_DIST,
-        "w_near": CostParams.W_NEAR,
-        "w_stab": CostParams.W_STAB,
-        "w_smooth": CostParams.W_SMOOTH,
-        "w_light": CostParams.W_LIGHT,
-        "light_avoidance_enabled": False,
-        "image_width": ImageParams.IMAGE_WIDTH,
-        "image_height": ImageParams.IMAGE_HEIGHT,
-        "framing_vertical_weight": CostParams.FRAMING_VERTICAL_WEIGHT,
-        "light_saturation_threshold": CostParams.LIGHT_SATURATION_THRESHOLD,
-        "light_tau": CostParams.LIGHT_TAU,
-        "w_saturation": CostParams.W_SATURATION,
-        "use_simulated_light": SimulationParams.USE_SIMULATED_LIGHT,
-        "camera_fx": 500.0,
-        "focus_yaw_hold_deadband_rad": math.radians(2.0),
+        'deadband_px': CostParams.DEADBAND_PX,
+        'huber_delta_px': CostParams.HUBER_DELTA_PX,
+        'w_framing': CostParams.W_FRAMING,
+        'w_dist': CostParams.W_DIST,
+        'w_near': CostParams.W_NEAR,
+        'w_stab': CostParams.W_STAB,
+        'w_smooth': CostParams.W_SMOOTH,
+        'w_light': CostParams.W_LIGHT,
+        'light_avoidance_enabled': False,
+        'image_width': ImageParams.IMAGE_WIDTH,
+        'image_height': ImageParams.IMAGE_HEIGHT,
+        'framing_vertical_weight': CostParams.FRAMING_VERTICAL_WEIGHT,
+        'light_saturation_threshold': CostParams.LIGHT_SATURATION_THRESHOLD,
+        'light_tau': CostParams.LIGHT_TAU,
+        'w_saturation': CostParams.W_SATURATION,
+        'use_simulated_light': SimulationParams.USE_SIMULATED_LIGHT,
+        'camera_fx': 500.0,
+        'focus_yaw_hold_deadband_rad': math.radians(2.0),
     }
 
     node.get_parameter.side_effect = lambda name: MagicMock(value=param_mapping.get(name, 0.0))
@@ -105,7 +105,7 @@ def test_acceleration_smoothness_cost(mock_node):
 
     costs = calculator.calculate_cost()
     assert costs is not None
-    assert costs["smoothness_cost"] == pytest.approx(float(CostParams.W_SMOOTH))
+    assert costs['smoothness_cost'] == pytest.approx(float(CostParams.W_SMOOTH))
 
 
 def test_feature_tracking_center_depth(mock_node):
@@ -146,14 +146,14 @@ def test_calibration_parameter_integration(mock_node):
 
     def get_param_double_fx(name):
         params = {
-            "w_framing": CostParams.W_FRAMING,
-            "camera_fx": 1000.0,
-            "huber_delta_px": CostParams.HUBER_DELTA_PX,
-            "deadband_px": 0.0,
-            "w_dist": CostParams.W_DIST,
-            "w_near": CostParams.W_NEAR,
-            "w_stab": CostParams.W_STAB,
-            "w_smooth": CostParams.W_SMOOTH,
+            'w_framing': CostParams.W_FRAMING,
+            'camera_fx': 1000.0,
+            'huber_delta_px': CostParams.HUBER_DELTA_PX,
+            'deadband_px': 0.0,
+            'w_dist': CostParams.W_DIST,
+            'w_near': CostParams.W_NEAR,
+            'w_stab': CostParams.W_STAB,
+            'w_smooth': CostParams.W_SMOOTH,
         }
 
         return MagicMock(value=params.get(name, 1.0))

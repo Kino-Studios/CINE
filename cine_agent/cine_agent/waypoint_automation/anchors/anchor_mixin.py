@@ -30,10 +30,10 @@ class AnchorMixin:
                 self.anchor_focus_distance = None
             self.anchor_start_world = static_world[start_idx]
             self.anchor_end_world = static_world[end_idx]
-            self.anchor_source = "static_pair"
+            self.anchor_source = 'static_pair'
             self.get_logger().debug(
-                f"Anchors static_pair source={self.anchor_source} start={start_idx} end={end_idx} focus_dist={self.anchor_focus_distance} "
-                f"target={tuple(target_world)} start_world={tuple(self.anchor_start_world)} end_world={tuple(self.anchor_end_world)}"
+                f'Anchors static_pair source={self.anchor_source} start={start_idx} end={end_idx} focus_dist={self.anchor_focus_distance} '
+                f'target={tuple(target_world)} start_world={tuple(self.anchor_start_world)} end_world={tuple(self.anchor_end_world)}'
             )
         else:
             start_idx = 0
@@ -53,11 +53,11 @@ class AnchorMixin:
             end_idx = len(static_world) - 1
             self.anchor_start_world = static_world[start_idx]
             self.anchor_end_world = static_world[end_idx]
-            self.anchor_source = "fallback"
+            self.anchor_source = 'fallback'
             self.anchor_focus_distance = None
             self.get_logger().debug(
-                f"Anchors fallback source={self.anchor_source} start={start_idx} end={end_idx} "
-                f"start_world={tuple(self.anchor_start_world)} end_world={tuple(self.anchor_end_world)}"
+                f'Anchors fallback source={self.anchor_source} start={start_idx} end={end_idx} '
+                f'start_world={tuple(self.anchor_start_world)} end_world={tuple(self.anchor_end_world)}'
             )
 
         self.anchor_start_idx = int(start_idx)
@@ -186,7 +186,7 @@ class AnchorMixin:
         balance_weight = 1.5
 
         best_pair = (0, min_gap)
-        best_cost = float("inf")
+        best_cost = float('inf')
         for i in range(n - 1):
             if i > closest_idx:
                 break
@@ -237,12 +237,12 @@ class AnchorMixin:
         scale = max(0.01, float(self.anchor_marker_scale_m))
         markers = MarkerArray()
 
-        seq = getattr(self, "_anchor_marker_seq", 0) + 1
+        seq = getattr(self, '_anchor_marker_seq', 0) + 1
         self._anchor_marker_seq = seq
         start_marker = Marker()
         start_marker.header.stamp = now_msg
         start_marker.header.frame_id = self.frame_id
-        start_marker.ns = "cinematography_anchors"
+        start_marker.ns = 'cinematography_anchors'
         start_marker.id = seq * 2
         start_marker.type = Marker.SPHERE
         start_marker.action = Marker.ADD
@@ -262,7 +262,7 @@ class AnchorMixin:
         end_marker = Marker()
         end_marker.header.stamp = now_msg
         end_marker.header.frame_id = self.frame_id
-        end_marker.ns = "cinematography_anchors"
+        end_marker.ns = 'cinematography_anchors'
         end_marker.id = seq * 2 + 1
         end_marker.type = Marker.SPHERE
         end_marker.action = Marker.ADD
@@ -287,8 +287,8 @@ class AnchorMixin:
         if not math.isfinite(self.anchor_focus_distance) or self.anchor_focus_distance <= 0.0:
             return
         self.get_logger().info(
-            f"Publishing anchor focus distance: {self.anchor_focus_distance:.3f} m "
-            f"(source={self.anchor_source} start={self.anchor_start_idx} end={self.anchor_end_idx})"
+            f'Publishing anchor focus distance: {self.anchor_focus_distance:.3f} m '
+            f'(source={self.anchor_source} start={self.anchor_start_idx} end={self.anchor_end_idx})'
         )
         msg = Float32()
         msg.data = float(self.anchor_focus_distance)
@@ -333,9 +333,9 @@ class AnchorMixin:
         if not start_candidates or not end_candidates:
             return
 
-        expected_len = getattr(self, "generated_arc_length", 0)
+        expected_len = getattr(self, 'generated_arc_length', 0)
         best_pair = None
-        best_cost = float("inf")
+        best_cost = float('inf')
 
         for s in start_candidates:
             for e in end_candidates:
@@ -357,9 +357,9 @@ class AnchorMixin:
             self.framing_end_idx = e
 
         self.get_logger().info(
-            f"Framing indices updated start={self.framing_start_idx} end={self.framing_end_idx} "
-            f"(len={self.framing_end_idx - self.framing_start_idx}, expected={expected_len}, "
-            f"mode={'baseline' if getattr(self, 'baseline_mode', False) else 'cinematic'})"
+            f'Framing indices updated start={self.framing_start_idx} end={self.framing_end_idx} '
+            f'(len={self.framing_end_idx - self.framing_start_idx}, expected={expected_len}, '
+            f'mode={"baseline" if getattr(self, "baseline_mode", False) else "cinematic"})'
         )
 
     def _is_framing_idx(self, idx):

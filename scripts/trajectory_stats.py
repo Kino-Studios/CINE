@@ -8,9 +8,9 @@ import csv
 import math
 import sys
 from collections import OrderedDict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 import pandas as pd
 
@@ -47,14 +47,14 @@ def collect_statistics(files: Iterable[Path]) -> OrderedDict[str, ColumnSummary]
     for col in full_df.columns:
         # Convert column to numeric, coercing errors to NaN
         # This mimics the try-except ValueError block in the original code
-        numeric_series = pd.to_numeric(full_df[col], errors="coerce")
+        numeric_series = pd.to_numeric(full_df[col], errors='coerce')
 
         # Drop NaNs (originally: if raw is None/empty or ValueError)
         numeric_series = numeric_series.dropna()
 
         count = len(numeric_series)
         if count == 0:
-            nan = float("nan")
+            nan = float('nan')
             stats[col] = ColumnSummary(count=0, mean=nan, std=nan, min=nan, max=nan, median=nan)
         else:
             # Calculate statistics
@@ -79,16 +79,16 @@ def collect_statistics(files: Iterable[Path]) -> OrderedDict[str, ColumnSummary]
 
 def format_float(value: float) -> str:
     if math.isnan(value):
-        return "nan"
+        return 'nan'
 
-    return f"{value:.6e}"
+    return f'{value:.6e}'
 
 
-def emit_csv(output_path: Path, summary: "OrderedDict[str, ColumnSummary]") -> None:
+def emit_csv(output_path: Path, summary: OrderedDict[str, ColumnSummary]) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="") as handle:
+    with output_path.open('w', newline='') as handle:
         writer = csv.writer(handle)
-        writer.writerow(["column", "count", "mean", "std", "min", "max", "median"])
+        writer.writerow(['column', 'count', 'mean', 'std', 'min', 'max', 'median'])
         for column, stats in summary.items():
             writer.writerow(
                 [
@@ -104,34 +104,34 @@ def emit_csv(output_path: Path, summary: "OrderedDict[str, ColumnSummary]") -> N
 
 
 def summarize_dataset(dataset_path: Path) -> OrderedDict[str, ColumnSummary]:
-    csv_files = sorted(dataset_path.glob("*.csv"))
+    csv_files = sorted(dataset_path.glob('*.csv'))
     if not csv_files:
-        raise FileNotFoundError(f"No CSV files found inside {dataset_path}")
+        raise FileNotFoundError(f'No CSV files found inside {dataset_path}')
 
     return collect_statistics(csv_files)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description=("Compute dataset-level statistics for each trajectory CSV directory.")
+        description=('Compute dataset-level statistics for each trajectory CSV directory.')
     )
     parser.add_argument(
-        "--trajectory-root",
+        '--trajectory-root',
         type=Path,
-        default=Path("trajectory_data"),
-        help="Root folder containing the dataset directories.",
+        default=Path('trajectory_data'),
+        help='Root folder containing the dataset directories.',
     )
     parser.add_argument(
-        "--datasets",
-        nargs="+",
-        default=["baseline", "cinematic"],
-        help="Subdirectories under the root to summarize.",
+        '--datasets',
+        nargs='+',
+        default=['baseline', 'cinematic'],
+        help='Subdirectories under the root to summarize.',
     )
     parser.add_argument(
-        "--output-dir",
+        '--output-dir',
         type=Path,
         default=None,
-        help=("Where to write the summary CSVs (default: trajectory root)."),
+        help=('Where to write the summary CSVs (default: trajectory root).'),
     )
     args = parser.parse_args()
 
@@ -141,21 +141,21 @@ def main() -> int:
     for dataset in args.datasets:
         dataset_path = root / dataset
         if not dataset_path.is_dir():
-            print(f"Skipping {dataset}: {dataset_path} is not a directory", file=sys.stderr)
+            print(f'Skipping {dataset}: {dataset_path} is not a directory', file=sys.stderr)
             status = 1
             continue
         try:
             summary = summarize_dataset(dataset_path)
         except FileNotFoundError as error:
-            print(f"{error}", file=sys.stderr)
+            print(f'{error}', file=sys.stderr)
             status = 1
             continue
-        output_path = output_dir / f"{dataset}_stats.csv"
+        output_path = output_dir / f'{dataset}_stats.csv'
         emit_csv(output_path, summary)
-        print(f"Wrote summary for {dataset} to {output_path}")
+        print(f'Wrote summary for {dataset} to {output_path}')
 
     return status
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())

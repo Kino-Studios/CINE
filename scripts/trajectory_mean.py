@@ -5,24 +5,24 @@ import csv
 import math
 import sys
 from collections import OrderedDict, defaultdict
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence, Tuple
 
 import numpy as np
 
 
 def read_run(
     csv_path: Path, columns_order: OrderedDict[str, None]
-) -> Tuple[dict[str, tuple[list[float], list[float]]], float, float] | None:
+) -> tuple[dict[str, tuple[list[float], list[float]]], float, float] | None:
     column_points: dict[str, list[tuple[float, float]]] = defaultdict(list)
     min_time = math.inf
     max_time = -math.inf
-    with csv_path.open(newline="") as handle:
+    with csv_path.open(newline='') as handle:
         reader = csv.DictReader(handle)
-        if reader.fieldnames is None or "time" not in reader.fieldnames:
+        if reader.fieldnames is None or 'time' not in reader.fieldnames:
             return None
         for row in reader:
-            raw_time = (row.get("time") or "").strip()
+            raw_time = (row.get('time') or '').strip()
             if not raw_time:
                 continue
             try:
@@ -32,7 +32,7 @@ def read_run(
             min_time = min(min_time, time_value)
             max_time = max(max_time, time_value)
             for column, raw_value in row.items():
-                if column == "time" or raw_value is None:
+                if column == 'time' or raw_value is None:
                     continue
                 value_str = raw_value.strip()
                 if not value_str:
@@ -57,7 +57,7 @@ def read_run(
 
 def load_runs(
     csv_paths: Sequence[Path],
-) -> Tuple[list[dict[str, tuple[list[float], list[float]]]], OrderedDict[str, None], float, float]:
+) -> tuple[list[dict[str, tuple[list[float], list[float]]]], OrderedDict[str, None], float, float]:
     runs: list[dict[str, tuple[list[float], list[float]]]] = []
     columns_order: OrderedDict[str, None] = OrderedDict()
     min_time = math.inf
@@ -135,15 +135,15 @@ def aggregate_runs(
 
 def compute_mean(
     csv_files: Sequence[Path], time_step: float
-) -> Tuple[list[float], OrderedDict[str, None], dict[str, np.ndarray]]:
+) -> tuple[list[float], OrderedDict[str, None], dict[str, np.ndarray]]:
     if not csv_files:
-        raise FileNotFoundError("No CSV files provided for averaging.")
+        raise FileNotFoundError('No CSV files provided for averaging.')
     runs, columns_order, min_time, max_time = load_runs(csv_files)
     if not runs or not columns_order:
-        raise FileNotFoundError("No numeric data found in provided CSVs.")
+        raise FileNotFoundError('No numeric data found in provided CSVs.')
     grid = build_time_grid(min_time, max_time, time_step)
     if not grid:
-        raise FileNotFoundError("Unable to construct a time grid from the provided data.")
+        raise FileNotFoundError('Unable to construct a time grid from the provided data.')
     column_stats = aggregate_runs(runs, grid, columns_order)
 
     return grid, columns_order, column_stats
@@ -157,34 +157,34 @@ def write_mean_std_csv(
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     columns = [
-        "time",
-        *(f"{col}_mean" for col in columns_order),
-        *(f"{col}_std" for col in columns_order),
+        'time',
+        *(f'{col}_mean' for col in columns_order),
+        *(f'{col}_std' for col in columns_order),
     ]
-    with output_path.open("w", newline="") as handle:
+    with output_path.open('w', newline='') as handle:
         writer = csv.writer(handle)
         writer.writerow(columns)
         for idx, time_value in enumerate(grid):
-            row = [f"{time_value:.9f}"]
+            row = [f'{time_value:.9f}']
             mean_cells = []
             std_cells = []
             for column in columns_order:
                 stats = column_stats.get(column)
                 if stats is None or idx >= len(stats):
-                    mean_cells.append("")
-                    std_cells.append("")
+                    mean_cells.append('')
+                    std_cells.append('')
                     continue
                 sum_value, sum_sq, count = stats[idx]
                 if count == 0:
-                    mean_cells.append("")
-                    std_cells.append("")
+                    mean_cells.append('')
+                    std_cells.append('')
                     continue
                 mean = sum_value / count
                 variance = sum_sq / count - mean * mean
                 if variance < 0.0:
                     variance = 0.0
-                mean_cells.append(f"{mean:.9e}")
-                std_cells.append(f"{math.sqrt(variance):.9e}")
+                mean_cells.append(f'{mean:.9e}')
+                std_cells.append(f'{math.sqrt(variance):.9e}')
             row.extend(mean_cells)
             row.extend(std_cells)
             writer.writerow(row)
@@ -207,42 +207,42 @@ def discover_csvs(root: Path, dataset: str) -> list[Path]:
     if not dataset_path.is_dir():
         return []
 
-    return sorted(dataset_path.glob("*.csv"))
+    return sorted(dataset_path.glob('*.csv'))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Resample trajectories onto a uniform time base and average the runs."
+        description='Resample trajectories onto a uniform time base and average the runs.'
     )
     parser.add_argument(
-        "--trajectory-root",
+        '--trajectory-root',
         type=Path,
-        default=Path("trajectory_data"),
-        help="Root directory containing the dataset folders.",
+        default=Path('trajectory_data'),
+        help='Root directory containing the dataset folders.',
     )
     parser.add_argument(
-        "--datasets",
-        nargs="+",
-        default=["baseline", "cinematic"],
-        help="Subdirectories under the root to process.",
+        '--datasets',
+        nargs='+',
+        default=['baseline', 'cinematic'],
+        help='Subdirectories under the root to process.',
     )
     parser.add_argument(
-        "--time-step",
+        '--time-step',
         type=float,
         default=0.005,
-        help="Resampling interval (seconds) for the uniform time grid.",
+        help='Resampling interval (seconds) for the uniform time grid.',
     )
     parser.add_argument(
-        "--output-dir",
+        '--output-dir',
         type=Path,
         default=None,
-        help="Directory where dataset mean files are written (defaults to the trajectory root).",
+        help='Directory where dataset mean files are written (defaults to the trajectory root).',
     )
     parser.add_argument(
-        "--combined-output",
+        '--combined-output',
         type=Path,
         default=None,
-        help="Optional path for a merged mean trajectory combining every run.",
+        help='Optional path for a merged mean trajectory combining every run.',
     )
     args = parser.parse_args()
 
@@ -253,40 +253,40 @@ def main() -> int:
     for dataset in args.datasets:
         csv_paths = discover_csvs(root, dataset)
         if not csv_paths:
-            print(f"Skipping {dataset}: no CSVs found in {root / dataset}")
+            print(f'Skipping {dataset}: no CSVs found in {root / dataset}')
             exit_status = 1
             continue
         combined_candidates.extend(csv_paths)
-        output_path = output_dir / f"{dataset}_mean_std_trajectory.csv"
+        output_path = output_dir / f'{dataset}_mean_std_trajectory.csv'
         try:
             written_path = process_dataset(dataset, csv_paths, output_path, args.time_step)
         except FileNotFoundError as exc:
-            print(f"Error for {dataset}: {exc}")
+            print(f'Error for {dataset}: {exc}')
             exit_status = 1
             continue
-        print(f"Wrote time-aligned mean+std trajectory for {dataset} to {written_path}")
+        print(f'Wrote time-aligned mean+std trajectory for {dataset} to {written_path}')
 
     if args.combined_output:
         if not combined_candidates:
-            print("No CSVs available to build combined mean trajectory", file=sys.stderr)
+            print('No CSVs available to build combined mean trajectory', file=sys.stderr)
             exit_status = 1
         else:
             combined_path = args.combined_output
             try:
                 process_dataset(
-                    "combined",
+                    'combined',
                     combined_candidates,
                     combined_path,
                     args.time_step,
                 )
             except FileNotFoundError as exc:
-                print(f"Error building combined trajectory: {exc}", file=sys.stderr)
+                print(f'Error building combined trajectory: {exc}', file=sys.stderr)
                 exit_status = 1
             else:
-                print(f"Wrote combined time-aligned mean+std trajectory to {combined_path}")
+                print(f'Wrote combined time-aligned mean+std trajectory to {combined_path}')
 
     return exit_status
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())

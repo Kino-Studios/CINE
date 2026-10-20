@@ -8,21 +8,21 @@ from rclpy.node import Node
 
 class SimulatedLightPublisher(Node):
     def __init__(self):
-        super().__init__("simulated_light_publisher")
+        super().__init__('simulated_light_publisher')
 
-        self.frame_id = str(self.declare_parameter("frame_id", "world").value)
-        self.publish_rate_hz = float(self.declare_parameter("publish_rate_hz", 10.0).value)
+        self.frame_id = str(self.declare_parameter('frame_id', 'world').value)
+        self.publish_rate_hz = float(self.declare_parameter('publish_rate_hz', 10.0).value)
         self.light_vector_xyz = tuple(
-            float(v) for v in self.declare_parameter("light_vector_xyz", [5.5, 1.7, 1.8]).value
+            float(v) for v in self.declare_parameter('light_vector_xyz', [5.5, 1.7, 1.8]).value
         )
-        self.light_distance_m = float(self.declare_parameter("light_distance_m", 4.8).value)
-        self.topic = str(self.declare_parameter("topic", "/cinematography/light_vector").value)
+        self.light_distance_m = float(self.declare_parameter('light_distance_m', 4.8).value)
+        self.topic = str(self.declare_parameter('topic', '/cinematography/light_vector').value)
         self.light_point_topic = str(
-            self.declare_parameter("light_point_topic", "/cinematography/light_point").value
+            self.declare_parameter('light_point_topic', '/cinematography/light_point').value
         )
-        self.use_start_position = bool(self.declare_parameter("use_start_position", True).value)
+        self.use_start_position = bool(self.declare_parameter('use_start_position', True).value)
         self.odom_topic = str(
-            self.declare_parameter("odom_topic", "/drone_0_visual_slam/odom").value
+            self.declare_parameter('odom_topic', '/drone_0_visual_slam/odom').value
         )
 
         self.start_position = None

@@ -1,0 +1,20 @@
+# ROS 2 C++ style, for first-party C++ only (today: cine_config). Never run it on
+# third_party/, which keeps its upstream formatting.
+BasedOnStyle: Google
+ColumnLimit: 100
+AccessModifierOffset: -2
+AlignAfterOpenBracket: AlwaysBreak
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterEnum: true
+BreakConstructorInitializers: BeforeComma
+ConstructorInitializerIndentWidth: 0
+ContinuationIndentWidth: 2
+DerivePointerAlignment: false
+PointerAlignment: Middle
+ReflowComments: false
+IncludeBlocks: Preserve

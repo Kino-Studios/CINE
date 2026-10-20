@@ -31,7 +31,7 @@ class WaypointSequencerMixin:
             sz = self.waypoint_z_scale
             waypoints = [(wp[0] * sx, wp[1] * sy, wp[2] * sz) for wp in waypoints]
             self.get_logger().debug(
-                f"Scaling static path (count={len(self.static_waypoints)}): xy_scale={sx:.2f} y_extra={self.waypoint_y_extra_scale:.2f} z_scale={sz:.2f}"
+                f'Scaling static path (count={len(self.static_waypoints)}): xy_scale={sx:.2f} y_extra={self.waypoint_y_extra_scale:.2f} z_scale={sz:.2f}'
             )
 
         return waypoints
@@ -46,11 +46,11 @@ class WaypointSequencerMixin:
                     or self.target_world is not None
                     or self.last_target_world is not None
                 ):
-                    self.get_logger().info("Generating dynamic waypoints for active path")
+                    self.get_logger().info('Generating dynamic waypoints for active path')
                     self.generate_cinematographic_waypoints()
                 if self.dynamic_waypoints is None:
                     self.get_logger().warn(
-                        "Dynamic waypoints unavailable; falling back to static path"
+                        'Dynamic waypoints unavailable; falling back to static path'
                     )
                     self.use_dynamic_waypoints = False
                     if self.detected_object is not None or self.target_world is not None:
@@ -90,7 +90,7 @@ class WaypointSequencerMixin:
 
         self.active_waypoints = self._limit_consecutive_waypoint_jumps(waypoints_to_send)
 
-        self.viz_data["static_world"] = [self._rel_to_world(wp) for wp in self.active_waypoints]
+        self.viz_data['static_world'] = [self._rel_to_world(wp) for wp in self.active_waypoints]
 
         self.current_target_index = 0
         self.last_published_index = -1
@@ -131,19 +131,19 @@ class WaypointSequencerMixin:
                     len(self.active_waypoints) if self.active_waypoints is not None else 0
                 )
                 if self.framing_start_idx is not None and self.framing_end_idx is not None:
-                    range_desc = f"{self.framing_start_idx}-{self.framing_end_idx}"
+                    range_desc = f'{self.framing_start_idx}-{self.framing_end_idx}'
                 else:
-                    range_desc = "unset"
-                overshoot_note = ""
+                    range_desc = 'unset'
+                overshoot_note = ''
                 if (
                     self.framing_start_idx is not None
                     and self.current_target_index > self.framing_start_idx
                 ):
-                    overshoot_note = " [warn: skip may have jumped past framing start]"
+                    overshoot_note = ' [warn: skip may have jumped past framing start]'
                 self.get_logger().warn(
-                    f"Skipped {skipped} near waypoints at init; now at {self.current_target_index} "
-                    f"(min_start_threshold={min_start_threshold:.2f}, framing range={range_desc}, total_waypoints={total_waypoints})"
-                    f"{overshoot_note}"
+                    f'Skipped {skipped} near waypoints at init; now at {self.current_target_index} '
+                    f'(min_start_threshold={min_start_threshold:.2f}, framing range={range_desc}, total_waypoints={total_waypoints})'
+                    f'{overshoot_note}'
                 )
         self._reset_and_prefill_queue()
 
@@ -319,19 +319,19 @@ class WaypointSequencerMixin:
         active = bool(active)
         if self.framing_active == active:
             return
-        prev_idx = getattr(self, "current_target_index", 0) or 0
+        prev_idx = getattr(self, 'current_target_index', 0) or 0
         total_waypoints = len(self.active_waypoints) if self.active_waypoints is not None else 0
         if self.framing_start_idx is not None and self.framing_end_idx is not None:
-            range_desc = f"{self.framing_start_idx}-{self.framing_end_idx}"
+            range_desc = f'{self.framing_start_idx}-{self.framing_end_idx}'
         else:
-            range_desc = "unset"
+            range_desc = 'unset'
         if active:
             self.get_logger().info(
-                f"FRAMING STARTED at waypoint {prev_idx} (range: {range_desc}, total_waypoints: {total_waypoints})"
+                f'FRAMING STARTED at waypoint {prev_idx} (range: {range_desc}, total_waypoints: {total_waypoints})'
             )
         else:
             self.get_logger().info(
-                f"FRAMING ENDED at waypoint {prev_idx} (range was: {range_desc}, total_waypoints: {total_waypoints})"
+                f'FRAMING ENDED at waypoint {prev_idx} (range was: {range_desc}, total_waypoints: {total_waypoints})'
             )
         msg = Bool()
         msg.data = active
@@ -342,7 +342,7 @@ class WaypointSequencerMixin:
         active = bool(active)
         if self.baseline_framing_active == active:
             return
-        self.get_logger().info(f"Baseline framing active state changed to {active}")
+        self.get_logger().info(f'Baseline framing active state changed to {active}')
         msg = Bool()
         msg.data = active
         self.baseline_framing_pub.publish(msg)
@@ -443,7 +443,7 @@ class WaypointSequencerMixin:
         dist = (dx * dx + dy * dy + dz * dz) ** 0.5
         threshold = self._current_distance_threshold()
         self.get_logger().debug(
-            f"Waypoint {self.current_target_index} dist={dist:.3f} threshold={threshold:.3f}"
+            f'Waypoint {self.current_target_index} dist={dist:.3f} threshold={threshold:.3f}'
         )
 
         now = self.get_clock().now()
@@ -461,7 +461,7 @@ class WaypointSequencerMixin:
                     self.waypoint_radius_m * 0.5
                 ):
                     self.get_logger().warn(
-                        f"No progress toward waypoint {self.current_target_index} for {elapsed_stuck:.1f}s; skipping it"
+                        f'No progress toward waypoint {self.current_target_index} for {elapsed_stuck:.1f}s; skipping it'
                     )
                     self.current_target_index += 1
                     self.last_progress_time = None
@@ -474,10 +474,10 @@ class WaypointSequencerMixin:
         if dist <= threshold:
             total_waypoints = len(self.active_waypoints) if self.active_waypoints is not None else 0
             max_idx = max(total_waypoints - 1, 0)
-            idx_label = f"{self.current_target_index}/{max_idx}"
-            framing_tag = " [FRAMING]" if framing_active else ""
+            idx_label = f'{self.current_target_index}/{max_idx}'
+            framing_tag = ' [FRAMING]' if framing_active else ''
             self.get_logger().info(
-                f"Waypoint {idx_label} reached{framing_tag}: dist={dist:.3f} <= threshold={threshold:.3f}"
+                f'Waypoint {idx_label} reached{framing_tag}: dist={dist:.3f} <= threshold={threshold:.3f}'
             )
             self.current_target_index += 1
             self.last_progress_time = None

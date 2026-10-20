@@ -20,13 +20,13 @@ class DetectionMixin:
         try:
             self.cost_calculator.update_light_vector(msg)
         except AttributeError as error:
-            self.get_logger().debug(f"light vector update skipped: {error}")
+            self.get_logger().debug(f'light vector update skipped: {error}')
 
     def focus_depth_callback(self, msg: Float32):
         try:
-            self.focus_depth_m = float(getattr(msg, "data", None))
+            self.focus_depth_m = float(getattr(msg, 'data', None))
         except (TypeError, ValueError) as error:
-            self.get_logger().warn(f"focus_depth_m nulled; bad Float32 data field: {error}")
+            self.get_logger().warn(f'focus_depth_m nulled; bad Float32 data field: {error}')
             self.focus_depth_m = None
 
     def _is_published_target(self, stamp):
@@ -60,7 +60,7 @@ class DetectionMixin:
             self.target_world = (float(p.x), float(p.y), float(p.z))
             self.last_target_world = self.target_world
         except (AttributeError, TypeError, ValueError) as error:
-            self.get_logger().warn(f"target world parse failed: {error}")
+            self.get_logger().warn(f'target world parse failed: {error}')
             self.target_world = None
             self.last_target_world = None
 
@@ -69,7 +69,7 @@ class DetectionMixin:
         try:
             self._set_anchors(target_world=self.target_world, obj_depth=self.focus_depth_m)
         except (AttributeError, TypeError, ValueError, IndexError) as error:
-            self.get_logger().warn(f"anchor update failed; nulling target world: {error}")
+            self.get_logger().warn(f'anchor update failed; nulling target world: {error}')
             self.target_world = None
             self.last_target_world = None
 
@@ -96,11 +96,11 @@ class DetectionMixin:
                 norm_y = data[8]
 
             return {
-                "center_x": center_x,
-                "center_y": center_y,
-                "depth": depth_m,
-                "norm_x": norm_x,
-                "norm_y": norm_y,
+                'center_x': center_x,
+                'center_y': center_y,
+                'depth': depth_m,
+                'norm_x': norm_x,
+                'norm_y': norm_y,
             }
 
         if len(data) >= 3:
@@ -111,11 +111,11 @@ class DetectionMixin:
                 return None
 
             return {
-                "center_x": x_center,
-                "center_y": y_center,
-                "depth": depth_m,
-                "norm_x": x_center if 0.0 <= x_center <= 1.0 else None,
-                "norm_y": y_center if 0.0 <= y_center <= 1.0 else None,
+                'center_x': x_center,
+                'center_y': y_center,
+                'depth': depth_m,
+                'norm_x': x_center if 0.0 <= x_center <= 1.0 else None,
+                'norm_y': y_center if 0.0 <= y_center <= 1.0 else None,
             }
 
         return None
@@ -123,11 +123,11 @@ class DetectionMixin:
     def _compute_object_world(self, detection):
         if detection is None:
             return None
-        obj_depth = float(detection["depth"])
-        center_x = float(detection["center_x"])
-        center_y = float(detection["center_y"])
-        norm_x = detection.get("norm_x", None)
-        norm_y = detection.get("norm_y", None)
+        obj_depth = float(detection['depth'])
+        center_x = float(detection['center_x'])
+        center_y = float(detection['center_y'])
+        norm_x = detection.get('norm_x', None)
+        norm_y = detection.get('norm_y', None)
 
         if norm_x is not None and norm_y is not None:
             u = float(norm_x) * float(self.image_width)
@@ -174,7 +174,7 @@ class DetectionMixin:
         self.simulated_detection_active = False
         self.use_dynamic_waypoints = True
         self.pending_detection_merge = True
-        obj_depth = float(parsed.get("depth", 0.0))
+        obj_depth = float(parsed.get('depth', 0.0))
         computed = self._compute_object_world(parsed)
         if computed is not None:
             target_world_pos, computed_depth = computed
@@ -199,7 +199,7 @@ class DetectionMixin:
             self.pending_detection_merge = not success
             if not success:
                 self.get_logger().warn(
-                    "Dynamic waypoints requested but unavailable; inserting anchor splicing"
+                    'Dynamic waypoints requested but unavailable; inserting anchor splicing'
                 )
         else:
             self.use_dynamic_waypoints = False

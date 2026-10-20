@@ -1,5 +1,4 @@
 import math
-from typing import Optional
 
 import rclpy
 from cv_bridge import CvBridge
@@ -17,7 +16,7 @@ from .trajectory_planner import (
 
 class OrbitWaypointGenerator(Node):
     def __init__(self):
-        super().__init__("orbit_waypoint_generator")
+        super().__init__('orbit_waypoint_generator')
         self.bridge = CvBridge()
         self.camera_info = None
         self.current_pose = None
@@ -29,14 +28,14 @@ class OrbitWaypointGenerator(Node):
         self.focus_depth_m: float | None = None
 
         self.camera_info_sub = self.create_subscription(
-            CameraInfo, "/camera/camera_info", self.camera_info_callback, 10
+            CameraInfo, '/camera/camera_info', self.camera_info_callback, 10
         )
-        self.pose_sub = self.create_subscription(PoseStamped, "/vio/pose", self.pose_callback, 10)
+        self.pose_sub = self.create_subscription(PoseStamped, '/vio/pose', self.pose_callback, 10)
         self.target_world_sub = self.create_subscription(
-            PointStamped, "/cinematography/target_world", self.target_world_callback, 10
+            PointStamped, '/cinematography/target_world', self.target_world_callback, 10
         )
         self.focus_depth_sub = self.create_subscription(
-            Float32, "/cinematography/focus_depth_m", self.focus_depth_callback, 10
+            Float32, '/cinematography/focus_depth_m', self.focus_depth_callback, 10
         )
 
         try:
@@ -44,23 +43,23 @@ class OrbitWaypointGenerator(Node):
 
             self._PositionTarget = PositionTarget
             self.setpoint_pub = self.create_publisher(
-                PositionTarget, "/mavros/setpoint_raw/local", 10
+                PositionTarget, '/mavros/setpoint_raw/local', 10
             )
         except ImportError:
-            self.get_logger().warn("mavros_msgs unavailable; setpoint publishing disabled")
+            self.get_logger().warn('mavros_msgs unavailable; setpoint publishing disabled')
             self._PositionTarget = None
             self.setpoint_pub = None
 
-        self.declare_parameter("center_x", 0.0)
-        self.declare_parameter("center_y", 0.0)
-        self.declare_parameter("radius", 2.0)
-        self.declare_parameter("angular_velocity", 0.1)
-        self.declare_parameter("duration", 60.0)
-        self.declare_parameter("waypoint_rate", 10.0)
-        self.declare_parameter("optimize_cost", True)
-        self.declare_parameter("altitude", 1.5)
-        self.declare_parameter("desired_focus_distance_m", 1.5)
-        self.declare_parameter("min_focus_distance_m", 1.0)
+        self.declare_parameter('center_x', 0.0)
+        self.declare_parameter('center_y', 0.0)
+        self.declare_parameter('radius', 2.0)
+        self.declare_parameter('angular_velocity', 0.1)
+        self.declare_parameter('duration', 60.0)
+        self.declare_parameter('waypoint_rate', 10.0)
+        self.declare_parameter('optimize_cost', True)
+        self.declare_parameter('altitude', 1.5)
+        self.declare_parameter('desired_focus_distance_m', 1.5)
+        self.declare_parameter('min_focus_distance_m', 1.0)
 
         self.timer = self.create_timer(0.1, self.publish_waypoint)
 
@@ -82,17 +81,17 @@ class OrbitWaypointGenerator(Node):
             p = msg.point
             self.target_world = (float(p.x), float(p.y), float(p.z))
         except (AttributeError, TypeError, ValueError) as error:
-            self.get_logger().warn(f"target_world nulled; bad PointStamped point field: {error}")
+            self.get_logger().warn(f'target_world nulled; bad PointStamped point field: {error}')
             self.target_world = None
 
     def focus_depth_callback(self, msg: Float32):
         try:
-            self.focus_depth_m = float(getattr(msg, "data", None))
+            self.focus_depth_m = float(getattr(msg, 'data', None))
         except (TypeError, ValueError) as error:
-            self.get_logger().warn(f"focus_depth_m nulled; bad Float32 data field: {error}")
+            self.get_logger().warn(f'focus_depth_m nulled; bad Float32 data field: {error}')
             self.focus_depth_m = None
 
-    def evaluate_cost_at_position(self, x: float, y: float, z: float) -> Optional[float]:
+    def evaluate_cost_at_position(self, x: float, y: float, z: float) -> float | None:
         if self.current_pose is None or self.target_world is None:
             return None
 
@@ -104,22 +103,22 @@ class OrbitWaypointGenerator(Node):
         if not math.isfinite(dist):
             return None
 
-        d_star = float(self.get_parameter("desired_focus_distance_m").value)
-        d_min = float(self.get_parameter("min_focus_distance_m").value)
+        d_star = float(self.get_parameter('desired_focus_distance_m').value)
+        d_min = float(self.get_parameter('min_focus_distance_m').value)
         j_dist = (dist - d_star) ** 2
         j_near = (d_min - dist) ** 2 if dist < d_min else 0.0
 
         return float(j_dist + 10.0 * j_near)
 
     def generate_waypoints(self):
-        center_x = float(self.get_parameter("center_x").value)
-        center_y = float(self.get_parameter("center_y").value)
-        radius = float(self.get_parameter("radius").value)
-        angular_velocity = float(self.get_parameter("angular_velocity").value)
-        duration = float(self.get_parameter("duration").value)
-        waypoint_rate = float(self.get_parameter("waypoint_rate").value)
-        optimize = bool(self.get_parameter("optimize_cost").value)
-        altitude = float(self.get_parameter("altitude").value)
+        center_x = float(self.get_parameter('center_x').value)
+        center_y = float(self.get_parameter('center_y').value)
+        radius = float(self.get_parameter('radius').value)
+        angular_velocity = float(self.get_parameter('angular_velocity').value)
+        duration = float(self.get_parameter('duration').value)
+        waypoint_rate = float(self.get_parameter('waypoint_rate').value)
+        optimize = bool(self.get_parameter('optimize_cost').value)
+        altitude = float(self.get_parameter('altitude').value)
 
         center = (center_x, center_y)
         if self.target_world is not None:
@@ -160,7 +159,7 @@ class OrbitWaypointGenerator(Node):
         msg = self._PositionTarget()
         msg.header = Header()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "map"
+        msg.header.frame_id = 'map'
         msg.coordinate_frame = self._PositionTarget.FRAME_LOCAL_NED
         msg.type_mask = (
             self._PositionTarget.IGNORE_VX
@@ -174,8 +173,8 @@ class OrbitWaypointGenerator(Node):
         msg.position.x = float(x)
         msg.position.y = float(y)
         msg.position.z = float(z)
-        cy = float(self.get_parameter("center_y").value)
-        cx = float(self.get_parameter("center_x").value)
+        cy = float(self.get_parameter('center_y').value)
+        cx = float(self.get_parameter('center_x').value)
         if self.target_world is not None:
             cx = float(self.target_world[0])
             cy = float(self.target_world[1])

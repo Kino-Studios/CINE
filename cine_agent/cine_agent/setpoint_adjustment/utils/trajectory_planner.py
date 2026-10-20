@@ -1,17 +1,17 @@
 import math
-from typing import Callable, List, Optional, Tuple
+from collections.abc import Callable
 
 import numpy as np
 
 
 def generate_orbit_waypoints_xy(
-    center_xy_m: Tuple[float, float],
+    center_xy_m: tuple[float, float],
     radius_m: float,
     angular_velocity_rps: float,
     duration_s: float,
     waypoint_rate_hz: float,
     altitude_m: float,
-) -> List[Tuple[float, float, float, float]]:
+) -> list[tuple[float, float, float, float]]:
     cx, cy = center_xy_m
     num_points = max(1, int(duration_s * waypoint_rate_hz))
     dt = 1.0 / waypoint_rate_hz
@@ -28,16 +28,16 @@ def generate_orbit_waypoints_xy(
 
 
 def generate_cost_optimized_orbit_waypoints(
-    center_xy_m: Tuple[float, float],
+    center_xy_m: tuple[float, float],
     initial_radius_m: float,
     angular_velocity_rps: float,
     duration_s: float,
     waypoint_rate_hz: float,
     altitude_m: float,
-    cost_function: Callable[[float, float, float], Optional[float]],
+    cost_function: Callable[[float, float, float], float | None],
     num_radius_samples: int = 5,
-    radius_range: Tuple[float, float] = (0.8, 2.0),
-) -> List[Tuple[float, float, float, float]]:
+    radius_range: tuple[float, float] = (0.8, 2.0),
+) -> list[tuple[float, float, float, float]]:
 
     cx, cy = center_xy_m
     num_points = max(1, int(duration_s * waypoint_rate_hz))
@@ -55,7 +55,7 @@ def generate_cost_optimized_orbit_waypoints(
         )
 
         best_radius = current_radius
-        best_cost = float("inf")
+        best_cost = float('inf')
 
         for test_radius in radius_candidates:
             test_x = cx + test_radius * math.cos(theta)
@@ -77,16 +77,16 @@ def generate_cost_optimized_orbit_waypoints(
 
 
 def optimize_orbit_center_and_radius(
-    initial_center_xy: Tuple[float, float],
+    initial_center_xy: tuple[float, float],
     initial_radius: float,
     altitude_m: float,
-    cost_function: Callable[[float, float, float], Optional[float]],
+    cost_function: Callable[[float, float, float], float | None],
     search_radius: float = 0.5,
     num_samples: int = 9,
-) -> Tuple[Tuple[float, float], float]:
+) -> tuple[tuple[float, float], float]:
     best_center = initial_center_xy
     best_radius = initial_radius
-    best_cost = float("inf")
+    best_cost = float('inf')
 
     cx, cy = initial_center_xy
     x_samples = np.linspace(cx - search_radius, cx + search_radius, int(np.sqrt(num_samples)))
@@ -115,7 +115,7 @@ def pixel_to_camera_xy(
     fy: float,
     cx: float,
     cy: float,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     x = (u - cx) * depth_m / fx
     y = (v - cy) * depth_m / fy
 

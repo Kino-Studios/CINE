@@ -1,6 +1,5 @@
 import time
 from collections import deque
-from typing import Optional, Tuple
 
 import numpy as np
 
@@ -9,17 +8,17 @@ class StateTracker:
     def __init__(self, look_duration_s: float = 10.0, depth_window_size: int = 15):
         self.look_duration_s = float(look_duration_s)
         self.depth_window_size = int(depth_window_size)
-        self.current_target_id: Optional[int] = None
+        self.current_target_id: int | None = None
         self.last_target_switch_time_s = time.time()
         self.recent_depth_samples = deque(maxlen=self.depth_window_size)
-        self.last_center_uv: Optional[Tuple[float, float]] = None
+        self.last_center_uv: tuple[float, float] | None = None
 
     def should_switch_target(self) -> bool:
         now_s = time.time()
 
         return (now_s - self.last_target_switch_time_s) >= self.look_duration_s
 
-    def set_target_observation(self, center_uv: Tuple[float, float]):
+    def set_target_observation(self, center_uv: tuple[float, float]):
         self.last_center_uv = center_uv
 
     def record_depth(self, depth_value_m: float):
@@ -27,7 +26,7 @@ class StateTracker:
             return
         self.recent_depth_samples.append(float(depth_value_m))
 
-    def get_smoothed_depth(self) -> Optional[float]:
+    def get_smoothed_depth(self) -> float | None:
         if len(self.recent_depth_samples) == 0:
             return None
 

@@ -38,27 +38,27 @@ def _quat_to_rot(q: np.ndarray) -> np.ndarray:
 
 class LightVectorAnalysisNode(Node):
     def __init__(self):
-        super().__init__("light_vector_analysis")
+        super().__init__('light_vector_analysis')
         self.params = CinematographyParams()
         self.bridge = CvBridge()
         self.has_odom = False
         self.drone_orientation = np.array([0.0, 0.0, 0.0, 1.0], dtype=float)
 
-        self.declare_parameter("image_topic", self.params.IMAGE_TOPIC)
-        self.declare_parameter("odom_topic", self.params.ODOM_TOPIC)
-        self.declare_parameter("light_vector_topic", self.params.LIGHT_VECTOR_TOPIC)
-        self.declare_parameter("camera_fx", self.params.CAMERA_FX)
-        self.declare_parameter("camera_fy", self.params.CAMERA_FY)
-        self.declare_parameter("camera_cx", self.params.CAMERA_CX)
-        self.declare_parameter("camera_cy", self.params.CAMERA_CY)
+        self.declare_parameter('image_topic', self.params.IMAGE_TOPIC)
+        self.declare_parameter('odom_topic', self.params.ODOM_TOPIC)
+        self.declare_parameter('light_vector_topic', self.params.LIGHT_VECTOR_TOPIC)
+        self.declare_parameter('camera_fx', self.params.CAMERA_FX)
+        self.declare_parameter('camera_fy', self.params.CAMERA_FY)
+        self.declare_parameter('camera_cx', self.params.CAMERA_CX)
+        self.declare_parameter('camera_cy', self.params.CAMERA_CY)
 
-        self.image_topic = str(self.get_parameter("image_topic").value)
-        self.odom_topic = str(self.get_parameter("odom_topic").value)
-        self.light_vector_topic = str(self.get_parameter("light_vector_topic").value)
-        self.params.CAMERA_FX = float(self.get_parameter("camera_fx").value)
-        self.params.CAMERA_FY = float(self.get_parameter("camera_fy").value)
-        self.params.CAMERA_CX = float(self.get_parameter("camera_cx").value)
-        self.params.CAMERA_CY = float(self.get_parameter("camera_cy").value)
+        self.image_topic = str(self.get_parameter('image_topic').value)
+        self.odom_topic = str(self.get_parameter('odom_topic').value)
+        self.light_vector_topic = str(self.get_parameter('light_vector_topic').value)
+        self.params.CAMERA_FX = float(self.get_parameter('camera_fx').value)
+        self.params.CAMERA_FY = float(self.get_parameter('camera_fy').value)
+        self.params.CAMERA_CX = float(self.get_parameter('camera_cx').value)
+        self.params.CAMERA_CY = float(self.get_parameter('camera_cy').value)
 
         self._image_sub = self.create_subscription(Image, self.image_topic, self.image_callback, 20)
         self._odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, 10)
@@ -84,14 +84,14 @@ class LightVectorAnalysisNode(Node):
         try:
             import cv2
         except ImportError:
-            self.get_logger().warn("cv2 unavailable; skipping light vector analysis")
+            self.get_logger().warn('cv2 unavailable; skipping light vector analysis')
 
             return
 
         try:
-            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         except CvBridgeError as error:
-            self.get_logger().warn(f"cv_bridge conversion failed: {error}")
+            self.get_logger().warn(f'cv_bridge conversion failed: {error}')
 
             return
 
@@ -122,7 +122,7 @@ class LightVectorAnalysisNode(Node):
 
         out = Vector3Stamped()
         out.header.stamp = self.get_clock().now().to_msg()
-        out.header.frame_id = "map"
+        out.header.frame_id = 'map'
         out.vector.x = float(world_vec[0])
         out.vector.y = float(world_vec[1])
         out.vector.z = float(world_vec[2])

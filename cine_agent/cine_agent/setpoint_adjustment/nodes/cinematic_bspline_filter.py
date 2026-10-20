@@ -6,7 +6,6 @@ import math
 
 import numpy as np
 import rclpy
-from cine_msgs.msg import CinematographyCosts
 from constants import (
     BsplineFilterParams,
     CinematicConstraints,
@@ -19,39 +18,41 @@ from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 from traj_utils.msg import Bspline
 
+from cine_msgs.msg import CinematographyCosts
+
 from .bspline_utils import arrays_to_msg, msg_to_arrays
 
 
 class CinematicBsplineFilter(Node):
     def __init__(self):
-        super().__init__("cinematic_bspline_filter")
+        super().__init__('cinematic_bspline_filter')
         self.params = CinematographyParams()
         self.constraints = CinematicConstraints()
         self.light_vector = None
         self.latest_costs = {}
         self.has_focus = False
 
-        self.declare_parameter("bspline_in_topic", self.params.BSPLINE_IN_TOPIC)
-        self.declare_parameter("bspline_out_topic", self.params.BSPLINE_OUT_TOPIC)
-        self.declare_parameter("cinematic_offset_m", self.params.CINEMATIC_OFFSET_M)
-        self.declare_parameter("cinematic_smooth_alpha", self.params.CINEMATIC_SMOOTH_ALPHA)
-        self.declare_parameter("min_altitude_m", self.params.MIN_ALTITUDE_M)
-        self.declare_parameter("focus_radius_m", BsplineFilterParams.FOCUS_RADIUS_M)
+        self.declare_parameter('bspline_in_topic', self.params.BSPLINE_IN_TOPIC)
+        self.declare_parameter('bspline_out_topic', self.params.BSPLINE_OUT_TOPIC)
+        self.declare_parameter('cinematic_offset_m', self.params.CINEMATIC_OFFSET_M)
+        self.declare_parameter('cinematic_smooth_alpha', self.params.CINEMATIC_SMOOTH_ALPHA)
+        self.declare_parameter('min_altitude_m', self.params.MIN_ALTITUDE_M)
+        self.declare_parameter('focus_radius_m', BsplineFilterParams.FOCUS_RADIUS_M)
         self.declare_parameter(
-            "focus_radius_tolerance_m", BsplineFilterParams.FOCUS_RADIUS_TOLERANCE_M
+            'focus_radius_tolerance_m', BsplineFilterParams.FOCUS_RADIUS_TOLERANCE_M
         )
-        self.declare_parameter("focus_altitude_m", BsplineFilterParams.FOCUS_ALTITUDE_M)
+        self.declare_parameter('focus_altitude_m', BsplineFilterParams.FOCUS_ALTITUDE_M)
 
-        self.params.BSPLINE_IN_TOPIC = str(self.get_parameter("bspline_in_topic").value)
-        self.params.BSPLINE_OUT_TOPIC = str(self.get_parameter("bspline_out_topic").value)
-        self.params.CINEMATIC_OFFSET_M = float(self.get_parameter("cinematic_offset_m").value)
+        self.params.BSPLINE_IN_TOPIC = str(self.get_parameter('bspline_in_topic').value)
+        self.params.BSPLINE_OUT_TOPIC = str(self.get_parameter('bspline_out_topic').value)
+        self.params.CINEMATIC_OFFSET_M = float(self.get_parameter('cinematic_offset_m').value)
         self.params.CINEMATIC_SMOOTH_ALPHA = float(
-            self.get_parameter("cinematic_smooth_alpha").value
+            self.get_parameter('cinematic_smooth_alpha').value
         )
-        self.params.MIN_ALTITUDE_M = float(self.get_parameter("min_altitude_m").value)
-        self.focus_radius_m = float(self.get_parameter("focus_radius_m").value)
-        self.focus_radius_tolerance_m = float(self.get_parameter("focus_radius_tolerance_m").value)
-        self.focus_altitude_m = float(self.get_parameter("focus_altitude_m").value)
+        self.params.MIN_ALTITUDE_M = float(self.get_parameter('min_altitude_m').value)
+        self.focus_radius_m = float(self.get_parameter('focus_radius_m').value)
+        self.focus_radius_tolerance_m = float(self.get_parameter('focus_radius_tolerance_m').value)
+        self.focus_altitude_m = float(self.get_parameter('focus_altitude_m').value)
 
         self.sub = self.create_subscription(
             Bspline,
@@ -69,14 +70,14 @@ class CinematicBsplineFilter(Node):
 
         self.cost_sub = self.create_subscription(
             CinematographyCosts,
-            "/cinematography/cinematography_costs",
+            '/cinematography/cinematography_costs',
             self.cost_callback,
             10,
         )
 
         self.detections_sub = self.create_subscription(
             Float32MultiArray,
-            "object_detections",
+            'object_detections',
             self.detections_callback,
             10,
         )
@@ -92,7 +93,7 @@ class CinematicBsplineFilter(Node):
 
         self.target_sub = self.create_subscription(
             PointStamped,
-            "/cinematography/target_world",
+            '/cinematography/target_world',
             self.target_world_callback,
             10,
         )
@@ -110,11 +111,11 @@ class CinematicBsplineFilter(Node):
 
     def cost_callback(self, msg: CinematographyCosts):
         self.latest_costs = {
-            "light_cost": float(msg.light_cost),
-            "framing_cost": float(msg.framing_cost),
-            "smoothness_cost": float(msg.smoothness_cost),
-            "distance_cost": float(msg.distance_cost),
-            "total_cost": float(msg.total_cost),
+            'light_cost': float(msg.light_cost),
+            'framing_cost': float(msg.framing_cost),
+            'smoothness_cost': float(msg.smoothness_cost),
+            'distance_cost': float(msg.distance_cost),
+            'total_cost': float(msg.total_cost),
         }
 
     def bbox_callback(self, msg: PolygonStamped):
@@ -133,7 +134,7 @@ class CinematicBsplineFilter(Node):
         self.has_focus = num_objects > 0
 
         if self.has_focus and num_objects > 0:
-            if not hasattr(self, "_detection_logged"):
+            if not hasattr(self, '_detection_logged'):
                 self._detection_logged = True
 
     def bspline_callback(self, msg: Bspline):
@@ -144,8 +145,8 @@ class CinematicBsplineFilter(Node):
     def adjust_bspline(self, msg: Bspline) -> Bspline:
         pos_pts, knots = msg_to_arrays(msg)
 
-        depth_cost = self.latest_costs.get("distance_cost", 0.0)
-        smooth_cost = self.latest_costs.get("smoothness_cost", 0.0)
+        depth_cost = self.latest_costs.get('distance_cost', 0.0)
+        smooth_cost = self.latest_costs.get('smoothness_cost', 0.0)
 
         depth_scale = np.tanh(depth_cost)
 
@@ -221,19 +222,17 @@ class CinematicBsplineFilter(Node):
         )
 
         self.get_logger().debug(
-            (
-                "CinematicBsplineFilter adjust: "
-                f"depth_cost={depth_cost:.3f} "
-                f"smooth_cost={smooth_cost:.3f} "
-                f"depth_scale={depth_scale:.3f} "
-                f"focus_ratio={focus_ratio:.3f} "
-                f"mask_count={focus_mask_count} "
-                f"use_focus_limits={use_focus_limits} "
-                f"max_vel={max_vel:.3f} "
-                f"max_acc={max_acc:.3f} "
-                f"z_pre=({z_pre_stats[0]:.3f},{z_pre_stats[1]:.3f},{z_pre_stats[2]:.3f}) "
-                f"z_post=({z_post_stats[0]:.3f},{z_post_stats[1]:.3f},{z_post_stats[2]:.3f})"
-            )
+            'CinematicBsplineFilter adjust: '
+            f'depth_cost={depth_cost:.3f} '
+            f'smooth_cost={smooth_cost:.3f} '
+            f'depth_scale={depth_scale:.3f} '
+            f'focus_ratio={focus_ratio:.3f} '
+            f'mask_count={focus_mask_count} '
+            f'use_focus_limits={use_focus_limits} '
+            f'max_vel={max_vel:.3f} '
+            f'max_acc={max_acc:.3f} '
+            f'z_pre=({z_pre_stats[0]:.3f},{z_pre_stats[1]:.3f},{z_pre_stats[2]:.3f}) '
+            f'z_post=({z_post_stats[0]:.3f},{z_post_stats[1]:.3f},{z_post_stats[2]:.3f})'
         )
 
         return arrays_to_msg(msg, pos_pts, knots=knots)

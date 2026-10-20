@@ -14,17 +14,17 @@ try:
     _CORRECTED_BSPLINE_TOPIC = MLPParams.CORRECTED_BSPLINE_TOPIC
     _CORRECTION_DELTA_TOPIC = MLPParams.CORRECTION_DELTA_TOPIC
 except ImportError:
-    _BSPLINE_IN_TOPIC = "/drone_0_planning/cinematic_bspline"
-    _CORRECTED_BSPLINE_TOPIC = "/mlp/corrected_bspline"
-    _CORRECTION_DELTA_TOPIC = "/mlp/correction_delta"
+    _BSPLINE_IN_TOPIC = '/drone_0_planning/cinematic_bspline'
+    _CORRECTED_BSPLINE_TOPIC = '/mlp/corrected_bspline'
+    _CORRECTION_DELTA_TOPIC = '/mlp/correction_delta'
 
 
 class MLPNode(Node):
     def __init__(self):
-        super().__init__("mlp_correction_node")
+        super().__init__('mlp_correction_node')
 
-        self.declare_parameter("mlp_weights_path", "")
-        self.mlp_weights_path = self.get_parameter("mlp_weights_path").value
+        self.declare_parameter('mlp_weights_path', '')
+        self.mlp_weights_path = self.get_parameter('mlp_weights_path').value
 
         self.loader = MLPLoader(self.mlp_weights_path)
 
@@ -57,7 +57,7 @@ class MLPNode(Node):
         mean_delta = np.mean(corrected_pts - pos_pts, axis=0)
         delta_msg = Vector3Stamped()
         delta_msg.header.stamp = self.get_clock().now().to_msg()
-        delta_msg.header.frame_id = "odom_world"
+        delta_msg.header.frame_id = 'odom_world'
         delta_msg.vector.x = float(mean_delta[0])
         delta_msg.vector.y = float(mean_delta[1])
         delta_msg.vector.z = float(mean_delta[2])

@@ -1,22 +1,20 @@
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 
 extend-exclude = [
-    "sensing_ws/src/VINS-Fusion-ROS2-humble-arm",
-    "sensing_ws/ceres-solver-2.1.0",
-    "sensing_ws/eigen-3.4.0",
+    "third_party",
     "venv",
     ".venv",
-    "sensing_ws/install",
-    "sensing_ws/build",
-    "sensing_ws/log",
 ]
 
+[format]
+quote-style = "single"
+
 [lint]
-select = ["E", "F", "W", "I"]
+select = ["E", "F", "W", "I", "B", "UP"]
 ignore = [
     "E501",   # line length handled by formatter
-    "E402",   # module-level import not at top: legitimate for sys.path / matplotlib.use() patterns
-    "F841",   # local variable assigned but never used: plot handles kept for API symmetry
-    "E741",   # ambiguous variable name: tolerate single-letter loop vars in viz scripts
+    "E402",   # test_cost_calculator stubs rclpy in sys.modules before importing the code under test
+    "F841",   # unused locals in the cost and path code; deleting them is a logic edit, left for review
+    "B905",   # zip(strict=True) would raise where the code now truncates; a behaviour change
 ]

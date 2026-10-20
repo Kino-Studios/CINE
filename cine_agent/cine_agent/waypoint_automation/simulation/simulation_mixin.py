@@ -25,7 +25,7 @@ class SimulationMixin:
         self.simulated_detection_active = True
         self.use_dynamic_waypoints = True
         self.pending_detection_merge = True
-        self._set_anchors(target_world=self.target_world, obj_depth=self.detected_object["depth"])
+        self._set_anchors(target_world=self.target_world, obj_depth=self.detected_object['depth'])
         if self.dynamic_waypoints is None or not self.use_dynamic_waypoints:
             self._rebuild_active_with_detection()
 
