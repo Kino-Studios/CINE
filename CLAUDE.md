@@ -22,10 +22,11 @@ not change between passes).
 ### Scope — first-party only
 
 The formatter excludes vendored upstream code via `_EXCLUDE_PARTS`. In particular
-`trajectory-optimization_ws/src/ego-planner-swarm/` (the upstream ego-planner tree, which
-bundles third-party libraries such as `odeint`) is NOT formatted, so it stays diffable
-against upstream. Format only first-party packages: `cinematographic_adjustment_agent`,
-`depth_publisher`, `configs`, `scripts`, and `mlp`.
+`third_party/` (the upstream ego-planner tree, which bundles third-party libraries such
+as `odeint`) is NOT formatted, so it stays diffable against upstream. Format only
+first-party code: `cine_agent`, `cine_bringup`, `cine_config`, `cine_depth`,
+`cine_mlp_correction`, and `tools`. `python3 tools/format.py --check` reports files that
+would change without writing them (exit 1 if any).
 
 The remaining convention rules are review-time judgment, not automated:
 
@@ -34,3 +35,8 @@ The remaining convention rules are review-time judgment, not automated:
   rename public API, ROS topics, params, dict keys, or `self.` attributes.
 
 Verify every touched file still compiles (`python3 -m py_compile <file>`) before finishing.
+
+Constants live as JSON in `cine_config/config/`; code reads them through
+`cine_config.constants` (Python) or `cine_config/constants.hpp` (C++), never by editing the
+import path. Bare `pytest` from the repository root runs the pure-Python tests. Changes
+under `third_party/ego_planner_swarm/` are recorded in its `UPSTREAM.md`.

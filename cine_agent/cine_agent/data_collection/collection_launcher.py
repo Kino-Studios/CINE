@@ -7,7 +7,6 @@ import os
 import shutil
 import signal
 import subprocess
-import sys
 import tempfile
 import time
 from collections.abc import Callable, Iterable
@@ -17,25 +16,8 @@ from threading import Event
 from typing import Any
 
 import rclpy
+from cine_config.constants import SimulationParams, WaypointParams
 from rclpy.node import Node
-
-
-def _add_config_path() -> None:
-    here = Path(__file__).resolve()
-    for parent in [here] + list(here.parents):
-        configs_dir = parent / 'configs'
-        if configs_dir.is_dir():
-            python_constants_path = configs_dir / 'python-constants'
-            if str(python_constants_path) not in sys.path:
-                sys.path.insert(0, str(python_constants_path))
-
-            return
-
-    raise RuntimeError('Unable to locate configs/python-constants for constants import.')
-
-
-_add_config_path()
-from constants import SimulationParams, WaypointParams  # noqa: E402
 
 _logger = logging.getLogger(__name__)
 
@@ -72,8 +54,8 @@ class CollectionParams:
 
 def _find_workspace_root(start: Path) -> Path:
     for parent in [start] + list(start.parents):
-        if (parent / 'start_simulation.sh').is_file():
-            return parent
+        if (parent / 'tools' / 'start_simulation.sh').is_file():
+            return parent / 'tools'
 
     raise RuntimeError('Unable to locate tools/ (start_simulation.sh missing).')
 

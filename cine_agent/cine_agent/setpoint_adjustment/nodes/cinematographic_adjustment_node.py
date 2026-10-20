@@ -1,10 +1,6 @@
-from cine_agent.utils.paths import add_config_path
-
-add_config_path()
-
 import numpy as np
 import rclpy
-from constants import SensorNoiseParams
+from cine_config.constants import SensorNoiseParams
 from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry

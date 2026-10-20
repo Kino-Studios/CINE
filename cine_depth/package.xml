@@ -3,19 +3,22 @@
 <package format="3">
   <name>cine_depth</name>
   <version>1.0.0</version>
-  <description>Depth image publisher using Depth-Anything with CUDA acceleration</description>
+  <description>Publishes monocular depth images estimated by Depth-Anything from the drone camera feed.</description>
   <maintainer email="fishnos@users.noreply.github.com">fishnos</maintainer>
-  <license>MIT</license>
+  <license>GPL-3.0-only</license>
+  <url type="repository">https://github.com/Kino-Studios/CINE</url>
+  <url type="bugtracker">https://github.com/Kino-Studios/CINE/issues</url>
 
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
-  <depend>cv_bridge</depend>
-  <depend>std_msgs</depend>
-  <depend>cine_agent</depend>
+  <depend>cine_config</depend>
 
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+
   <test_depend>python3-pytest</test_depend>
 
   <export>

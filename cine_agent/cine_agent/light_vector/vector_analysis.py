@@ -1,12 +1,8 @@
-from cine_agent.utils.paths import add_config_path
-
-add_config_path()
-
 import math
 
 import numpy as np
 import rclpy
-from constants import CinematographyParams
+from cine_config.constants import CinematographyParams
 from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import Vector3Stamped
 from nav_msgs.msg import Odometry

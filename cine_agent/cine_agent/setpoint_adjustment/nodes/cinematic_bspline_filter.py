@@ -1,12 +1,8 @@
-from cine_agent.utils.paths import add_config_path
-
-add_config_path()
-
 import math
 
 import numpy as np
 import rclpy
-from constants import (
+from cine_config.constants import (
     BsplineFilterParams,
     CinematicConstraints,
     CinematographyParams,
@@ -20,7 +16,7 @@ from traj_utils.msg import Bspline
 
 from cine_msgs.msg import CinematographyCosts
 
-from .bspline_utils import arrays_to_msg, msg_to_arrays
+from ..utils.bspline_utils import arrays_to_msg, msg_to_arrays
 
 
 class CinematicBsplineFilter(Node):

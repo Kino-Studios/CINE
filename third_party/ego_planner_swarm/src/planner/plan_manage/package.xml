@@ -15,6 +15,7 @@
   <depend>geometry_msgs</depend>
   <depend>quadrotor_msgs</depend>
   <depend>cine_msgs</depend>
+  <depend>cine_config</depend>
   <depend>visualization_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>plan_env</depend>

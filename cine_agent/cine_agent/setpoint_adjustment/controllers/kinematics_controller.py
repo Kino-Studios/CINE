@@ -1,7 +1,7 @@
 import math
 
 import numpy as np
-from constants import CinematicConstraints
+from cine_config.constants import CinematicConstraints
 
 from ..utils.config_loader import ConfigLoader
 

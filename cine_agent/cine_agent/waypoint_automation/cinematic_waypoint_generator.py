@@ -28,14 +28,10 @@ along which cinematic framing is active.
 producing plain EGO-Planner setpoints for comparison data collection.
 """
 
-from cine_agent.utils.paths import add_config_path
-
-add_config_path()
-
 import math
 
 import rclpy
-from constants import (
+from cine_config.constants import (
     BsplineFilterParams,
     CinematicConstraints,
     CinematographyParams,

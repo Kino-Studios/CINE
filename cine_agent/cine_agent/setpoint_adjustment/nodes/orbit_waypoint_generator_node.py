@@ -7,7 +7,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo
 from std_msgs.msg import Float32
 
-from .trajectory_planner import (
+from ..utils.trajectory_planner import (
     generate_cost_optimized_orbit_waypoints,
     generate_orbit_waypoints_xy,
     optimize_orbit_center_and_radius,

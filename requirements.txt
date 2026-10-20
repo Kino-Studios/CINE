@@ -1,15 +1,14 @@
-# pip install -r requirements.txt
+# Python packages rosdep does not provide: pip install -r requirements.txt
+# OpenCV comes from python3-opencv and cv_bridge through rosdep; do not pip-install it.
 
-numpy>=1.24,<2.0
-opencv-python>=4.8,<5.0
-scipy>=1.11,<2.0
-matplotlib>=3.7,<4.0
+# Jazzy's apt numpy is 1.26; numpy 2 also works with the first-party code.
+numpy>=1.26,<3
+# cine_mlp_correction
+onnxruntime>=1.16,<2.0
+# tools/analysis/trajectory_stats.py
 pandas>=2.0,<3.0
-pillow>=10.0,<13.0
+
+# cine_depth (optional: only for the Depth-Anything depth publisher). Also install the
+# Depth-Anything checkout's own requirements.txt.
 torch>=2.0,<3.0
 torchvision>=0.15,<1.0
-onnxruntime>=1.16,<2.0
-
-# Known-good exact versions (system Python, 2026-06-13):
-# numpy==2.4.6
-# pillow==12.2.0

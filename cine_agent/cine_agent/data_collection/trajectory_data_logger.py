@@ -8,18 +8,13 @@ from pathlib import Path
 import numpy as np
 import rclpy
 import rclpy.time
+from cine_config.constants import CinematicConstraints, SimulationParams, WaypointParams
 from geometry_msgs.msg import PointStamped
 from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from std_msgs.msg import Bool, Float32
 from traj_utils.msg import Bspline
-
-from cine_agent.utils.paths import add_config_path
-
-add_config_path()
-
-from constants import CinematicConstraints, SimulationParams, WaypointParams
 
 
 class UniformBspline:
@@ -125,12 +120,9 @@ class TrajectoryDataLogger(Node):
         self._anchor_end_world: tuple[float, float, float] | None = None
         self._expected_target_distance: float | None = None
 
-        workspace_root = next(
-            (p for p in Path(__file__).resolve().parents if p.name == 'trajectory-optimization_ws'),
-            Path.cwd(),
-        )
-        default_dir = workspace_root / SimulationParams.TRAJECTORY_DATA_DIR
-        output_dir = Path(default_dir)
+        # A relative output_dir resolves against the working directory the node starts in.
+        self.declare_parameter('output_dir', SimulationParams.TRAJECTORY_DATA_DIR)
+        output_dir = Path(str(self.get_parameter('output_dir').value)).expanduser()
         output_dir.mkdir(exist_ok=True, parents=True)
         self.timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         self.output_dir = output_dir

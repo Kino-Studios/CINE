@@ -1,11 +1,7 @@
-from cine_agent.utils.paths import add_config_path
-
-add_config_path()
-
 import math
 
 import numpy as np
-from constants import Constraints
+from cine_config.constants import Constraints
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node

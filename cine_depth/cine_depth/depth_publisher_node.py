@@ -2,23 +2,10 @@ import os
 import sys
 from pathlib import Path
 
-# Add repo root to sys.path to find 'configs'
-here = Path(__file__).resolve()
-for parent in [here] + list(here.parents):
-    if (parent / 'configs').is_dir():
-        python_constants_path = parent / 'configs' / 'python-constants'
-        if str(python_constants_path) not in sys.path:
-            sys.path.insert(0, str(python_constants_path))
-        break
-
-user_site = os.path.expanduser('~/.local/lib/python3.12/site-packages')
-if user_site in sys.path:
-    sys.path.remove(user_site)
-
 import cv2
 import numpy as np
 import rclpy
-from constants import DepthAnythingParams
+from cine_config.constants import DepthAnythingParams
 from cv_bridge import CvBridge
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -84,11 +71,11 @@ class DepthPublisherNode(Node):
 
             if not depth_anything_path:
                 raise RuntimeError(
-                    'Depth-Anything path not set; provide ROS param `depth_anything_path` or set it in configs/json_constants/user_params/params.json.'
+                    'Depth-Anything path not set; provide ROS param `depth_anything_path` or set it in cine_config/config/user_params/params.json.'
                 )
             if not venv_site:
                 raise RuntimeError(
-                    'Venv site-packages path not set; provide ROS param `venv_site_path` or set it in configs/json_constants/user_params/params.json.'
+                    'Venv site-packages path not set; provide ROS param `venv_site_path` or set it in cine_config/config/user_params/params.json.'
                 )
 
             if venv_site not in sys.path:

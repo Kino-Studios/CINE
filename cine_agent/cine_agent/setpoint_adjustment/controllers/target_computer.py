@@ -1,6 +1,6 @@
 import numpy as np
 
-from ..cost_functions.cost_calculator import CostCalculator
+from ...cost_functions.cost_calculator import CostCalculator
 from ..utils.config_loader import ConfigLoader
 from ..utils.state_tracker import StateTracker
 from ..utils.trajectory_planner import clamp_depth_to_preference, pixel_to_camera_xy

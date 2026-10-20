@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>cine_bringup</name>
+  <version>1.0.0</version>
+  <description>Launch file and RViz layout that start the full CINE cinematic planning pipeline in simulation or on hardware.</description>
+  <maintainer email="fishnos@users.noreply.github.com">fishnos</maintainer>
+  <license>GPL-3.0-only</license>
+
+  <url type="repository">https://github.com/Kino-Studios/CINE</url>
+  <url type="bugtracker">https://github.com/Kino-Studios/CINE/issues</url>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>cine_agent</exec_depend>
+  <exec_depend>cine_config</exec_depend>
+  <exec_depend>cine_mlp_correction</exec_depend>
+  <exec_depend>ego_planner</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>map_generator</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

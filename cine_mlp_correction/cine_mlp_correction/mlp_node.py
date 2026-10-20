@@ -1,22 +1,17 @@
 import numpy as np
 import rclpy
+from cine_config.constants import MLPParams
 from geometry_msgs.msg import Point, Vector3Stamped
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from traj_utils.msg import Bspline
 
 from .mlp_loader import MLPLoader
+from .weights_path import resolve_weights_dir
 
-try:
-    from constants import MLPParams
-
-    _BSPLINE_IN_TOPIC = MLPParams.BSPLINE_IN_TOPIC
-    _CORRECTED_BSPLINE_TOPIC = MLPParams.CORRECTED_BSPLINE_TOPIC
-    _CORRECTION_DELTA_TOPIC = MLPParams.CORRECTION_DELTA_TOPIC
-except ImportError:
-    _BSPLINE_IN_TOPIC = '/drone_0_planning/cinematic_bspline'
-    _CORRECTED_BSPLINE_TOPIC = '/mlp/corrected_bspline'
-    _CORRECTION_DELTA_TOPIC = '/mlp/correction_delta'
+_BSPLINE_IN_TOPIC = MLPParams.BSPLINE_IN_TOPIC
+_CORRECTED_BSPLINE_TOPIC = MLPParams.CORRECTED_BSPLINE_TOPIC
+_CORRECTION_DELTA_TOPIC = MLPParams.CORRECTION_DELTA_TOPIC
 
 
 class MLPNode(Node):
@@ -26,7 +21,7 @@ class MLPNode(Node):
         self.declare_parameter('mlp_weights_path', '')
         self.mlp_weights_path = self.get_parameter('mlp_weights_path').value
 
-        self.loader = MLPLoader(self.mlp_weights_path)
+        self.loader = MLPLoader(resolve_weights_dir(self.mlp_weights_path))
 
         self.subscription = self.create_subscription(
             Bspline,

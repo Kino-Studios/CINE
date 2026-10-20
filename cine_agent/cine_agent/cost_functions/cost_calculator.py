@@ -32,16 +32,12 @@ quaternion is [x, y, z, w].  Camera intrinsics (fx, fy, cx, cy) are read from
 for candidate waypoint positions without requiring a live depth image.
 """
 
-from cine_agent.utils.paths import add_config_path
-
-add_config_path()
-
 import logging
 import math
 
 import cv2
 import numpy as np
-from constants import (
+from cine_config.constants import (
     CinematographyParams,
     CostParams,
     ImageParams,

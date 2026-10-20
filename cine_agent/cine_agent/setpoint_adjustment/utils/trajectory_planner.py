@@ -47,7 +47,7 @@ def generate_cost_optimized_orbit_waypoints(
     theta = 0.0
     current_radius = initial_radius_m
 
-    for i in range(num_points):
+    for _ in range(num_points):
         radius_candidates = np.linspace(
             max(radius_range[0], current_radius * 0.7),
             min(radius_range[1], current_radius * 1.3),

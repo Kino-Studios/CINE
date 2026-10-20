@@ -19,8 +19,11 @@ if [ -f "${SCRIPT_DIR}/install/setup.bash" ]; then
   source "${SCRIPT_DIR}/install/setup.bash"
 elif [ -f "${REPO_ROOT}/install/setup.bash" ]; then
   source "${REPO_ROOT}/install/setup.bash"
+elif [ -f "${REPO_ROOT}/../../install/setup.bash" ]; then
+  # The usual layout: this repository cloned into <workspace>/src/.
+  source "${REPO_ROOT}/../../install/setup.bash"
 else
-  echo "Could not find install/setup.bash under ${SCRIPT_DIR} or ${REPO_ROOT}" >&2
+  echo "Could not find install/setup.bash under ${SCRIPT_DIR}, ${REPO_ROOT} or the workspace above it" >&2
   exit 1
 fi
 set -u
@@ -33,4 +36,4 @@ case "${MODE}" in
   * ) echo "Usage: $0 [baseline|constrained]" >&2; exit 2 ;;
 esac
 
-exec ros2 launch ego_planner single_run_in_sim.launch.py "${LAUNCH_ARGS[@]}"
+exec ros2 launch cine_bringup cinematic_run.launch.py "${LAUNCH_ARGS[@]}"

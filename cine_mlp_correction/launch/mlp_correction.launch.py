@@ -9,9 +9,10 @@ def generate_launch_description():
         [
             DeclareLaunchArgument(
                 'mlp_weights_path',
+                default_value='',
                 description=(
-                    'Absolute path to the mlp/weights/ directory '
-                    'containing mlp_correction.onnx and scaler.json'
+                    'Directory containing mlp_correction.onnx and scaler.json; '
+                    'empty means share/cine_mlp_correction/weights'
                 ),
             ),
             Node(

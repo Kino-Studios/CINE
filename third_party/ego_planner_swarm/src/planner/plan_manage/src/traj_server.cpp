@@ -13,7 +13,7 @@
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "cine_msgs/msg/cinematography_costs.hpp"
-#include "constants.hpp"
+#include "cine_config/constants.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>

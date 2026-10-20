@@ -25,12 +25,8 @@ All depth values are in metres; angles in radians; positions in the ENU world
 frame unless ``frame_id`` is overridden.
 """
 
-from cine_agent.utils.paths import add_config_path
-
-add_config_path()
-
 import rclpy
-from constants import CinematographyParams, LightAvoidanceParams
+from cine_config.constants import CinematographyParams, LightAvoidanceParams
 from geometry_msgs.msg import PointStamped, PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node

@@ -1,17 +1,6 @@
 import math
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock
-
-test_dir = Path(__file__).resolve().parent
-package_root = test_dir.parent
-repo_root = package_root.parent
-configs_path = repo_root / 'configs' / 'python-constants'
-
-if str(package_root) not in sys.path:
-    sys.path.insert(0, str(package_root))
-if str(configs_path) not in sys.path:
-    sys.path.insert(0, str(configs_path))
 
 mock_rclpy = MagicMock()
 sys.modules['rclpy'] = mock_rclpy
@@ -34,7 +23,7 @@ sys.modules['cv2'] = MagicMock()
 import numpy as np
 import pytest
 from cine_agent.cost_functions.cost_calculator import CostCalculator
-from constants import (
+from cine_config.constants import (
     CostParams,
     ImageParams,
     SimulationParams,

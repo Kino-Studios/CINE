@@ -4,12 +4,8 @@ import copy
 import math
 import random
 
-from cine_agent.utils.paths import add_config_path
-
-add_config_path()
-
 import rclpy
-from constants import SensorNoiseParams
+from cine_config.constants import SensorNoiseParams
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 

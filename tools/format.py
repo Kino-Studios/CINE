@@ -11,12 +11,14 @@ runs of blank lines inside function bodies to one, while leaving module-level sp
 Run from a repo root:
     python3 tools/format.py                # format all tracked python in this repo
     python3 tools/format.py path/to/file.py [more.py ...]
+    python3 tools/format.py --check        # list files that would change; exit 1 if any
 
 The pass is idempotent and behavior-preserving (it only moves blank lines). Comment
 removal (#8) and descriptive renaming (#10) remain review-time judgment calls, not
 automated here. If `ruff` is on PATH it is run first for the deterministic rules.
 """
 
+import argparse
 import ast
 import os
 import shutil
@@ -141,17 +143,28 @@ def _run_ruff(paths):
     if not shutil.which('ruff'):
         return
 
-    subprocess.run(['ruff', 'check', '--fix', '--quiet', *paths], check=False)
-    subprocess.run(['ruff', 'format', '--quiet', *paths], check=False)
+    # --force-exclude: honour ruff.toml's excludes even for paths named explicitly.
+    subprocess.run(['ruff', 'check', '--fix', '--quiet', '--force-exclude', *paths], check=False)
+    subprocess.run(['ruff', 'format', '--quiet', '--force-exclude', *paths], check=False)
 
 
 def main(argv):
-    if argv:
-        paths = [os.path.abspath(p) for p in argv]
+    parser = argparse.ArgumentParser(description='Apply the repository whitespace convention.')
+    parser.add_argument('paths', nargs='*', help='files to format (default: all tracked python)')
+    parser.add_argument(
+        '--check',
+        action='store_true',
+        help='write nothing; list files that would change and exit 1 if there are any',
+    )
+    arguments = parser.parse_args(argv)
+
+    if arguments.paths:
+        paths = [os.path.abspath(path) for path in arguments.paths]
     else:
         paths = list(_iter_repo_python(os.getcwd()))
 
-    _run_ruff(paths)
+    if not arguments.check:
+        _run_ruff(paths)
 
     changed = 0
     for path in paths:
@@ -159,11 +172,22 @@ def main(argv):
             original = handle.read()
 
         formatted = _format_source(original)
-        if formatted != original:
-            with open(path, 'w') as handle:
-                handle.write(formatted)
-            changed += 1
-            print(f'formatted {path}')
+        if formatted == original:
+            continue
+
+        changed += 1
+        if arguments.check:
+            print(f'would reformat {path}')
+            continue
+
+        with open(path, 'w') as handle:
+            handle.write(formatted)
+        print(f'formatted {path}')
+
+    if arguments.check:
+        print(f'{changed} file(s) would change of {len(paths)} checked')
+
+        return 1 if changed else 0
 
     print(f'{changed} file(s) changed of {len(paths)} checked')
 

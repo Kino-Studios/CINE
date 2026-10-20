@@ -27,7 +27,7 @@ listed under "Reorganisation".
 | File (under `src/`)                                                    | Change                                                                                                                                                                                               |
 | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `planner/plan_manage/src/traj_server.cpp`                              | Large extension (+1623 lines changed): cinematic B-spline input, focus target, target distance, framing and light-vector subscriptions, `CinematographyCosts` input, and visualisation publishers. |
-| `planner/plan_manage/launch/cinematic_run.launch.py`                   | New. First-party CINE launch file that starts the cinematic pipeline; it lives here until it moves to the `cine_bringup` package.                                                                   |
+| `planner/plan_manage/launch/cinematic_run.launch.py`                   | New. First-party CINE launch file that starts the cinematic pipeline; since moved to `cine_bringup` (see below).                                                                            |
 | `planner/plan_manage/launch/single_run_in_sim.launch.py`               | Deleted.                                                                                                                                                                                             |
 | `planner/plan_manage/launch/default.rviz`                              | RViz layout extended for the cinematic displays.                                                                                                                                                     |
 | `planner/plan_manage/launch/advanced_param.launch.py`                  | Lower `max_vel` (1.55) and higher `max_acc` (3.7) defaults; `realworld_experiment` and `use_sim_time` launch arguments; un-namespaced cloud remap.                                                   |
@@ -42,6 +42,9 @@ listed under "Reorganisation".
 | `uav_simulator/so3_quadrotor_simulator/launch/simulator_example.launch.py` | Passes `enable_motors: True`.                                                                                                                                                                    |
 
 ### Reorganisation for open-source release (2026-10-15)
+
+Committed as `39b40cd` ("Vendor ego-planner under third_party for Jazzy") and
+`bee2e7e` (package renames).
 
 - Moved from `trajectory-optimization_ws/src/ego-planner-swarm/` to
   `third_party/ego_planner_swarm/`; `Readme.md` renamed `README.md`.
@@ -58,3 +61,15 @@ listed under "Reorganisation".
   (Python 2, not parseable by Python 3), the generated HTML documentation
   (`libs/numeric/odeint/doc/html/`, `libs/numeric/odeint/index.html`); added
   `LICENSE_1_0.txt`. Nothing in the build referenced the removed files.
+
+### Changes after the reorganisation
+
+The commit column reads `(uncommitted)` until these changes land; replace it with
+the commit hash then.
+
+| File (under `src/`)                                  | Commit          | Change                                                                                                                                                                       |
+| ---------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `planner/plan_manage/CMakeLists.txt`                 | (uncommitted)   | `find_package(cine_config)` and link `traj_server` to `cine_config::cine_config_cpp`, replacing the relative path into the old `configs/cpp-constants` directory.         |
+| `planner/plan_manage/package.xml`                    | (uncommitted)   | Depends on `cine_config`.                                                                                                                                                     |
+| `planner/plan_manage/src/traj_server.cpp`            | (uncommitted)   | Includes `cine_config/constants.hpp` instead of `constants.hpp`; no logic change.                                                                                           |
+| `planner/plan_manage/launch/cinematic_run.launch.py` | (uncommitted)   | Moved out of this tree to `cine_bringup/launch/cinematic_run.launch.py` (first-party). There it reads constants from `cine_config` and no longer starts the deleted `light_vector_analysis` node. |

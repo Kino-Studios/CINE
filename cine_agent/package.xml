@@ -3,9 +3,11 @@
 <package format="3">
   <name>cine_agent</name>
   <version>1.0.0</version>
-  <description>Cinematographic adjustment agent for trajectory optimization</description>
+  <description>Cinematography agent for the CINE drone: cost functions, setpoint adjustment, waypoint generation and trajectory data logging.</description>
   <maintainer email="fishnos@users.noreply.github.com">fishnos</maintainer>
   <license>GPL-3.0-only</license>
+  <url type="repository">https://github.com/Kino-Studios/CINE</url>
+  <url type="bugtracker">https://github.com/Kino-Studios/CINE/issues</url>
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
@@ -14,11 +16,15 @@
   <depend>nav_msgs</depend>
   <depend>visualization_msgs</depend>
   <depend>cine_msgs</depend>
+  <depend>cine_config</depend>
   <depend>traj_utils</depend>
 
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+
   <test_depend>python3-pytest</test_depend>
 
   <export>

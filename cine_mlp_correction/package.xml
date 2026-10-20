@@ -1,22 +1,26 @@
 <?xml version="1.0"?>
-<?xml-model href="http://download.ros.org/schema/package_format3.xsd"
-            schematypens="http://www.w3.org/2001/XMLSchema"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>cine_mlp_correction</name>
   <version>1.0.0</version>
-  <description>
-    MLP setpoint correction interceptor node for cinematic drone trajectory control.
-    Subscribes to /drone_0_planning/cinematic_bspline, applies learned position
-    correction, and publishes /mlp/corrected_bspline.
-  </description>
-  <maintainer email="todo@todo.com">TODO</maintainer>
-  <license>MIT</license>
+  <description>Corrects the planned cinematic B-spline with a learned MLP (ONNX Runtime) before it reaches the trajectory server.</description>
+  <maintainer email="fishnos@users.noreply.github.com">fishnos</maintainer>
+  <license>GPL-3.0-only</license>
+  <url type="repository">https://github.com/Kino-Studios/CINE</url>
+  <url type="bugtracker">https://github.com/Kino-Studios/CINE/issues</url>
 
-  <exec_depend>rclpy</exec_depend>
-  <exec_depend>traj_utils</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>traj_utils</depend>
+  <depend>cine_config</depend>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-onnxruntime-pip</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>

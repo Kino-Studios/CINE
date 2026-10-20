@@ -17,10 +17,12 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='fishnos',
-    maintainer_email='fishnos@example.com',
-    description='Depth image publisher using Depth-Anything with CUDA acceleration',
-    license='MIT',
-    tests_require=['pytest'],
+    maintainer_email='fishnos@users.noreply.github.com',
+    description=(
+        'Publishes monocular depth images estimated by Depth-Anything from the drone camera feed.'
+    ),
+    license='GPL-3.0-only',
+    extras_require={'test': ['pytest']},
     entry_points={
         'console_scripts': [
             'depth_publisher_node = cine_depth.depth_publisher_node:main',

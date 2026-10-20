@@ -34,8 +34,11 @@ if [ -f "${SCRIPT_DIR}/install/setup.bash" ]; then
   source "${SCRIPT_DIR}/install/setup.bash"
 elif [ -f "${REPO_ROOT}/install/setup.bash" ]; then
   source "${REPO_ROOT}/install/setup.bash"
+elif [ -f "${REPO_ROOT}/../../install/setup.bash" ]; then
+  # The usual layout: this repository cloned into <workspace>/src/.
+  source "${REPO_ROOT}/../../install/setup.bash"
 else
-  echo "Could not find install/setup.bash under ${SCRIPT_DIR} or ${REPO_ROOT}" >&2
+  echo "Could not find install/setup.bash under ${SCRIPT_DIR}, ${REPO_ROOT} or the workspace above it" >&2
   exit 1
 fi
 
@@ -47,7 +50,7 @@ fi
 rm -rf /tmp/cyclonedds* ~/.local/share/cyclonedds* 2>/dev/null
 sleep 2
 
-GET_CONFIG="python3 ${REPO_ROOT}/configs/python-constants/get_config.py"
+GET_CONFIG="python3 -m cine_config.get_config"
 
 DRONE_ID=$($GET_CONFIG DRONE_ID)
 TRAJECTORY_DATA_DIR="${REPO_ROOT}/$($GET_CONFIG TRAJECTORY_DATA_DIR)"
