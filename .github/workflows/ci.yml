@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - uses: pre-commit/action@v3.0.1
 
   test:
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - run: pip install pytest numpy onnxruntime
       # Pure-Python tests: config loader, cost calculator, MLP weights lookup and
       # passthrough, and the tools. No ROS needed.
@@ -32,7 +32,7 @@ jobs:
     container: ubuntu:noble
     env:
       # pip inside the noble container refuses system-wide installs without this.
-      PIP_BREAK_SYSTEM_PACKAGES: '1'
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
     steps:
       - uses: ros-tooling/setup-ros@v0.7
         with:
@@ -41,8 +41,10 @@ jobs:
       - uses: ros-tooling/action-ros-ci@v0.4
         with:
           target-ros2-distro: jazzy
-          # Builds every package below and its in-repo dependencies; tests only the
-          # first-party packages (third_party/ fails the ament linters upstream already).
+          # Builds every package below and its in-repo dependencies, which brings in
+          # ego_planner through cine_bringup. Naming ego_planner here would also test
+          # it, because the action passes this list to `colcon test --packages-select`
+          # over colcon-defaults, and third_party/ fails the ament linters upstream.
           colcon-defaults: |
             {
               "test": {
@@ -63,4 +65,3 @@ jobs:
             cine_depth
             cine_mlp_correction
             cine_bringup
-            ego_planner
