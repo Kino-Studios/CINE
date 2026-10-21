@@ -6,8 +6,8 @@ This directory is a modified copy of EGO-Planner-Swarm by the ZJU FAST Lab
 (<https://github.com/ZJU-FAST-Lab/ego-planner-swarm>), taken from a community
 ROS 2 port of that project. Which port, and which commit of it, is not
 recorded: the tree was imported into this repository without history in
-commits `03ac667` and `e3af213` (both 2025-11-08, "unstaged changes..").
-Treat `03ac667` as the base when comparing.
+commit `c9525f9` (2025-11-08, "unstaged changes..").
+Treat `c9525f9` as the base when comparing.
 
 ## Licence
 
@@ -22,7 +22,7 @@ Modified by Kino-Studios, 2025-2026. The files below differ from the imported
 base. Everything else is as imported, apart from the repository housekeeping
 listed under "Reorganisation".
 
-### Behaviour changes since the base (`git diff --stat 03ac667 HEAD`, 15 files)
+### Behaviour changes since the base (`git diff --stat c9525f9 HEAD`, 15 files)
 
 | File (under `src/`)                                                    | Change                                                                                                                                                                                               |
 | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -43,8 +43,8 @@ listed under "Reorganisation".
 
 ### Reorganisation for open-source release (2026-10-15)
 
-Committed as `39b40cd` ("Vendor ego-planner under third_party for Jazzy") and
-`bee2e7e` (package renames).
+Committed as `11a6fbc` ("Vendor ego-planner under third_party for Jazzy") and
+`f4e1cc2` (package renames).
 
 - Moved from `trajectory-optimization_ws/src/ego-planner-swarm/` to
   `third_party/ego_planner_swarm/`; `Readme.md` renamed `README.md`.
@@ -66,7 +66,7 @@ Committed as `39b40cd` ("Vendor ego-planner under third_party for Jazzy") and
 
 | File (under `src/`)                                  | Commit          | Change                                                                                                                                                                       |
 | ---------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `planner/plan_manage/CMakeLists.txt`                 | `62f2fc6`       | `find_package(cine_config)` and link `traj_server` to `cine_config::cine_config_cpp`, replacing the relative path into the old `configs/cpp-constants` directory.         |
-| `planner/plan_manage/package.xml`                    | `62f2fc6`       | Depends on `cine_config`.                                                                                                                                                     |
-| `planner/plan_manage/src/traj_server.cpp`            | `62f2fc6`       | Includes `cine_config/constants.hpp` instead of `constants.hpp`; no logic change.                                                                                           |
-| `planner/plan_manage/launch/cinematic_run.launch.py` | `62f2fc6`       | Moved out of this tree to `cine_bringup/launch/cinematic_run.launch.py` (first-party). There it reads constants from `cine_config` and no longer starts the deleted `light_vector_analysis` node. |
+| `planner/plan_manage/CMakeLists.txt`                 | `a7ce900`       | `find_package(cine_config)` and link `traj_server` to `cine_config::cine_config_cpp`, replacing the relative path into the old `configs/cpp-constants` directory.         |
+| `planner/plan_manage/package.xml`                    | `a7ce900`       | Depends on `cine_config`.                                                                                                                                                     |
+| `planner/plan_manage/src/traj_server.cpp`            | `a7ce900`       | Includes `cine_config/constants.hpp` instead of `constants.hpp`; no logic change.                                                                                           |
+| `planner/plan_manage/launch/cinematic_run.launch.py` | `a7ce900`       | Moved out of this tree to `cine_bringup/launch/cinematic_run.launch.py` (first-party). There it reads constants from `cine_config` and no longer starts the deleted `light_vector_analysis` node. |
