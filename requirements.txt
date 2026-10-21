@@ -12,3 +12,7 @@ pandas>=2.0,<3.0
 # Depth-Anything checkout's own requirements.txt.
 torch>=2.0,<3.0
 torchvision>=0.15,<1.0
+
+# torch needs setuptools>=77.0.3 and colcon-core needs <80; without this bound pip
+# installs the newest setuptools and colcon warns it is unsupported.
+setuptools>=77.0.3,<80
