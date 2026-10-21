@@ -3,8 +3,10 @@ message: If you use this software, please cite it using the metadata from this f
 title: 'CINE: cinematographic trajectory planning for autonomous camera drones'
 type: software
 authors:
-  # TODO(author): replace this placeholder with the real author list.
-  - family-names: TODO-AUTHOR
+  - family-names: Kosukhin
+    given-names: Daniel
+    alias: fishnos
+    website: https://github.com/fishnos
 license: GPL-3.0-only
 repository-code: https://github.com/Kino-Studios/CINE
 version: 1.0.0

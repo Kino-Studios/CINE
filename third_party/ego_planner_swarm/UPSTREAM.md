@@ -64,12 +64,9 @@ Committed as `39b40cd` ("Vendor ego-planner under third_party for Jazzy") and
 
 ### Changes after the reorganisation
 
-The commit column reads `(uncommitted)` until these changes land; replace it with
-the commit hash then.
-
 | File (under `src/`)                                  | Commit          | Change                                                                                                                                                                       |
 | ---------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `planner/plan_manage/CMakeLists.txt`                 | (uncommitted)   | `find_package(cine_config)` and link `traj_server` to `cine_config::cine_config_cpp`, replacing the relative path into the old `configs/cpp-constants` directory.         |
-| `planner/plan_manage/package.xml`                    | (uncommitted)   | Depends on `cine_config`.                                                                                                                                                     |
-| `planner/plan_manage/src/traj_server.cpp`            | (uncommitted)   | Includes `cine_config/constants.hpp` instead of `constants.hpp`; no logic change.                                                                                           |
-| `planner/plan_manage/launch/cinematic_run.launch.py` | (uncommitted)   | Moved out of this tree to `cine_bringup/launch/cinematic_run.launch.py` (first-party). There it reads constants from `cine_config` and no longer starts the deleted `light_vector_analysis` node. |
+| `planner/plan_manage/CMakeLists.txt`                 | `62f2fc6`       | `find_package(cine_config)` and link `traj_server` to `cine_config::cine_config_cpp`, replacing the relative path into the old `configs/cpp-constants` directory.         |
+| `planner/plan_manage/package.xml`                    | `62f2fc6`       | Depends on `cine_config`.                                                                                                                                                     |
+| `planner/plan_manage/src/traj_server.cpp`            | `62f2fc6`       | Includes `cine_config/constants.hpp` instead of `constants.hpp`; no logic change.                                                                                           |
+| `planner/plan_manage/launch/cinematic_run.launch.py` | `62f2fc6`       | Moved out of this tree to `cine_bringup/launch/cinematic_run.launch.py` (first-party). There it reads constants from `cine_config` and no longer starts the deleted `light_vector_analysis` node. |
