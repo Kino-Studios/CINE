@@ -31,6 +31,9 @@ unset ROS_LOCALHOST_ONLY
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
+# The trajectory data logger writes under the directory it starts in.
+cd "${REPO_ROOT}"
+
 ROS_LOG_DIR="${REPO_ROOT}/ros_logs"
 mkdir -p "${ROS_LOG_DIR}"
 export ROS_LOG_DIR
