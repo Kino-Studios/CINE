@@ -3,7 +3,7 @@
 <package format="3">
   <name>cine_depth</name>
   <version>1.0.0</version>
-  <description>Publishes monocular depth images estimated by Depth-Anything from the drone camera feed.</description>
+  <description>Publishes monocular depth images estimated by Depth Anything 3 from the drone camera feed.</description>
   <maintainer email="fishnos@users.noreply.github.com">fishnos</maintainer>
   <license>GPL-3.0-only</license>
   <url type="repository">https://github.com/Kino-Studios/CINE</url>

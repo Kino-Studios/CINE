@@ -23,7 +23,7 @@ runs on its own.
 | ROS 2 | Jazzy (Python 3.12) |
 | Middleware | Cyclone DDS (`rmw_cyclonedds_cpp`, set by `source_env.sh`) |
 | Simulator | The quadrotor simulator bundled with EGO-Planner (`third_party/ego_planner_swarm`) |
-| GPU | Optional; only the Depth-Anything depth publisher uses CUDA, and it falls back to CPU |
+| GPU | Optional; only the Depth Anything 3 depth publisher uses CUDA, and it falls back to CPU |
 
 ## Install
 
@@ -78,7 +78,7 @@ rviz2 -d "$(ros2 pkg prefix cine_bringup)/share/cine_bringup/rviz/cinema.rviz"
 | `cine_config` | `cine_config/` | All tunable constants as JSON in `cine_config/config/`, read by a Python module and a C++ library. `CINE_CONFIG_ROOT` points it at another config directory. |
 | `cine_agent` | `cine_agent/` | Cost functions, the cinematic B-spline filter, waypoint generation, simulated sensors and the trajectory data logger. |
 | `cine_mlp_correction` | `cine_mlp_correction/` | Applies the learned position correction to the cinematic B-spline. |
-| `cine_depth` | `cine_depth/` | Publishes Depth-Anything depth images from the camera feed (optional). |
+| `cine_depth` | `cine_depth/` | Publishes Depth Anything 3 depth images, in metres, from the camera feed (optional). |
 | `cine_bringup` | `cine_bringup/` | The launch file that starts a full pipeline, and the RViz layout. |
 | EGO-Planner-Swarm | `third_party/ego_planner_swarm/` | Upstream local planner and quadrotor simulator, modified; changes listed in its `UPSTREAM.md`. |
 
@@ -105,7 +105,7 @@ distance, its target and the error against the tolerance.
 `tools/analysis/trajectory_stats.py` and `tools/analysis/trajectory_mean.py` summarise
 and average the runs in `data/trajectories/baseline` and `data/trajectories/cinematic`.
 
-## MLP correction and Depth-Anything
+## MLP correction and Depth Anything 3
 
 **MLP correction.** The trained correction weights are not distributed with this
 repository, and so the correction is off by default. To use your own,
@@ -116,19 +116,37 @@ build installs them to the package share). Set `mlp_weights_path` in
 use another directory. Without the model the node passes trajectories through unchanged.
 To run it on its own: `ros2 launch cine_mlp_correction mlp_correction.launch.py`.
 
-**Depth-Anything.** `cine_depth` imports Depth-Anything from a source checkout and loads
-the `LiheYoung/depth_anything_vits14` weights from Hugging Face on first start:
+**Depth Anything 3.** `cine_depth` estimates depth from the camera image with
+[Depth Anything 3](https://github.com/ByteDance-Seed/Depth-Anything-3) and publishes it in
+metres on `/depth/image_raw`. Its packages are optional and are installed into the
+workspace venv; Depth Anything 3 is not on PyPI, and so it is installed from a pinned
+commit without its full dependency list (which pulls in 3D-export tools the node never
+uses):
 
 ```bash
-git clone https://github.com/LiheYoung/Depth-Anything.git ~/cine_ws/src/Depth-Anything
-touch ~/cine_ws/src/Depth-Anything/COLCON_IGNORE
-~/cine_ws/venv/bin/pip install -r ~/cine_ws/src/Depth-Anything/requirements.txt
+~/cine_ws/venv/bin/pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+  -r ~/cine_ws/src/CINE/cine_depth/requirements.txt
+~/cine_ws/venv/bin/pip install --no-deps \
+  "depth-anything-3 @ git+https://github.com/ByteDance-Seed/Depth-Anything-3@3d835ec1a5802d64a8b8b15f817a1ab54809bfe4"
 ros2 launch cine_depth depth_publisher.launch.py
 ```
 
-The node finds the checkout and the venv in that layout by itself. Elsewhere, set
-`depth_anything_path` and `venv_site_path` in `cine_config/config/user_params/params.json`
-or as node parameters.
+Drop the PyTorch CPU index on a CUDA machine. The weights download from Hugging Face on
+first start. The node takes these parameters:
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `model_id` | `depth-anything/DA3METRIC-LARGE` | Hugging Face model. A `DA3METRIC` model gives depth in metres, using the focal length from `cine_config/config/camera/camera-params.json`; any other model gives relative depth, stretched over 0 to `max_depth`. |
+| `process_resolution` | `504` | Longest side, in pixels, of the image the network sees. The output is resized back to the camera resolution. |
+| `depth_encoding` | `32FC1` | `32FC1` publishes metres as float; `mono8` publishes depth normalised to 0 to 255. |
+| `depth_scale` | `1.0` | Multiplier applied to the depth in metres. |
+| `max_depth` | `10.0` | Far end, in metres, of the range relative depth is stretched over. |
+
+The default model has 334M parameters and took about 14 s per 1152×648 frame on an
+Apple M-series CPU, and so a CUDA GPU is recommended for anything close to the camera
+rate. `depth-anything/DA3-SMALL` is a much lighter option, at the cost of relative depth.
+DA3METRIC-LARGE, DA3-SMALL and DA3-BASE are Apache-2.0; the larger Depth Anything 3
+models are CC BY-NC 4.0 (non-commercial use only).
 
 ## Data and weights download
 
@@ -190,7 +208,7 @@ GPL-3.0-only, see `LICENSE`. Bundled third-party code keeps its own licence; see
 
 - [EGO-Planner-Swarm](https://github.com/ZJU-FAST-Lab/ego-planner-swarm) by the ZJU FAST
   Lab, the planner and simulator CINE builds on.
-- [Depth-Anything](https://github.com/LiheYoung/Depth-Anything) by Yang et al., for
-  monocular depth.
+- [Depth Anything 3](https://github.com/ByteDance-Seed/Depth-Anything-3) by Lin et al.
+  (ByteDance Seed), for monocular depth.
 - [Boost.odeint](https://www.boost.org/doc/libs/release/libs/numeric/odeint/) by Karsten
   Ahnert and Mario Mulansky, which drives the quadrotor simulator.

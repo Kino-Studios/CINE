@@ -1,0 +1,14 @@
+# Optional: only for the Depth Anything 3 depth publisher. Install Depth Anything 3 itself
+# afterwards with --no-deps (see the README); its declared dependencies add xformers,
+# open3d, COLMAP bindings and a web server that the depth publisher does not use. These
+# are the packages its model and inference code import; the node stands in for its export
+# helpers. OpenCV comes from python3-opencv through rosdep.
+torch>=2.0,<3.0
+torchvision>=0.15,<1.0
+huggingface_hub
+safetensors
+einops
+imageio
+omegaconf
+addict
+evo

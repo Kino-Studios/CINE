@@ -15,9 +15,5 @@
     "logging_severity": "DEBUG",
     "epsilon": 1e-6,
     "use_simulation": true
-  },
-  "depth_anything_params": {
-    "depth_anything_path": "",
-    "venv_site_path": ""
   }
 }

@@ -326,11 +326,6 @@ class SimulationParams:
     USE_SIMULATION = config.get('params', 'simulation_params', 'use_simulation', True)
 
 
-class DepthAnythingParams:
-    DEPTH_ANYTHING_PATH = config.get('params', 'depth_anything_params', 'depth_anything_path')
-    VENV_SITE_PATH = config.get('params', 'depth_anything_params', 'venv_site_path')
-
-
 class CostParams:
     # cost weights
     W_FRAMING = config.get('costs', 'cost_function_weights', 'w_framing')

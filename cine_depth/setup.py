@@ -19,7 +19,7 @@ setup(
     maintainer='fishnos',
     maintainer_email='fishnos@users.noreply.github.com',
     description=(
-        'Publishes monocular depth images estimated by Depth-Anything from the drone camera feed.'
+        'Publishes monocular depth images estimated by Depth Anything 3 from the drone camera feed.'
     ),
     license='GPL-3.0-only',
     extras_require={'test': ['pytest']},

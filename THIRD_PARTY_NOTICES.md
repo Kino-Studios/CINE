@@ -19,7 +19,7 @@ steps download, each under its own licence.
 
 | Component | Fetched by | Licence |
 | --- | --- | --- |
-| Depth-Anything code (<https://github.com/LiheYoung/Depth-Anything>) | You, as a checkout next to the workspace (see the README) | Apache-2.0 |
-| Depth-Anything model weights `LiheYoung/depth_anything_vits14` | `cine_depth` on first start, from Hugging Face | As stated on the Hugging Face model card |
-| PyTorch, torchvision, ONNX Runtime, NumPy, pandas | `pip install -r requirements.txt` | Their own licences (BSD-3-Clause, MIT and others) |
+| Depth Anything 3 code (<https://github.com/ByteDance-Seed/Depth-Anything-3>) | You, with pip (see the README) | Apache-2.0 |
+| Depth Anything 3 model weights `depth-anything/DA3METRIC-LARGE` (default) | `cine_depth` on first start, from Hugging Face | Apache-2.0; `DA3-SMALL` and `DA3-BASE` are also Apache-2.0, the larger `DA3-LARGE`, `DA3-GIANT` and `DA3NESTED` weights are CC BY-NC 4.0 (non-commercial) |
+| ONNX Runtime, NumPy, pandas; for `cine_depth` also PyTorch, torchvision and the packages in `cine_depth/requirements.txt` | `pip install -r requirements.txt` (and `cine_depth/requirements.txt`) | Their own licences (BSD-3-Clause, MIT and others) |
 | CINE trajectory datasets | `tools/download_assets.py`, from this repository's GitHub Release | Published by the CINE authors with the release; see its notes |
