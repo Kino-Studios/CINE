@@ -14,12 +14,20 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}"
 unset ROS_LOCALHOST_ONLY
 
-# Optional virtual environment for the pip-only packages (requirements.txt). The depth
-# publisher looks for one beside <ws>/src/Depth-Anything, so the workspace is tried first.
+# Optional virtual environment for the pip-only packages (requirements.txt); the one in
+# the workspace is tried first.
 if [ -f "$CINE_WS/venv/bin/activate" ]; then
     source "$CINE_WS/venv/bin/activate"
 elif [ -f "$CINE_REPO/venv/bin/activate" ]; then
     source "$CINE_REPO/venv/bin/activate"
+fi
+
+# ROS starts Python nodes with /usr/bin/python3, which ignores an activated venv, and so the
+# venv's packages are put on PYTHONPATH for the nodes to import.
+if [ -n "${VIRTUAL_ENV:-}" ]; then
+    CINE_VENV_SITE="$("$VIRTUAL_ENV/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+    export PYTHONPATH="$CINE_VENV_SITE${PYTHONPATH:+:$PYTHONPATH}"
+    unset CINE_VENV_SITE
 fi
 
 # The ROS setup scripts read unset variables, so they fail under `set -u`.
