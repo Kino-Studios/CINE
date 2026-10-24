@@ -14,6 +14,7 @@ steps download, each under its own licence.
 | `FindCUDA.cmake` and its helper scripts, NVIDIA and Kitware | `third_party/ego_planner_swarm/src/uav_simulator/local_sensing/CMakeModules/` | MIT (per-file headers) | CMake modules bundled by the EGO-Planner tree. |
 | `FindEigen.cmake`, Eigen authors | `third_party/ego_planner_swarm/src/uav_simulator/local_sensing/CMakeModules/FindEigen.cmake` | BSD-2-Clause (per-file header) | CMake module bundled by the EGO-Planner tree. |
 | `FindEigen.cmake`, Google (Ceres Solver) | `third_party/ego_planner_swarm/src/uav_simulator/Utils/cmake_utils/cmake_modules/FindEigen.cmake` | BSD-3-Clause (per-file header) | CMake module bundled by the EGO-Planner tree. |
+| `FindGSL.cmake` and `FindmvIMPACT.cmake`, authors not stated | `third_party/ego_planner_swarm/src/uav_simulator/Utils/cmake_utils/cmake_modules/` | No licence header; distributed as part of the EGO-Planner tree under its GPL-3.0 | CMake modules bundled by the EGO-Planner tree. |
 
 ## Downloaded during setup, not shipped here
 

@@ -57,6 +57,12 @@ Committed as `11a6fbc` ("Vendor ego-planner under third_party for Jazzy") and
   to match the new location.
 - Removed committed colcon `install/` output, `.vscode.zip`, and a ROS 1
   `.gitignore`.
+- Every `package.xml` (20 files): the placeholder maintainer, licence and description
+  (`TODO`) were filled in, with `fishnos` as maintainer, ZJU FAST Lab as author and
+  `GPL-3.0-only` as licence; dependency names were changed to keys rosdep resolves on
+  Jazzy (`Eigen3` to `eigen`, `PCL` to `libpcl-all-dev`, `OpenCV` to `libopencv-dev`,
+  `Armadillo` and `Boost` lowercased, `tf` to `tf2`), and the ROS 1 `dynamic_reconfigure`
+  dependency was dropped.
 - Boost.odeint: removed `libs/numeric/odeint/performance/performance.py`
   (Python 2, not parseable by Python 3), the generated HTML documentation
   (`libs/numeric/odeint/doc/html/`, `libs/numeric/odeint/index.html`); added
