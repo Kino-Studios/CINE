@@ -191,7 +191,9 @@ class TrajectoryDataLogger(Node):
 
         self.timer = self.create_timer(0.02, self.log_data)
         self._saved_once = False
-        self._autosave_timer = self.create_timer(0.05, self._autosave)
+        # Each autosave rewrites every row so far, and so it runs every two seconds rather
+        # than every sample; a hard kill loses at most that much.
+        self._autosave_timer = self.create_timer(2.0, self._autosave)
         atexit.register(lambda: self._save_on_exit('process exit'))
 
         self.get_logger().info('Trajectory data logger initialized')

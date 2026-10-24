@@ -5,17 +5,13 @@ from cine_depth.depth_scaling import metric_depth_metres, relative_depth_metres
 
 def test_metric_depth_uses_focal_length_over_300():
     network_depth = np.full((4, 6), 3.0, dtype=np.float32)
-    depth = metric_depth_metres(
-        network_depth, camera_focal_px=600.0, calibration_image_width=6
-    )
+    depth = metric_depth_metres(network_depth, camera_focal_px=600.0, calibration_image_width=6)
     assert depth[0, 0] == pytest.approx(6.0)
 
 
 def test_metric_depth_rescales_focal_length_to_processed_width():
     network_depth = np.full((4, 6), 3.0, dtype=np.float32)
-    depth = metric_depth_metres(
-        network_depth, camera_focal_px=600.0, calibration_image_width=12
-    )
+    depth = metric_depth_metres(network_depth, camera_focal_px=600.0, calibration_image_width=12)
     assert depth[0, 0] == pytest.approx(3.0)
 
 

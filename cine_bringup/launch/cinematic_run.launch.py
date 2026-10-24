@@ -1,7 +1,12 @@
 import os
 
 from ament_index_python.packages import get_package_share_directory
-from cine_config.constants import CinematicConstraints, MLPParams, SimulationParams
+from cine_config.constants import (
+    CinematicConstraints,
+    CinematographyParams,
+    MLPParams,
+    SimulationParams,
+)
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition, UnlessCondition
@@ -23,6 +28,54 @@ def generate_cinematic_waypoints():
     ]
 
     return waypoints
+
+
+# The ego-planner simulator renders its depth image at 640x480 with this focal length
+# (uav_simulator/local_sensing/config/camera.yaml); the principal point here is the image
+# centre, about three pixels from that file's. On hardware the nodes read the camera in
+# cine_config/config/camera/ by default, so these apply only in simulation.
+SIMULATED_DEPTH_CAMERA = {
+    'image_width': 640,
+    'image_height': 480,
+    'camera_fx': 387.229248046875,
+    'camera_fy': 387.229248046875,
+    'camera_cx': 320.5,
+    'camera_cy': 240.5,
+}
+
+
+def _camera_parameters(use_simulation):
+    hardware_camera = CinematographyParams()
+    hardware_values = {
+        'image_width': hardware_camera.IMAGE_WIDTH,
+        'image_height': hardware_camera.IMAGE_HEIGHT,
+        'camera_fx': hardware_camera.CAMERA_FX,
+        'camera_fy': hardware_camera.CAMERA_FY,
+        'camera_cx': hardware_camera.CAMERA_CX,
+        'camera_cy': hardware_camera.CAMERA_CY,
+    }
+
+    return [
+        {
+            name: PythonExpression(
+                [
+                    f'{simulated_value!r} if "',
+                    use_simulation,
+                    f'".lower() == "true" else {hardware_values[name]!r}',
+                ]
+            )
+        }
+        for name, simulated_value in SIMULATED_DEPTH_CAMERA.items()
+    ]
+
+
+def _if_all_true(*flags):
+    expression = ['"true" if all(flag.lower() == "true" for flag in [']
+    for index, flag in enumerate(flags):
+        expression += ([', '] if index else []) + ['"', flag, '"']
+    expression.append(']) else "false"')
+
+    return IfCondition(PythonExpression(expression))
 
 
 def generate_launch_description():
@@ -79,6 +132,16 @@ def generate_launch_description():
     )
     use_simulation_cmd = DeclareLaunchArgument(
         'use_simulation', default_value='true' if SimulationParams.USE_SIMULATION else 'false'
+    )
+
+    # The collection scripts start these nodes themselves, with their own parameters, and so
+    # they pass false here to keep two copies from running.
+    start_cinematography_nodes = LaunchConfiguration('start_cinematography_nodes', default='true')
+    start_cinematography_nodes_cmd = DeclareLaunchArgument(
+        'start_cinematography_nodes', default_value='true'
+    )
+    not_use_simulation = PythonExpression(
+        ['"false" if "', use_simulation, '".lower() == "true" else "true"']
     )
 
     use_distinctive_trajs = LaunchConfiguration('use_distinctive_trajs', default='false')
@@ -379,12 +442,7 @@ def generate_launch_description():
             {'center_topic': '/object_detection/center_point'},
             {'bbox_topic': '/object_detection/bounding_box'},
             {'dimensions_topic': '/object_detection/dimensions'},
-            {'image_width': 640},
-            {'image_height': 480},
-            {'camera_fx': 387.229248046875},
-            {'camera_fy': 387.229248046875},
-            {'camera_cx': 320.5},
-            {'camera_cy': 240.5},
+            *_camera_parameters(use_simulation),
         ],
     )
 
@@ -393,7 +451,7 @@ def generate_launch_description():
         executable='cinematic_bspline_filter',
         name='cinematic_bspline_filter',
         output='screen',
-        condition=IfCondition(use_cinematic_bspline),
+        condition=_if_all_true(use_cinematic_bspline, start_cinematography_nodes),
         parameters=[
             {
                 'bspline_in_topic': PythonExpression(
@@ -414,27 +472,17 @@ def generate_launch_description():
         executable='simulated_object_detector',
         name='simulated_object_detector',
         output='screen',
-        condition=IfCondition(
-            PythonExpression(
-                [
-                    '"true" if "',
-                    use_simulation,
-                    '" == "true" and "',
-                    use_cinematic_bspline,
-                    '" == "true" else "false"',
-                ]
-            )
-        ),
+        condition=_if_all_true(use_simulation, use_cinematic_bspline, start_cinematography_nodes),
         remappings=[
             ('depth/image_raw', depth_topic),
         ],
         parameters=[
-            {'cx': 320.5},
-            {'cy': 240.5},
-            {'fx': 387.229248046875},
-            {'fy': 387.229248046875},
-            {'width': 640},
-            {'height': 480},
+            {'cx': SIMULATED_DEPTH_CAMERA['camera_cx']},
+            {'cy': SIMULATED_DEPTH_CAMERA['camera_cy']},
+            {'fx': SIMULATED_DEPTH_CAMERA['camera_fx']},
+            {'fy': SIMULATED_DEPTH_CAMERA['camera_fy']},
+            {'width': SIMULATED_DEPTH_CAMERA['image_width']},
+            {'height': SIMULATED_DEPTH_CAMERA['image_height']},
         ],
     )
 
@@ -443,7 +491,7 @@ def generate_launch_description():
         executable='simulated_focus_publisher',
         name='simulated_focus_publisher',
         output='screen',
-        condition=IfCondition(use_simulation),
+        condition=_if_all_true(use_simulation, start_cinematography_nodes),
         parameters=[
             {
                 'odom_topic': PythonExpression(
@@ -460,7 +508,7 @@ def generate_launch_description():
         executable='simulated_light_publisher',
         name='simulated_light_publisher',
         output='screen',
-        condition=IfCondition(use_simulation),
+        condition=_if_all_true(use_simulation, start_cinematography_nodes),
         parameters=[
             {
                 'odom_topic': PythonExpression(
@@ -476,7 +524,7 @@ def generate_launch_description():
         executable='cost_function_calculator',
         name='cost_function_calculator',
         output='screen',
-        condition=UnlessCondition(use_simulation),
+        condition=_if_all_true(not_use_simulation, start_cinematography_nodes),
         parameters=[
             # NOTE: /imu_propagate is used as the odometry source for hardware mode. Confirm this topic matches the flight controller configuration.
             {'odom_topic': '/imu_propagate'},
@@ -485,10 +533,6 @@ def generate_launch_description():
             {'bbox_topic': '/object_detection/bounding_box'},
             {'dimensions_topic': '/object_detection/dimensions'},
             {'light_vector_topic': '/cinematography/light_vector'},
-            {'camera_fx': 387.229248046875},
-            {'camera_fy': 387.229248046875},
-            {'camera_cx': 320.5},
-            {'camera_cy': 240.5},
         ],
     )
 
@@ -531,6 +575,7 @@ def generate_launch_description():
     ld.add_action(mlp_weights_path_cmd)
     ld.add_action(use_simulation_cmd)
     ld.add_action(use_distinctive_trajs_cmd)
+    ld.add_action(start_cinematography_nodes_cmd)
 
     # Kinematic/cinematographic constraint args
     ld.add_action(default_max_vel_cmd)

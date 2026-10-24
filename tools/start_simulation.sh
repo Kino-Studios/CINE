@@ -2,6 +2,8 @@
 set -euo pipefail
 
 MODE="${1:-}"
+# Anything after the mode is passed to the launch file as name:=value arguments.
+shift || true
 
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
@@ -33,7 +35,8 @@ case "${MODE}" in
   "" ) ;;
   baseline ) LAUNCH_ARGS+=("use_cinematic_bspline:=false") ;;
   constrained|cinematic ) LAUNCH_ARGS+=("use_cinematic_bspline:=true") ;;
-  * ) echo "Usage: $0 [baseline|constrained]" >&2; exit 2 ;;
+  * ) echo "Usage: $0 [baseline|constrained] [name:=value ...]" >&2; exit 2 ;;
 esac
+LAUNCH_ARGS+=("$@")
 
 exec ros2 launch cine_bringup cinematic_run.launch.py "${LAUNCH_ARGS[@]}"

@@ -72,12 +72,22 @@ def _cleanup_cyclonedds() -> None:
                 pass
 
 
-def _ensure_display(env: dict[str, str]) -> None:
+def _ensure_display(
+    env: dict[str, str],
+    proc_version: Path = Path('/proc/version'),
+    resolv_conf: Path = Path('/etc/resolv.conf'),
+) -> None:
     if env.get('DISPLAY'):
         return
-    if Path('/etc/resolv.conf').is_file():
+    # Under WSL the X server runs on the Windows host, whose address is the nameserver WSL
+    # writes to resolv.conf. Elsewhere that nameserver is a local resolver, not an X server.
+    try:
+        is_wsl = 'microsoft' in proc_version.read_text(encoding='utf-8').lower()
+    except OSError:
+        is_wsl = False
+    if is_wsl and resolv_conf.is_file():
         try:
-            with open('/etc/resolv.conf', encoding='utf-8') as handle:
+            with open(resolv_conf, encoding='utf-8') as handle:
                 for line in handle:
                     if line.startswith('nameserver'):
                         parts = line.split()
@@ -306,7 +316,8 @@ def _launch_simulation(
     )
     log_path = Path(log_handle.name)
     sim_proc = subprocess.Popen(
-        [str(start_script), mode_label],
+        # This launcher starts the cinematography nodes itself.
+        [str(start_script), mode_label, 'start_cinematography_nodes:=false'],
         stdout=log_handle,
         stderr=subprocess.STDOUT,
         env=os.environ,

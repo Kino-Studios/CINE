@@ -27,6 +27,4 @@ def relative_depth_metres(network_depth: np.ndarray, max_depth_m: float) -> np.n
     if depth_max <= depth_min:
         return np.zeros_like(network_depth, dtype=np.float32)
 
-    return ((network_depth - depth_min) / (depth_max - depth_min) * max_depth_m).astype(
-        np.float32
-    )
+    return ((network_depth - depth_min) / (depth_max - depth_min) * max_depth_m).astype(np.float32)

@@ -1,6 +1,7 @@
 cff-version: 1.2.0
 message: If you use this software, please cite it using the metadata from this file.
-title: 'CINE: cinematographic trajectory planning for autonomous camera drones'
+title: 'CINE: Cinematic Intelligent Navigation Engine'
+abstract: Cinematographic trajectory planning for autonomous camera drones.
 type: software
 authors:
   - family-names: Kosukhin

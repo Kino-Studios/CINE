@@ -4,8 +4,10 @@ set -euo pipefail
 export ROS_DOMAIN_ID=0
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
+# Under WSL the X server runs on the Windows host, whose address is the resolv.conf
+# nameserver; elsewhere that nameserver is a local resolver, not an X server.
 if [ -z "${DISPLAY:-}" ]; then
-  if [ -f /etc/resolv.conf ]; then
+  if grep -qi microsoft /proc/version 2>/dev/null && [ -f /etc/resolv.conf ]; then
     export DISPLAY="$(grep -m1 nameserver /etc/resolv.conf | awk '{print $2}'):0"
   else
     export DISPLAY=":0"
@@ -75,7 +77,7 @@ SIMULATED_FOCUS_PID=""
 if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
   SIM_LOG=$(mktemp /tmp/ego_planner_baseline.XXXXXX)
   LOG_FILE="${SIM_LOG}"
-  "${SCRIPT_DIR}/start_simulation.sh" baseline > "$SIM_LOG" 2>&1 &
+  "${SCRIPT_DIR}/start_simulation.sh" baseline start_cinematography_nodes:=false > "$SIM_LOG" 2>&1 &
   SIM_PID=$!
 
   tail -f "$SIM_LOG" &
