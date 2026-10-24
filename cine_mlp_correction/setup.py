@@ -12,7 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages', [f'resource/{package_name}']),
         (f'share/{package_name}', ['package.xml']),
         (f'share/{package_name}/launch', ['launch/mlp_correction.launch.py']),
-        # Empty in a fresh clone; tools/download_assets.py fills it before the build.
+        # Empty in a fresh clone; the weights are not distributed, and so users add their own.
         (f'share/{package_name}/weights', glob('weights/*')),
     ],
     install_requires=['setuptools'],

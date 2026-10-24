@@ -10,8 +10,8 @@ def _installed_share_directory(package_name):
 def resolve_weights_dir(configured_dir, share_directory_of=_installed_share_directory):
     """Directory holding ``mlp_correction.onnx`` and ``scaler.json``.
 
-    An empty setting means the copy installed with this package, which
-    ``tools/download_assets.py`` fills before ``colcon build``.
+    An empty setting means the copy installed with this package from its ``weights/``
+    folder, where users place their own weights before ``colcon build``.
     """
     configured_dir = str(configured_dir).strip()
     if configured_dir:

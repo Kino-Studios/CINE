@@ -247,7 +247,7 @@ class TrajectoryDataLogger(Node):
                     )
 
     def log_data(self):
-        """Evaluate B-spline trajectories at 20 Hz to get planned position/velocity"""
+        """Evaluate B-spline trajectories at 50 Hz to get planned position/velocity"""
         if not self.logging_active or self.current_odom is None:
             return
 

@@ -87,7 +87,7 @@ rviz2 -d "$(ros2 pkg prefix cine_bringup)/share/cine_bringup/rviz/cinema.rviz"
 The trajectory data logger (`ros2 run cine_agent trajectory_data_logger`) writes one CSV
 per run to its `output_dir` parameter, by default `data/trajectories` under the
 directory it starts in (the collection scripts start it from the repository root). It
-writes one row per sample, taken at 20 Hz from the latest odometry:
+writes one row per sample, taken at 50 Hz from the latest odometry:
 
 | Column | Unit | Meaning |
 | --- | --- | --- |
