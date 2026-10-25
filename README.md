@@ -25,10 +25,10 @@ and slows down and smooths out while it is filming.
 This repository is the planning half. The sensing half, which runs on the Raspberry Pi 5
 on the drone, is [CINE-Sensing](https://github.com/Kino-Studios/CINE-Sensing).
 
-- **Paper:** *CINE: Cinematic Intelligent Navigation Engine using B-spline trajectory
-  generation and model-based perception*, D. Kosukhin. Abstract accepted to AIAA SciTech
-  2027. Manuscript and project page:
-  [kosukhin.com/projects/cine](https://kosukhin.com/projects/cine).
+The paper is *CINE: Cinematic Intelligent Navigation Engine using B-spline trajectory
+generation and model-based perception* by D. Kosukhin; its abstract was accepted to AIAA
+SciTech 2027. The manuscript and project page are at
+[kosukhin.com/projects/cine](https://kosukhin.com/projects/cine).
 
 ## Status
 
@@ -48,23 +48,23 @@ simulator. It is kept in `third_party/ego_planner_swarm/`, with every change lis
 `UPSTREAM.md`; [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) lists all bundled code.
 The `cine_*` packages add:
 
-- **cost functions** (`cine_agent/cine_agent/cost_functions/`) that score a moment of
+- cost functions (`cine_agent/cine_agent/cost_functions/`) that score a moment of
   flight on four things: framing, distance to the subject, light, and smoothness;
-- the **cinematic B-spline filter**
+- the cinematic B-spline filter
   (`cine_agent/cine_agent/setpoint_adjustment/nodes/cinematic_bspline_filter.py`), which
   takes each path EGO-Planner publishes and moves its control points to keep the subject
   inside the focus radius, then rescales its timing so speed and acceleration stay under
   limits that look smooth on camera;
-- the **waypoint generator** that places the shots around the subject
+- the waypoint generator that places the shots around the subject
   (`cine_agent/cine_agent/waypoint_automation/`);
-- the **learned drift correction** (`cine_mlp_correction/`): a two-layer, 128-unit neural
+- the learned drift correction (`cine_mlp_correction/`): a two-layer, 128-unit neural
   network that predicts how far the position estimate has drifted and shifts the path to
   compensate;
-- **simulated sensors** (subject detector, focus distance, light source, noisy odometry)
+- simulated sensors (subject detector, focus distance, light source, noisy odometry)
   that let the whole pipeline run without the drone;
-- the **data logger and analysis scripts** behind the numbers in the Results section;
-- one **configuration package** (`cine_config/`) that both the Python and the C++ code
-  read, so a tuning value lives in exactly one place.
+- the data logger and analysis scripts behind the numbers in the Results section;
+- a configuration package (`cine_config/`) that both the Python and the C++ code read,
+  so each tuning value is set in one place.
 
 ## How it works
 
@@ -98,8 +98,8 @@ CINE-Sensing, so this repository runs on its own.
 
 ## Results
 
-From the paper. Unless marked otherwise, these come from **15 trials in kinematic
-simulation** (the drone model follows the planned path exactly; there is no aerodynamics).
+From the paper. Unless marked otherwise, these come from 15 trials in kinematic
+simulation (the drone model follows the planned path exactly; there is no aerodynamics).
 
 | What was measured | Without | With |
 | --- | --- | --- |
@@ -110,18 +110,20 @@ simulation** (the drone model follows the planned path exactly; there is no aero
 | Path points within 10 cm of their target, without and with the drift correction | about 25% | over 95% |
 | Camera tilt when a bright light enters the view | 0° | 20°, with the heading turned about 110° away |
 
-**On the real camera (bench test, drone not flying):** with the drone held and moved by
-hand, the subject's average distance from its rule-of-thirds target fell from 127.6 px
-to 32.5 px (75% lower), and the variance of that distance fell by 98%, over 33 frames
-without CINE and 66 with it.
+A bench test on the real camera, with the drone held and moved by hand instead of flying,
+gave one hardware result: the subject's average distance from its rule-of-thirds target
+fell from 127.6 px to 32.5 px (75% lower), and the variance of that distance fell by 98%,
+over 33 frames without CINE and 66 with it.
 
-**Limitations.** Every flight result is from simulation. The depth model gives relative
+### Limitations
+
+Every flight result is from simulation. The depth model gives relative
 depth, not metres, unless a metric model is used. Cost weights were tuned by hand. CINE
 frames one subject at a time. The drift correction was trained on simulated drift, so it
 has not been shown to help with the drift the real sensors produce.
 
-**Next.** Fix the real drone's position drift (the open issue in CINE-Sensing), then fly
-the same baseline-against-CINE comparison outdoors.
+The next step is to fix the real drone's position drift (the open issue in
+CINE-Sensing) and then fly the same baseline-against-CINE comparison outdoors.
 
 ## Supported platforms
 
@@ -218,7 +220,9 @@ and average the runs in `data/trajectories/baseline` and `data/trajectories/cine
 
 ## MLP correction and Depth Anything 3
 
-**MLP correction.** The trained correction weights are not distributed with this
+### MLP correction
+
+The trained correction weights are not distributed with this
 repository, and so the correction is off by default. To use your own,
 `cine_mlp_correction` reads `mlp_correction.onnx`, `mlp_correction.onnx.data` and
 `scaler.json` from `cine_mlp_correction/weights/` (git ignores that folder's contents; the
@@ -227,7 +231,9 @@ build installs them to the package share). Set `mlp_weights_path` in
 use another directory. Without the model the node passes trajectories through unchanged.
 To run it on its own: `ros2 launch cine_mlp_correction mlp_correction.launch.py`.
 
-**Depth Anything 3.** `cine_depth` estimates depth from the camera image with
+### Depth Anything 3
+
+`cine_depth` estimates depth from the camera image with
 [Depth Anything 3](https://github.com/ByteDance-Seed/Depth-Anything-3) and publishes it in
 metres on `/depth/image_raw`. On the drone it does not run on the Raspberry Pi: it runs on
 a separate computer with an NVIDIA GTX 1660 Ti on the same ROS 2 network, which receives
