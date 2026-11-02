@@ -898,7 +898,7 @@ class CostCalculator:
             self.CostParams.INCLUDE_LIGHTING_IN_POSITION_COST,
         )
 
-        depth_cost, lighting_cost, smoothness_cost, _ = self._compute_cost_components(
+        depth_cost, lighting_cost, smoothness_cost, framing_cost = self._compute_cost_components(
             drone_x,
             drone_y,
             drone_z,
@@ -912,7 +912,7 @@ class CostCalculator:
             include_lighting=include_lighting,
         )
 
-        return float(depth_cost + lighting_cost + smoothness_cost)
+        return float(depth_cost + lighting_cost + smoothness_cost + framing_cost)
 
     def _is_waypoint_occluded(
         self,

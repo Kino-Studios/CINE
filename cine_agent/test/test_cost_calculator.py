@@ -162,3 +162,47 @@ def test_calibration_parameter_integration(mock_node):
         include_lighting=False,
     )
     assert res_double[3] > framing_cost
+
+
+def _position_cost(calculator):
+    return calculator.estimate_position_cost_at_position(
+        drone_x=0.0,
+        drone_y=0.0,
+        drone_z=0.0,
+        target_world_x=1.0,
+        target_world_y=0.0,
+        target_world_z=1.0,
+        reference_drone_x=0.0,
+        reference_drone_y=0.0,
+        reference_drone_z=-1.0,
+    )
+
+
+def _framing_component(calculator):
+    return calculator._compute_cost_components(
+        drone_x=0.0,
+        drone_y=0.0,
+        drone_z=0.0,
+        target_world_x=1.0,
+        target_world_y=0.0,
+        target_world_z=1.0,
+        reference_drone_x=0.0,
+        reference_drone_y=0.0,
+        reference_drone_z=-1.0,
+        include_framing=True,
+        include_lighting=False,
+    )[3]
+
+
+def test_position_cost_rises_by_framing_cost_when_framing_is_on(mock_node):
+    calculator = CostCalculator(mock_node)
+    calculator._get_bool_parameter = lambda name, default: (
+        name == ('include_framing_in_position_cost')
+    )
+    with_framing = _position_cost(calculator)
+
+    calculator._get_bool_parameter = lambda name, default: False
+    without_framing = _position_cost(calculator)
+
+    assert with_framing - without_framing == pytest.approx(_framing_component(calculator))
+    assert _framing_component(calculator) > 0.0

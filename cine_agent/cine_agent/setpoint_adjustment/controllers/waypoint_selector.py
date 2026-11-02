@@ -2,7 +2,9 @@ import math
 from collections.abc import Callable
 
 import numpy as np
+from geometry_msgs.msg import Point
 from rclpy.node import Node
+from visualization_msgs.msg import Marker
 
 from ..utils.config_loader import ConfigLoader
 from ..utils.trajectory_planner import (
@@ -23,6 +25,8 @@ class WaypointSelector:
         self.last_optimization_time = 0.0
         self.optimized_center: tuple[float, float] | None = None
         self.optimized_radius: float | None = None
+
+        self.candidates_pub = self.node.create_publisher(Marker, '/cinematography/candidates', 10)
 
     def select_next_waypoint(
         self,
@@ -67,8 +71,8 @@ class WaypointSelector:
         )
         r_min, r_max = (min(r_min, r_max), max(r_min, r_max))
         base_r = float(radius_m)
-        r_low = max(0.1, min(base_r, base_r * 1.5, r_max))
-        r_high = min(max(base_r, base_r * 0.7, r_min), r_max)
+        r_low = max(0.1, r_min, base_r * 0.7)
+        r_high = min(r_max, base_r * 1.5)
 
         if r_high < r_low:
             r_low, r_high = r_min, r_max
@@ -80,6 +84,7 @@ class WaypointSelector:
 
         best = None
         best_cost = float('inf')
+        evaluated_positions: list[tuple[float, float, float]] = []
 
         for da in angle_offsets:
             theta = self.phase_theta + float(da)
@@ -91,6 +96,7 @@ class WaypointSelector:
                 z = float(altitude_m)
 
                 cost = cost_function(x, y, z)
+                evaluated_positions.append((x, y, z))
                 if cost is None or not math.isfinite(cost):
                     continue
 
@@ -98,7 +104,54 @@ class WaypointSelector:
                     best_cost = float(cost)
                     best = np.array([x, y, z], dtype=float)
 
+        self._publish_candidate_markers(evaluated_positions, best)
+
         return best
+
+    def _publish_candidate_markers(
+        self,
+        evaluated_positions: list[tuple[float, float, float]],
+        best: np.ndarray | None,
+    ) -> None:
+        stamp = self.node.get_clock().now().to_msg()
+
+        candidate_marker = Marker()
+        candidate_marker.header.stamp = stamp
+        candidate_marker.header.frame_id = 'world'
+        candidate_marker.ns = 'candidates'
+        candidate_marker.id = 0
+        candidate_marker.type = Marker.SPHERE_LIST
+        candidate_marker.action = Marker.ADD
+        candidate_marker.scale.x = 0.08
+        candidate_marker.scale.y = 0.08
+        candidate_marker.scale.z = 0.08
+        candidate_marker.color.r = 0.9
+        candidate_marker.color.g = 0.9
+        candidate_marker.color.b = 0.9
+        candidate_marker.color.a = 0.9
+        candidate_marker.points = [
+            Point(x=float(x), y=float(y), z=float(z)) for x, y, z in evaluated_positions
+        ]
+        self.candidates_pub.publish(candidate_marker)
+
+        if best is None:
+            return
+
+        winner_marker = Marker()
+        winner_marker.header.stamp = stamp
+        winner_marker.header.frame_id = 'world'
+        winner_marker.ns = 'candidates'
+        winner_marker.id = 1
+        winner_marker.type = Marker.SPHERE
+        winner_marker.action = Marker.ADD
+        winner_marker.pose.position = Point(x=float(best[0]), y=float(best[1]), z=float(best[2]))
+        winner_marker.pose.orientation.w = 1.0
+        winner_marker.scale.x = 0.16
+        winner_marker.scale.y = 0.16
+        winner_marker.scale.z = 0.16
+        winner_marker.color.g = 1.0
+        winner_marker.color.a = 1.0
+        self.candidates_pub.publish(winner_marker)
 
     def build_initial_waypoints(
         self,

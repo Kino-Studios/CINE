@@ -21,7 +21,7 @@
     "framing_vertical_weight": 0.75,
     "large_penalty": 1000.0,
     "include_lighting_in_position_cost": false,
-    "include_framing_in_position_cost": false,
+    "include_framing_in_position_cost": true,
     "include_lighting_in_orientation_cost": true,
     "include_framing_in_orientation_cost": true
   }
