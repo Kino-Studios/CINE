@@ -16,6 +16,22 @@ python3 tools/format.py --check     # whitespace convention
 cd ~/cine_ws && colcon test --packages-select cine_config cine_agent cine_mlp_correction
 ```
 
+## Command-line tool
+
+The `cine` command (package `cine_cli`) runs on the ground PC and the Mac. Install it from
+the repository root with pipx, not plain `pip`, because Ubuntu 24.04 refuses `pip` into the
+system Python (`sudo apt install pipx` if pipx is missing):
+
+```bash
+pipx install --editable ./cine_cli
+pipx inject cine-cli ../CINE-Interfaces/cine_interfaces   # needed by `contract check`
+cine --help                                               # lists every command
+```
+
+The editable install means `git pull` updates the tool without reinstalling it. The
+`inject` line adds the CINE-Interfaces package to the same environment, so `contract check`
+can import it.
+
 ## Topics shared with CINE-Sensing
 
 Topics that cross the Wi-Fi link to the drone's Raspberry Pi are listed in the contract in

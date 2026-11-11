@@ -40,3 +40,5 @@ Constants live as JSON in `cine_config/config/`; code reads them through
 `cine_config.constants` (Python) or `cine_config/constants.hpp` (C++), never by editing the
 import path. Bare `pytest` from the repository root runs the pure-Python tests. Changes
 under `third_party/ego_planner_swarm/` are recorded in its `UPSTREAM.md`.
+
+Prefer `cine ... --json` over calling the underlying scripts directly: it prints one JSON object on stdout and uses distinct exit codes (exit `3` means the environment is not ready).
