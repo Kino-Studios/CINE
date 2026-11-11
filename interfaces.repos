@@ -1,0 +1,7 @@
+# The CINE-Interfaces commit this repository is checked against (vcstool format).
+# Keep version in step with the ref in .github/workflows/ci.yml.
+repositories:
+  CINE-Interfaces:
+    type: git
+    url: https://github.com/Kino-Studios/CINE-Interfaces.git
+    version: 9bd133ce7bed4b9d7ff50f1476eccd25ae8bb5d2

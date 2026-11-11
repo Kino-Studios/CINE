@@ -16,3 +16,6 @@ datasets/
 data/
 release-assets/
 .DS_Store
+
+# CINE-Interfaces checkout made by CI
+.deps/

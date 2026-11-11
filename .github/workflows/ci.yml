@@ -22,7 +22,13 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: pip install pytest numpy onnxruntime
+      - uses: actions/checkout@v7
+        with:
+          repository: Kino-Studios/CINE-Interfaces
+          # Must match version in interfaces.repos, so CI checks the pinned contract.
+          ref: 9bd133ce7bed4b9d7ff50f1476eccd25ae8bb5d2
+          path: .deps/CINE-Interfaces
+      - run: pip install pytest numpy onnxruntime ./.deps/CINE-Interfaces/cine_interfaces
       # Pure-Python tests: config loader, cost calculator, MLP weights lookup and
       # passthrough, and the tools. No ROS needed.
       - run: pytest

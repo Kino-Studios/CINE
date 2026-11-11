@@ -16,6 +16,22 @@ python3 tools/format.py --check     # whitespace convention
 cd ~/cine_ws && colcon test --packages-select cine_config cine_agent cine_mlp_correction
 ```
 
+## Topics shared with CINE-Sensing
+
+Topics that cross the Wi-Fi link to the drone's Raspberry Pi are listed in the contract in
+[CINE-Interfaces](https://github.com/Kino-Studios/CINE-Interfaces), and
+`tools/test_interface_contract.py` fails when this repository drifts from it. Install the
+checker next to this checkout before running `pytest`:
+
+```bash
+git clone https://github.com/Kino-Studios/CINE-Interfaces ../CINE-Interfaces
+pip install -e ../CINE-Interfaces/cine_interfaces
+```
+
+To rename or retype one of those topics, edit `contract.json` in CINE-Interfaces first,
+then change the code here and in CINE-Sensing, and move the commit pinned in
+`interfaces.repos` and `.github/workflows/ci.yml` forward.
+
 ## Style
 
 Python follows ruff (line length 100, single quotes, Python 3.12) and then
