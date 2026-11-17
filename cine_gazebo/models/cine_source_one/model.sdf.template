@@ -1,0 +1,696 @@
+<?xml version="1.0"?>
+<!--
+  Template for the CINE drone as the real airframe in Gazebo: a TBS Source One 5-inch
+  frame, four EMAX ECO II 2207 1700KV motors, Gemfan 51366 props, a 6S battery and the Pi
+  stack, with the same fixed Pi camera as cine_iris. The ArduPilot plugin, rotor joint
+  order and LiftDrag layout follow ardupilot_gazebo's iris_with_ardupilot (commit
+  f116b03552d05c8d0b0bed5ed67033a1183121d1; see models/ATTRIBUTION.md); the geometry,
+  mass and thrust numbers are the real vehicle's. gazebo_sim.launch.py fills {{camera}} and
+  {{imu_axes_noise}} through cine_gazebo.model_rendering; never load this file directly.
+
+  Mass blocks (box inertias; metres, kilograms; block sizes are assumed, the masses are
+  weighed). base_link carries all of them, its inertial computed by
+  model_rendering.composite_inertia (a test checks the totals):
+    4 motors with props   0.036 each, 0.03 x 0.03 x 0.03 at (+-0.07265, +-0.0865, 0)
+    frame                 0.300, 0.14 x 0.10 x 0.03 at the origin
+    battery               0.213, 0.075 x 0.035 x 0.047 at z -0.026
+    Pi stack              0.100, 0.065 x 0.056 x 0.03 at z +0.041
+  Total 0.757 kg (1.67 lb weighed with battery), centre of gravity z -0.0019 m.
+  The rotor links add 4 x 0.001 kg so each can spin as its own link, and the camera link
+  0.0001 kg (the Pi stack's weighed mass already includes the camera).
+
+  Thrust: each prop is three LiftDrag blades 120 degrees apart at r = 0.0486 m. With cla
+  4.25, a0 0.3 and blade area 2.308e-4 m^2 the thrust coefficient is k = 1.2552e-6
+  N/(rad/s)^2; the ArduPilot plugin's multiplier 3666 rad/s at full command follows from
+  it.
+
+  Rotor spin: ArduPilot's quad-X numbering, motor 1 front-right CCW, 2 back-left CCW, 3
+  front-left CW, 4 back-right CW, on channels 0 to 3; the model's +x is forward and +y is
+  left.
+
+  Looks: the visuals are meshes in meshes/, written in metres in base_link's frame except
+  the props, which are centred on their rotor links. Each has its colours in the .mtl
+  beside it except the carbon (twill texture) and the clear props (translucent material
+  below). The geometry is the TBS Source One V5 CAD, the
+  Raspberry Pi 5 and Camera Module 3 CAD, the owner's printed parts and a few generated
+  pieces (wiring, standoffs). The motors, stack, props and guards come from CAD that may not
+  be redistributed, so their meshes (restricted_*) stay out of git and those visuals are
+  missing on a fresh checkout; see models/ATTRIBUTION.md. Visuals only: collision and
+  inertia above still use the mass blocks.
+
+  Rotor joint control: p_gain is the Iris's 0.20 scaled by the rotor inertia (6e-6 here
+  against the Iris's 1.7e-4) so P * dt / I stays near the Iris's value at the 1 ms step.
+  Not yet run in Gazebo.
+-->
+<sdf version="1.9">
+  <model name="cine_source_one" canonical_link="base_link">
+    <link name="base_link">
+      <enable_wind>true</enable_wind>
+      <velocity_decay>
+        <linear>0.0</linear>
+        <angular>0.0</angular>
+      </velocity_decay>
+      <inertial>
+        <pose>0 0 -0.0019 0 0 0</pose>
+        <mass>0.757</mass>
+        <inertia>
+          <ixx>0.00178</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.00179</iyy>
+          <iyz>0</iyz>
+          <izz>0.00278</izz>
+        </inertia>
+      </inertial>
+      <collision name="frame_collision">
+        <geometry>
+          <box>
+            <size>0.14 0.10 0.03</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="battery_collision">
+        <pose>0 0 -0.026 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.075 0.035 0.047</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name="carbon_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/carbon.obj</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.9 0.9 0.9 1</ambient>
+          <diffuse>0.9 0.9 0.9 1</diffuse>
+          <specular>0.3 0.3 0.3 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>meshes/carbon_twill.png</albedo_map>
+              <metalness>0.1</metalness>
+              <roughness>0.35</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <!-- Colours for this and the meshes below come from the .mtl beside each mesh. -->
+      <visual name="airframe_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/airframe.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <!-- Raspberry Pi 5. -->
+      <visual name="pi5_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/pi5.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <!-- Camera Module 3 Wide on its printed mount. -->
+      <visual name="camera_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/camera.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <!-- restricted_* meshes are not in git; see models/ATTRIBUTION.md. -->
+      <visual name="restricted_motors_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/restricted_motors.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <!-- SpeedyBee F405 stack. -->
+      <visual name="restricted_stack_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/restricted_stack.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <!-- Printed motor guards. -->
+      <visual name="restricted_guards_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/restricted_guards.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <sensor name="imu_sensor" type="imu">
+        <gz_frame_id>base_link</gz_frame_id>
+        <pose degrees="true">0 0 0 180 0 0</pose>
+        <always_on>1</always_on>
+        <update_rate>1000.0</update_rate>
+        <imu>
+          {{imu_axes_noise}}
+        </imu>
+      </sensor>
+    </link>
+
+    <link name="rotor_0">
+      <pose relative_to="base_link">0.07265 -0.0865 0 0 0 0</pose>
+      <enable_wind>true</enable_wind>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>3.5e-06</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>3.5e-06</iyy>
+          <iyz>0</iyz>
+          <izz>6e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="visual">
+        <pose>0 0 0.025 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>meshes/restricted_prop_ccw.obj</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.85 0.88 0.9 1</ambient>
+          <diffuse>0.85 0.88 0.9 1</diffuse>
+          <specular>0.6 0.6 0.6 1</specular>
+          <pbr>
+            <metal>
+              <metalness>0</metalness>
+              <roughness>0.15</roughness>
+            </metal>
+          </pbr>
+        </material>
+        <transparency>0.6</transparency>
+      </visual>
+    </link>
+    <joint name="rotor_0_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_0</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <damping>0.0001</damping>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name="rotor_1">
+      <pose relative_to="base_link">-0.07265 0.0865 0 0 0 0</pose>
+      <enable_wind>true</enable_wind>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>3.5e-06</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>3.5e-06</iyy>
+          <iyz>0</iyz>
+          <izz>6e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="visual">
+        <pose>0 0 0.025 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>meshes/restricted_prop_ccw.obj</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.85 0.88 0.9 1</ambient>
+          <diffuse>0.85 0.88 0.9 1</diffuse>
+          <specular>0.6 0.6 0.6 1</specular>
+          <pbr>
+            <metal>
+              <metalness>0</metalness>
+              <roughness>0.15</roughness>
+            </metal>
+          </pbr>
+        </material>
+        <transparency>0.6</transparency>
+      </visual>
+    </link>
+    <joint name="rotor_1_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_1</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <damping>0.0001</damping>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name="rotor_2">
+      <pose relative_to="base_link">0.07265 0.0865 0 0 0 0</pose>
+      <enable_wind>true</enable_wind>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>3.5e-06</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>3.5e-06</iyy>
+          <iyz>0</iyz>
+          <izz>6e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="visual">
+        <pose>0 0 0.025 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>meshes/restricted_prop_cw.obj</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.85 0.88 0.9 1</ambient>
+          <diffuse>0.85 0.88 0.9 1</diffuse>
+          <specular>0.6 0.6 0.6 1</specular>
+          <pbr>
+            <metal>
+              <metalness>0</metalness>
+              <roughness>0.15</roughness>
+            </metal>
+          </pbr>
+        </material>
+        <transparency>0.6</transparency>
+      </visual>
+    </link>
+    <joint name="rotor_2_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_2</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <damping>0.0001</damping>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name="rotor_3">
+      <pose relative_to="base_link">-0.07265 -0.0865 0 0 0 0</pose>
+      <enable_wind>true</enable_wind>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia>
+          <ixx>3.5e-06</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>3.5e-06</iyy>
+          <iyz>0</iyz>
+          <izz>6e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name="visual">
+        <pose>0 0 0.025 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>meshes/restricted_prop_cw.obj</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.85 0.88 0.9 1</ambient>
+          <diffuse>0.85 0.88 0.9 1</diffuse>
+          <specular>0.6 0.6 0.6 1</specular>
+          <pbr>
+            <metal>
+              <metalness>0</metalness>
+              <roughness>0.15</roughness>
+            </metal>
+          </pbr>
+        </material>
+        <transparency>0.6</transparency>
+      </visual>
+    </link>
+    <joint name="rotor_3_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>rotor_3</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+        </limit>
+        <dynamics>
+          <damping>0.0001</damping>
+        </dynamics>
+      </axis>
+    </joint>
+
+    <!-- The real camera is fixed to the frame, so no gimbal. Gazebo cameras look along
+         their link's +x, which is the drone's forward axis. -->
+    <link name="camera_link">
+      <pose relative_to="base_link">0.05 0 0 0 0 0</pose>
+      <enable_wind>true</enable_wind>
+      <inertial>
+        <mass>0.0001</mass>
+        <inertia>
+          <ixx>1e-08</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1e-08</iyy>
+          <iyz>0</iyz>
+          <izz>1e-08</izz>
+        </inertia>
+      </inertial>
+      {{camera}}
+    </link>
+    <joint name="camera_joint" type="fixed">
+      <parent>base_link</parent>
+      <child>camera_link</child>
+    </joint>
+
+    <!-- Ground truth for logging the estimators against: the model's world pose alone,
+         one gz.msgs.Pose per message on /model/<name>/pose. -->
+    <plugin filename="gz-sim-pose-publisher-system"
+      name="gz::sim::systems::PosePublisher">
+      <publish_model_pose>true</publish_model_pose>
+      <publish_nested_model_pose>false</publish_nested_model_pose>
+      <publish_link_pose>false</publish_link_pose>
+      <publish_visual_pose>false</publish_visual_pose>
+      <publish_collision_pose>false</publish_collision_pose>
+      <publish_sensor_pose>false</publish_sensor_pose>
+      <use_pose_vector_msg>false</use_pose_vector_msg>
+      <update_frequency>50</update_frequency>
+    </plugin>
+
+    <plugin filename="gz-sim-joint-state-publisher-system"
+      name="gz::sim::systems::JointStatePublisher">
+    </plugin>
+    <plugin filename="gz-sim-lift-drag-system"
+        name="gz::sim::systems::LiftDrag">
+      <a0>0.3</a0>
+      <alpha_stall>1.4</alpha_stall>
+      <cla>4.25</cla>
+      <cda>0.10</cda>
+      <cma>0.0</cma>
+      <cla_stall>-0.025</cla_stall>
+      <cda_stall>0.0</cda_stall>
+      <cma_stall>0.0</cma_stall>
+      <area>2.308e-4</area>
+      <air_density>1.2041</air_density>
+      <cp>0.0486 0 0</cp>
+      <forward>0 1 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>rotor_0</link_name>
+    </plugin>
+    <plugin filename="gz-sim-lift-drag-system"
+        name="gz::sim::systems::LiftDrag">
+      <a0>0.3</a0>
+      <alpha_stall>1.4</alpha_stall>
+      <cla>4.25</cla>
+      <cda>0.10</cda>
+      <cma>0.0</cma>
+      <cla_stall>-0.025</cla_stall>
+      <cda_stall>0.0</cda_stall>
+      <cma_stall>0.0</cma_stall>
+      <area>2.308e-4</area>
+      <air_density>1.2041</air_density>
+      <cp>-0.0243 0.0421 0</cp>
+      <forward>-0.866 -0.5 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>rotor_0</link_name>
+    </plugin>
+    <plugin filename="gz-sim-lift-drag-system"
+        name="gz::sim::systems::LiftDrag">
+      <a0>0.3</a0>
+      <alpha_stall>1.4</alpha_stall>
+      <cla>4.25</cla>
+      <cda>0.10</cda>
+      <cma>0.0</cma>
+      <cla_stall>-0.025</cla_stall>
+      <cda_stall>0.0</cda_stall>
+      <cma_stall>0.0</cma_stall>
+      <area>2.308e-4</area>
+      <air_density>1.2041</air_density>
+      <cp>-0.0243 -0.0421 0</cp>
+      <forward>0.866 -0.5 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>rotor_0</link_name>
+    </plugin>
+    <plugin filename="gz-sim-lift-drag-system"
+        name="gz::sim::systems::LiftDrag">
+      <a0>0.3</a0>
+      <alpha_stall>1.4</alpha_stall>
+      <cla>4.25</cla>
+      <cda>0.10</cda>
+      <cma>0.0</cma>
+      <cla_stall>-0.025</cla_stall>
+      <cda_stall>0.0</cda_stall>
+      <cma_stall>0.0</cma_stall>
+      <area>2.308e-4</area>
+      <air_density>1.2041</air_density>
+      <cp>0.0486 0 0</cp>
+      <forward>0 1 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>rotor_1</link_name>
+    </plugin>
+    <plugin filename="gz-sim-lift-drag-system"
+        name="gz::sim::systems::LiftDrag">
+      <a0>0.3</a0>
+      <alpha_stall>1.4</alpha_stall>
+      <cla>4.25</cla>
+      <cda>0.10</cda>
+      <cma>0.0</cma>
+      <cla_stall>-0.025</cla_stall>
+      <cda_stall>0.0</cda_stall>
+      <cma_stall>0.0</cma_stall>
+      <area>2.308e-4</area>
+      <air_density>1.2041</air_density>
+      <cp>-0.0243 0.0421 0</cp>
+      <forward>-0.866 -0.5 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>rotor_1</link_name>
+    </plugin>
+    <plugin filename="gz-sim-lift-drag-system"
+        name="gz::sim::systems::LiftDrag">
+      <a0>0.3</a0>
+      <alpha_stall>1.4</alpha_stall>
+      <cla>4.25</cla>
+      <cda>0.10</cda>
+      <cma>0.0</cma>
+      <cla_stall>-0.025</cla_stall>
+      <cda_stall>0.0</cda_stall>
+      <cma_stall>0.0</cma_stall>
+      <area>2.308e-4</area>
+      <air_density>1.2041</air_density>
+      <cp>-0.0243 -0.0421 0</cp>
+      <forward>0.866 -0.5 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>rotor_1</link_name>
+    </plugin>
+    <plugin filename="gz-sim-lift-drag-system"
+        name="gz::sim::systems::LiftDrag">
+      <a0>0.3</a0>
+      <alpha_stall>1.4</alpha_stall>
+      <cla>4.25</cla>
+      <cda>0.10</cda>
+      <cma>0.0</cma>
+      <cla_stall>-0.025</cla_stall>
+      <cda_stall>0.0</cda_stall>
+      <cma_stall>0.0</cma_stall>
+      <area>2.308e-4</area>
+      <air_density>1.2041</air_density>
+      <cp>0.0486 0 0</cp>
+      <forward>0 -1 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>rotor_2</link_name>
+    </plugin>
+    <plugin filename="gz-sim-lift-drag-system"
+        name="gz::sim::systems::LiftDrag">
+      <a0>0.3</a0>
+      <alpha_stall>1.4</alpha_stall>
+      <cla>4.25</cla>
+      <cda>0.10</cda>
+      <cma>0.0</cma>
+      <cla_stall>-0.025</cla_stall>
+      <cda_stall>0.0</cda_stall>
+      <cma_stall>0.0</cma_stall>
+      <area>2.308e-4</area>
+      <air_density>1.2041</air_density>
+      <cp>-0.0243 0.0421 0</cp>
+      <forward>0.866 0.5 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>rotor_2</link_name>
+    </plugin>
+    <plugin filename="gz-sim-lift-drag-system"
+        name="gz::sim::systems::LiftDrag">
+      <a0>0.3</a0>
+      <alpha_stall>1.4</alpha_stall>
+      <cla>4.25</cla>
+      <cda>0.10</cda>
+      <cma>0.0</cma>
+      <cla_stall>-0.025</cla_stall>
+      <cda_stall>0.0</cda_stall>
+      <cma_stall>0.0</cma_stall>
+      <area>2.308e-4</area>
+      <air_density>1.2041</air_density>
+      <cp>-0.0243 -0.0421 0</cp>
+      <forward>-0.866 0.5 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>rotor_2</link_name>
+    </plugin>
+    <plugin filename="gz-sim-lift-drag-system"
+        name="gz::sim::systems::LiftDrag">
+      <a0>0.3</a0>
+      <alpha_stall>1.4</alpha_stall>
+      <cla>4.25</cla>
+      <cda>0.10</cda>
+      <cma>0.0</cma>
+      <cla_stall>-0.025</cla_stall>
+      <cda_stall>0.0</cda_stall>
+      <cma_stall>0.0</cma_stall>
+      <area>2.308e-4</area>
+      <air_density>1.2041</air_density>
+      <cp>0.0486 0 0</cp>
+      <forward>0 -1 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>rotor_3</link_name>
+    </plugin>
+    <plugin filename="gz-sim-lift-drag-system"
+        name="gz::sim::systems::LiftDrag">
+      <a0>0.3</a0>
+      <alpha_stall>1.4</alpha_stall>
+      <cla>4.25</cla>
+      <cda>0.10</cda>
+      <cma>0.0</cma>
+      <cla_stall>-0.025</cla_stall>
+      <cda_stall>0.0</cda_stall>
+      <cma_stall>0.0</cma_stall>
+      <area>2.308e-4</area>
+      <air_density>1.2041</air_density>
+      <cp>-0.0243 0.0421 0</cp>
+      <forward>0.866 0.5 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>rotor_3</link_name>
+    </plugin>
+    <plugin filename="gz-sim-lift-drag-system"
+        name="gz::sim::systems::LiftDrag">
+      <a0>0.3</a0>
+      <alpha_stall>1.4</alpha_stall>
+      <cla>4.25</cla>
+      <cda>0.10</cda>
+      <cma>0.0</cma>
+      <cla_stall>-0.025</cla_stall>
+      <cda_stall>0.0</cda_stall>
+      <cma_stall>0.0</cma_stall>
+      <area>2.308e-4</area>
+      <air_density>1.2041</air_density>
+      <cp>-0.0243 -0.0421 0</cp>
+      <forward>-0.866 0.5 0</forward>
+      <upward>0 0 1</upward>
+      <link_name>rotor_3</link_name>
+    </plugin>
+    <plugin filename="gz-sim-apply-joint-force-system"
+      name="gz::sim::systems::ApplyJointForce">
+      <joint_name>rotor_0_joint</joint_name>
+    </plugin>
+    <plugin filename="gz-sim-apply-joint-force-system"
+      name="gz::sim::systems::ApplyJointForce">
+      <joint_name>rotor_1_joint</joint_name>
+    </plugin>
+    <plugin filename="gz-sim-apply-joint-force-system"
+      name="gz::sim::systems::ApplyJointForce">
+      <joint_name>rotor_2_joint</joint_name>
+    </plugin>
+    <plugin filename="gz-sim-apply-joint-force-system"
+      name="gz::sim::systems::ApplyJointForce">
+      <joint_name>rotor_3_joint</joint_name>
+    </plugin>
+    <plugin name="ArduPilotPlugin"
+      filename="ArduPilotPlugin">
+      <fdm_addr>127.0.0.1</fdm_addr>
+      <fdm_port_in>9002</fdm_port_in>
+      <connectionTimeoutMaxCount>5</connectionTimeoutMaxCount>
+      <lock_step>1</lock_step>
+      <no_time_sync>1</no_time_sync>
+      <have_32_channels>0</have_32_channels>
+      <modelXYZToAirplaneXForwardZDown degrees="true">0 0 0 180 0 0</modelXYZToAirplaneXForwardZDown>
+      <gazeboXYZToNED degrees="true">0 0 0 180 0 90</gazeboXYZToNED>
+      <imuName>base_link::imu_sensor</imuName>
+      <control channel="0">
+        <jointName>rotor_0_joint</jointName>
+        <useForce>1</useForce>
+        <multiplier>3666</multiplier>
+        <offset>0</offset>
+        <servo_min>1100</servo_min>
+        <servo_max>1900</servo_max>
+        <type>VELOCITY</type>
+        <p_gain>0.007</p_gain>
+        <i_gain>0</i_gain>
+        <d_gain>0</d_gain>
+        <i_max>0</i_max>
+        <i_min>0</i_min>
+        <cmd_max>2.5</cmd_max>
+        <cmd_min>-2.5</cmd_min>
+        <controlVelocitySlowdownSim>1</controlVelocitySlowdownSim>
+      </control>
+      <control channel="1">
+        <jointName>rotor_1_joint</jointName>
+        <useForce>1</useForce>
+        <multiplier>3666</multiplier>
+        <offset>0</offset>
+        <servo_min>1100</servo_min>
+        <servo_max>1900</servo_max>
+        <type>VELOCITY</type>
+        <p_gain>0.007</p_gain>
+        <i_gain>0</i_gain>
+        <d_gain>0</d_gain>
+        <i_max>0</i_max>
+        <i_min>0</i_min>
+        <cmd_max>2.5</cmd_max>
+        <cmd_min>-2.5</cmd_min>
+        <controlVelocitySlowdownSim>1</controlVelocitySlowdownSim>
+      </control>
+      <control channel="2">
+        <jointName>rotor_2_joint</jointName>
+        <useForce>1</useForce>
+        <multiplier>-3666</multiplier>
+        <offset>0</offset>
+        <servo_min>1100</servo_min>
+        <servo_max>1900</servo_max>
+        <type>VELOCITY</type>
+        <p_gain>0.007</p_gain>
+        <i_gain>0</i_gain>
+        <d_gain>0</d_gain>
+        <i_max>0</i_max>
+        <i_min>0</i_min>
+        <cmd_max>2.5</cmd_max>
+        <cmd_min>-2.5</cmd_min>
+        <controlVelocitySlowdownSim>1</controlVelocitySlowdownSim>
+      </control>
+      <control channel="3">
+        <jointName>rotor_3_joint</jointName>
+        <useForce>1</useForce>
+        <multiplier>-3666</multiplier>
+        <offset>0</offset>
+        <servo_min>1100</servo_min>
+        <servo_max>1900</servo_max>
+        <type>VELOCITY</type>
+        <p_gain>0.007</p_gain>
+        <i_gain>0</i_gain>
+        <d_gain>0</d_gain>
+        <i_max>0</i_max>
+        <i_min>0</i_min>
+        <cmd_max>2.5</cmd_max>
+        <cmd_min>-2.5</cmd_min>
+        <controlVelocitySlowdownSim>1</controlVelocitySlowdownSim>
+      </control>
+    </plugin>
+  </model>
+</sdf>
