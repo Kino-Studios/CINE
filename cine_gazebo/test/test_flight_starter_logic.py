@@ -408,8 +408,11 @@ def test_source_switch_waits_while_overshoot_has_the_vehicle_far_from_the_hold_p
 
     action = starter.step(
         _agreeing(
-            206.0, autopilot_velocity=(0.05, 0.0, 0.0), target_index=None, position_error_m=0.9
-        )
+            206.0,
+            autopilot_velocity=(0.05, 0.0, 0.0),
+            target_index=None,
+            position_error_m=0.9,
+        ),
     )
 
     assert action.kind == 'none'
@@ -429,7 +432,7 @@ def test_vehicle_that_never_settles_lands_with_a_message_saying_so():
     starter = _starter_braking_for_switch()
 
     action = starter.step(
-        _agreeing(221.0, autopilot_velocity=MOVING, target_index=None, position_error_m=0.9)
+        _agreeing(221.0, autopilot_velocity=MOVING, target_index=None, position_error_m=0.9),
     )
 
     assert action.kind == 'land'
@@ -442,10 +445,10 @@ def test_hold_after_braking_is_confirmed_by_the_full_confirm_window():
     starter.step(_agreeing(208.0, target_index=None, position_error_m=0.1, ekf_source_set=2))
 
     early = starter.step(
-        _agreeing(212.0, target_index=None, position_error_m=0.1, ekf_source_set=2)
+        _agreeing(212.0, target_index=None, position_error_m=0.1, ekf_source_set=2),
     )
     confirmed = starter.step(
-        _agreeing(213.0, target_index=None, position_error_m=0.1, ekf_source_set=2)
+        _agreeing(213.0, target_index=None, position_error_m=0.1, ekf_source_set=2),
     )
 
     assert early.kind == 'none'
@@ -458,7 +461,7 @@ def test_position_jump_at_the_switch_after_braking_still_fails_the_hold():
     starter.step(_agreeing(208.0, target_index=None, position_error_m=0.1, ekf_source_set=2))
 
     action = starter.step(
-        _agreeing(209.0, target_index=None, position_error_m=2.5, ekf_source_set=2)
+        _agreeing(209.0, target_index=None, position_error_m=2.5, ekf_source_set=2),
     )
 
     assert action.kind == 'land'

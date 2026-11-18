@@ -125,10 +125,12 @@ class FlightStarter:
     def __init__(self, config: StarterConfig):
         if config.nav_source not in VALID_NAV_SOURCES:
             raise ValueError(
-                f'nav_source must be one of {VALID_NAV_SOURCES}, got {config.nav_source!r}'
+                f'nav_source must be one of {VALID_NAV_SOURCES}, got {config.nav_source!r}',
             )
+
         if config.nav_source == 'vins' and not config.excitation_pattern:
             raise ValueError('excitation_pattern must not be empty when nav_source is vins')
+
         self._config = config
         self._state = StarterState.WAITING_FOR_LINK
         self._failure_message = ''
@@ -148,10 +150,12 @@ class FlightStarter:
     def step(self, observation: Observation) -> Action:
         if self._state_entered_s is None:
             self._state_entered_s = observation.time_s
+
         if self._state.name in POST_ARM_STATES:
             guard_failure = self._post_arm_failure(observation)
             if guard_failure is not None:
                 return guard_failure
+
         handler = {
             StarterState.WAITING_FOR_LINK: self._wait_for_link,
             StarterState.WAITING_FOR_POSITION: self._wait_for_position,
@@ -172,8 +176,10 @@ class FlightStarter:
     def _post_arm_failure(self, observation):
         if not observation.connected:
             return self._fail(observation, 'MAVROS link lost')
+
         if not observation.armed:
             return self._fail(observation, 'disarmed unexpectedly')
+
         if observation.mode != GUIDED_MODE:
             return self._fail(observation, f'mode changed to {observation.mode} by the autopilot')
 
@@ -206,6 +212,7 @@ class FlightStarter:
             self._enter(StarterState.WAITING_FOR_POSITION, observation)
 
             return self._wait_for_position(observation)
+
         if self._waited_too_long(observation):
             return self._fail(
                 observation,
@@ -219,6 +226,7 @@ class FlightStarter:
             self._enter(StarterState.SETTING_GUIDED, observation)
 
             return self._set_guided(observation)
+
         if self._waited_too_long(observation):
             return self._fail(
                 observation,
@@ -264,15 +272,18 @@ class FlightStarter:
         if observation.altitude_m >= TAKEOFF_REACHED_FRACTION * config.takeoff_altitude_m:
             if config.nav_source == 'sim':
                 return self._trigger(observation)
+
             self._enter(StarterState.EXCITING, observation)
 
             return self._current_setpoint('takeoff altitude reached, exciting VINS')
+
         if observation.time_s - self._state_entered_s > config.takeoff_timeout_s:
             return self._land(
                 observation,
                 f'takeoff did not reach {config.takeoff_altitude_m:g} m '
                 f'within {config.takeoff_timeout_s:g} s',
             )
+
         if observation.altitude_m < AIRBORNE_ALTITUDE_M:
             return Action(
                 'takeoff',
@@ -291,23 +302,29 @@ class FlightStarter:
 
     def _vio_agrees(self, observation):
         config = self._config
+
         if observation.vio_velocity is None or observation.vio_age_s is None:
             return False
+
         if observation.vio_age_s > config.vio_max_age_s:
             return False
 
         return all(
             abs(vio - autopilot) <= config.vio_velocity_tolerance_mps
             for vio, autopilot in zip(
-                observation.vio_velocity, observation.autopilot_velocity, strict=True
+                observation.vio_velocity,
+                observation.autopilot_velocity,
+                strict=True,
             )
         )
 
     def _excite(self, observation):
         config = self._config
+
         if self._vio_agrees(observation):
             if self._agreement_started_s is None:
                 self._agreement_started_s = observation.time_s
+
             if observation.time_s - self._agreement_started_s >= config.vio_ready_hold_s:
                 if self._speed_mps(observation) > config.switch_max_speed_mps:
                     self._enter(StarterState.SETTLING, observation)
@@ -320,12 +337,14 @@ class FlightStarter:
                 return self._switch_to_external_vision(observation)
         else:
             self._agreement_started_s = None
+
         reached_target = (
             observation.target_index == self._pattern_index
             and observation.position_error_m <= config.hold_tolerance_m
         )
         if not reached_target:
             return self._current_setpoint('flying to excitation point')
+
         self._pattern_index += 1
         if self._pattern_index == len(config.excitation_pattern):
             self._pattern_index = 0
@@ -363,6 +382,7 @@ class FlightStarter:
         )
         if at_rest_on_hold_point:
             return self._switch_to_external_vision(observation)
+
         if observation.time_s - self._state_entered_s > config.settle_timeout_s:
             return self._land(
                 observation,
@@ -377,6 +397,7 @@ class FlightStarter:
             self._enter(StarterState.CONFIRMING_HOLD, observation)
 
             return self._confirm_hold(observation)
+
         if self._command_unconfirmed_too_long(observation):
             return self._land(observation, 'EKF source switch refused')
 
@@ -388,13 +409,16 @@ class FlightStarter:
 
     def _confirm_hold(self, observation):
         config = self._config
+
         if observation.ekf_source_set != EXTERNAL_VISION_SOURCE_SET:
             return self._land(observation, 'EKF source fell back from external vision')
+
         if observation.position_error_m > config.hold_tolerance_m:
             return self._land(
                 observation,
                 f'position drifted {observation.position_error_m:.2f} m after switching to VINS',
             )
+
         if observation.time_s - self._state_entered_s >= config.hold_confirm_s:
             return self._trigger(observation)
 
@@ -410,12 +434,14 @@ class FlightStarter:
             self._enter(StarterState.FAILED, observation)
 
             return Action('none', message=self._failure_message)
+
         if observation.time_s - self._state_entered_s > self._config.landing_timeout_s:
             return self._fail(
                 observation,
                 f'landing did not complete within {self._config.landing_timeout_s:g} s '
                 f'({self._failure_message})',
             )
+
         if observation.mode != LAND_MODE:
             return Action('land', source_set=GPS_SOURCE_SET, message='repeating land')
 

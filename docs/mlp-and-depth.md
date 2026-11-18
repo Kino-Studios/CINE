@@ -33,13 +33,13 @@ ros2 launch cine_depth depth_publisher.launch.py
 Drop the PyTorch CPU index on a CUDA machine. The weights download from Hugging Face on
 first start. The node takes these parameters:
 
-| Parameter | Default | Meaning |
-| --- | --- | --- |
-| `model_id` | `depth-anything/DA3METRIC-LARGE` | Hugging Face model. A `DA3METRIC` model gives depth in metres, using the focal length from `cine_config/config/camera/camera-params.json`; any other model gives relative depth, stretched over 0 to `max_depth`. |
-| `process_resolution` | `504` | Longest side, in pixels, of the image the network sees. The output is resized back to the camera resolution. |
-| `depth_encoding` | `32FC1` | `32FC1` publishes metres as float; `mono8` publishes depth normalised to 0 to 255. |
-| `depth_scale` | `1.0` | Multiplier applied to the depth in metres. |
-| `max_depth` | `10.0` | Far end, in metres, of the range relative depth is stretched over. |
+| Parameter            | Default                          | Meaning                                                                                                                                                                                                           |
+| -------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model_id`           | `depth-anything/DA3METRIC-LARGE` | Hugging Face model. A `DA3METRIC` model gives depth in metres, using the focal length from `cine_config/config/camera/camera-params.json`; any other model gives relative depth, stretched over 0 to `max_depth`. |
+| `process_resolution` | `504`                            | Longest side, in pixels, of the image the network sees. The output is resized back to the camera resolution.                                                                                                      |
+| `depth_encoding`     | `32FC1`                          | `32FC1` publishes metres as float; `mono8` publishes depth normalised to 0 to 255.                                                                                                                                |
+| `depth_scale`        | `1.0`                            | Multiplier applied to the depth in metres.                                                                                                                                                                        |
+| `max_depth`          | `10.0`                           | Far end, in metres, of the range relative depth is stretched over.                                                                                                                                                |
 
 The default model has 334M parameters and took about 14 s per 1152×648 frame on an
 Apple M-series CPU, and so a CUDA GPU is recommended for anything close to the camera

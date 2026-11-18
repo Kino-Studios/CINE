@@ -32,10 +32,13 @@ set -u
 
 LAUNCH_ARGS=()
 case "${MODE}" in
-  "" ) ;;
-  baseline ) LAUNCH_ARGS+=("use_cinematic_bspline:=false") ;;
-  constrained|cinematic ) LAUNCH_ARGS+=("use_cinematic_bspline:=true") ;;
-  * ) echo "Usage: $0 [baseline|constrained] [name:=value ...]" >&2; exit 2 ;;
+  "") ;;
+  baseline) LAUNCH_ARGS+=("use_cinematic_bspline:=false") ;;
+  constrained | cinematic) LAUNCH_ARGS+=("use_cinematic_bspline:=true") ;;
+  *)
+    echo "Usage: $0 [baseline|constrained] [name:=value ...]" >&2
+    exit 2
+    ;;
 esac
 LAUNCH_ARGS+=("$@")
 

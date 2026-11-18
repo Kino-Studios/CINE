@@ -14,7 +14,11 @@ class KinematicsController:
         self.smooth_vel = np.zeros(3, dtype=float)
 
     def next_kinematic_step(
-        self, target_pos: np.ndarray, current_pos: np.ndarray, dt: float, has_focus: bool
+        self,
+        target_pos: np.ndarray,
+        current_pos: np.ndarray,
+        dt: float,
+        has_focus: bool,
     ) -> np.ndarray:
         if self.smooth_pos is None:
             self.smooth_pos = current_pos.copy()

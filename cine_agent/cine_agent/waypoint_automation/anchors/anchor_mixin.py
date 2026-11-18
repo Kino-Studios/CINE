@@ -11,6 +11,7 @@ class AnchorMixin:
             return
 
         static_world = [self._rel_to_world(wp) for wp in self._scaled_static_waypoints()]
+
         if target_world is None and self.detected_object is not None:
             target_world, _ = self._compute_object_world(self.detected_object)
 
@@ -23,22 +24,23 @@ class AnchorMixin:
             )
             dist_start = math.dist(static_world[start_idx], target_world)
             dist_end = math.dist(static_world[end_idx], target_world)
-
             if math.isfinite(dist_start) and math.isfinite(dist_end):
                 self.anchor_focus_distance = max(dist_start, dist_end)
             else:
                 self.anchor_focus_distance = None
+
             self.anchor_start_world = static_world[start_idx]
             self.anchor_end_world = static_world[end_idx]
             self.anchor_source = 'static_pair'
             self.get_logger().debug(
                 f'Anchors static_pair source={self.anchor_source} start={start_idx} end={end_idx} focus_dist={self.anchor_focus_distance} '
-                f'target={tuple(target_world)} start_world={tuple(self.anchor_start_world)} end_world={tuple(self.anchor_end_world)}'
+                f'target={tuple(target_world)} start_world={tuple(self.anchor_start_world)} end_world={tuple(self.anchor_end_world)}',
             )
         else:
             start_idx = 0
+
             if self.active_waypoints is not None and 0 <= int(self.current_target_index) < len(
-                self.active_waypoints
+                self.active_waypoints,
             ):
                 start_idx = int(self.current_target_index)
             else:
@@ -50,6 +52,7 @@ class AnchorMixin:
                         + (static_world[i][2] - self.current_pos[2]) ** 2
                     ),
                 )
+
             end_idx = len(static_world) - 1
             self.anchor_start_world = static_world[start_idx]
             self.anchor_end_world = static_world[end_idx]
@@ -57,7 +60,7 @@ class AnchorMixin:
             self.anchor_focus_distance = None
             self.get_logger().debug(
                 f'Anchors fallback source={self.anchor_source} start={start_idx} end={end_idx} '
-                f'start_world={tuple(self.anchor_start_world)} end_world={tuple(self.anchor_end_world)}'
+                f'start_world={tuple(self.anchor_start_world)} end_world={tuple(self.anchor_end_world)}',
             )
 
         self.anchor_start_idx = int(start_idx)
@@ -87,22 +90,25 @@ class AnchorMixin:
         d1, _ = _dist_at(1.0)
         f0 = d0 - desired_distance
         f1 = d1 - desired_distance
-
         if not (math.isfinite(f0) and math.isfinite(f1)):
             return None
+
         if abs(f0) <= 1e-6:
             _, p = _dist_at(0.0)
 
             return p
+
         if abs(f1) <= 1e-6:
             _, p = _dist_at(1.0)
 
             return p
+
         if f0 * f1 > 0.0:
             return None
 
         t0 = 0.0
         t1 = 1.0
+
         for _ in range(12):
             tm = 0.5 * (t0 + t1)
             dm, _ = _dist_at(tm)
@@ -113,6 +119,7 @@ class AnchorMixin:
             else:
                 t0 = tm
                 f0 = fm
+
         _, p = _dist_at(0.5 * (t0 + t1))
 
         return p
@@ -124,6 +131,7 @@ class AnchorMixin:
 
         desired = max(float(desired_distance), float(self.min_orbit_radius_m))
         distances = []
+
         for wp in static_world:
             dx = float(wp[0]) - float(target_world[0])
             dy = float(wp[1]) - float(target_world[1])
@@ -133,6 +141,7 @@ class AnchorMixin:
         closest_idx = int(min(range(n), key=lambda i: distances[i]))
         left_anchor = None
         left_idx = None
+
         for i in range(closest_idx, 0, -1):
             p0 = static_world[i - 1]
             p1 = static_world[i]
@@ -144,6 +153,7 @@ class AnchorMixin:
 
         right_anchor = None
         right_idx = None
+
         for i in range(closest_idx, n - 1):
             p0 = static_world[i]
             p1 = static_world[i + 1]
@@ -158,6 +168,7 @@ class AnchorMixin:
 
         if left_idx is None or right_idx is None:
             return None
+
         if right_idx <= left_idx:
             return None
 
@@ -175,6 +186,7 @@ class AnchorMixin:
         )
         desired = max(float(desired_distance), float(self.min_orbit_radius_m))
         distances = []
+
         for wp in static_world:
             dx = float(wp[0]) - tx
             dy = float(wp[1]) - ty
@@ -187,18 +199,23 @@ class AnchorMixin:
 
         best_pair = (0, min_gap)
         best_cost = float('inf')
+
         for i in range(n - 1):
             if i > closest_idx:
                 break
+
             di = distances[i]
             if not math.isfinite(di) or di < self.min_orbit_radius_m:
                 continue
+
             for j in range(i + min_gap, n):
                 if j < closest_idx:
                     continue
+
                 dj = distances[j]
                 if not math.isfinite(dj) or dj < self.min_orbit_radius_m:
                     continue
+
                 cost = abs(di - desired) + abs(dj - desired) + balance_weight * abs(di - dj)
                 if cost < best_cost:
                     best_cost = cost
@@ -209,9 +226,11 @@ class AnchorMixin:
     def _publish_anchor_points(self):
         if not self.anchors_set or self.anchor_start_idx is None or self.anchor_end_idx is None:
             return
+
         static_world = [self._rel_to_world(wp) for wp in self._scaled_static_waypoints()]
         if not static_world:
             return
+
         start_idx = int(max(0, min(self.anchor_start_idx, len(static_world) - 1)))
         end_idx = int(max(start_idx, min(self.anchor_end_idx, len(static_world) - 1)))
         start_wp = static_world[start_idx]
@@ -284,11 +303,13 @@ class AnchorMixin:
     def _publish_anchor_focus_distance(self):
         if self.anchor_distance_pub is None or self.anchor_focus_distance is None:
             return
+
         if not math.isfinite(self.anchor_focus_distance) or self.anchor_focus_distance <= 0.0:
             return
+
         self.get_logger().info(
             f'Publishing anchor focus distance: {self.anchor_focus_distance:.3f} m '
-            f'(source={self.anchor_source} start={self.anchor_start_idx} end={self.anchor_end_idx})'
+            f'(source={self.anchor_source} start={self.anchor_start_idx} end={self.anchor_end_idx})',
         )
         msg = Float32()
         msg.data = float(self.anchor_focus_distance)
@@ -299,6 +320,7 @@ class AnchorMixin:
             return []
 
         candidates = []
+
         for i, wp in enumerate(self.active_waypoints):
             rel = self._rel_to_world(wp)
             dist_sq = (
@@ -309,6 +331,7 @@ class AnchorMixin:
             candidates.append((i, dist_sq))
 
         candidates.sort(key=lambda x: x[1])
+
         if not candidates:
             return []
 
@@ -320,16 +343,18 @@ class AnchorMixin:
     def _update_framing_indices(self):
         self.framing_start_idx = None
         self.framing_end_idx = None
+
         if self.active_waypoints is None:
             return
+
         if not self.anchors_set:
             return
+
         if self.anchor_start_world is None or self.anchor_end_world is None:
             return
 
         start_candidates = self._find_candidate_indices(self.anchor_start_world)
         end_candidates = self._find_candidate_indices(self.anchor_end_world)
-
         if not start_candidates or not end_candidates:
             return
 
@@ -353,13 +378,14 @@ class AnchorMixin:
             e = end_candidates[0]
             if e < s:
                 s, e = e, s
+
             self.framing_start_idx = s
             self.framing_end_idx = e
 
         self.get_logger().info(
             f'Framing indices updated start={self.framing_start_idx} end={self.framing_end_idx} '
             f'(len={self.framing_end_idx - self.framing_start_idx}, expected={expected_len}, '
-            f'mode={"baseline" if getattr(self, "baseline_mode", False) else "cinematic"})'
+            f'mode={"baseline" if getattr(self, "baseline_mode", False) else "cinematic"})',
         )
 
     def _is_framing_idx(self, idx):

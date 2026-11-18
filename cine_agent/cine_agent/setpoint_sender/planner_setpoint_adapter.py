@@ -13,15 +13,23 @@ class PlannerSetpointAdapter(Node):
         drone_id = int(self.get_parameter('drone_id').value)
 
         self._publisher = self.create_publisher(
-            PoseStamped, '/cinematography/translational_position_setpoints', 10
+            PoseStamped,
+            '/cinematography/translational_position_setpoints',
+            10,
         )
         self._subscription = self.create_subscription(
-            PositionCommand, f'drone_{drone_id}_planning/pos_cmd', self._on_position_command, 10
+            PositionCommand,
+            f'drone_{drone_id}_planning/pos_cmd',
+            self._on_position_command,
+            10,
         )
 
     def _on_position_command(self, command: PositionCommand):
         setpoint = position_command_to_setpoint(
-            command.position.x, command.position.y, command.position.z, command.yaw
+            command.position.x,
+            command.position.y,
+            command.position.z,
+            command.yaw,
         )
         if setpoint is None:
             self.get_logger().warning('Dropped position command with non-finite values')
@@ -44,6 +52,7 @@ class PlannerSetpointAdapter(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = PlannerSetpointAdapter()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

@@ -13,11 +13,13 @@ class WaypointPublisher:
         self.node = node
         self.topic_name = topic_name
         self.frame_id = 'map'
+
         try:
             node.declare_parameter('frame_id', 'map')
             self.frame_id = str(node.get_parameter('frame_id').value)
         except (ParameterAlreadyDeclaredException, ParameterNotDeclaredException):
             self.frame_id = 'map'
+
         self.goal_pub = node.create_publisher(
             PoseStamped,
             topic_name,
@@ -73,6 +75,7 @@ class WaypointSenderNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = WaypointSenderNode()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

@@ -11,5 +11,5 @@ def test_assets_download_passes_each_only_name(invoke, runner, repository_root):
         (
             ['python3', 'tools/download_assets.py', '--only', 'a', '--only', 'b'],
             repository_root,
-        )
+        ),
     ]

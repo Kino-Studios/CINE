@@ -20,7 +20,12 @@ def test_height_only_keeps_aspect():
 
 def test_intrinsics_scale_with_width():
     focal_x, focal_y, centre_x, centre_y = scaled_intrinsics(
-        497.5985575, 497.5985575, 576, 324, 1152, 640
+        497.5985575,
+        497.5985575,
+        576,
+        324,
+        1152,
+        640,
     )
 
     assert focal_x == pytest.approx(276.444, abs=1e-3)

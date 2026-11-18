@@ -19,12 +19,12 @@ def generate_launch_description():
                 'odom_topic': odom_topic,
                 'baseline_bspline_topic': baseline_topic,
                 'cinematic_bspline_topic': cinematic_topic,
-            }
+            },
         ],
     )
 
     return LaunchDescription(
         [
             trajectory_logger,
-        ]
+        ],
     )

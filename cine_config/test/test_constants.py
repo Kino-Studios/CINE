@@ -35,6 +35,7 @@ def test_constants_import_does_not_require_rclpy(tmp_path):
 def test_config_loader_missing_file_names_the_file(tmp_path, monkeypatch):
     monkeypatch.setenv('CINE_CONFIG_ROOT', str(tmp_path))
     monkeypatch.setattr(ConfigLoader, '_instance', None)
+
     with pytest.raises(FileNotFoundError, match='camera-params.json'):
         ConfigLoader()
 

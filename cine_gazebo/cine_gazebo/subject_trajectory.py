@@ -40,11 +40,14 @@ class SubjectPose:
 def _parse_waypoint(element) -> Waypoint:
     pose_element = element.find('pose')
     x, y, z, roll, pitch, yaw = (float(value) for value in pose_element.text.split())
+
     if pose_element.get('degrees', 'false').lower() in ('true', '1'):
         roll, pitch, yaw = (math.radians(angle) for angle in (roll, pitch, yaw))
 
     return Waypoint(
-        time=float(element.find('time').text), position=(x, y, z), rpy=(roll, pitch, yaw)
+        time=float(element.find('time').text),
+        position=(x, y, z),
+        rpy=(roll, pitch, yaw),
     )
 
 
@@ -66,7 +69,7 @@ def parse_actor_script(world_sdf_text: str, actor_name: str = 'subject') -> Acto
     # Gazebo plays several trajectories back to back; the CINE world needs only one.
     if len(trajectories) != 1:
         raise ValueError(
-            f"Actor '{actor_name}' must have exactly one trajectory, has {len(trajectories)}"
+            f"Actor '{actor_name}' must have exactly one trajectory, has {len(trajectories)}",
         )
 
     trajectory = trajectories[0]
@@ -87,8 +90,10 @@ def parse_actor_script(world_sdf_text: str, actor_name: str = 'subject') -> Acto
 
 def _trajectory_time(script: ActorScript, sim_time_seconds: float) -> float:
     """Map sim time onto the trajectory the way gz-sim's SceneManager does."""
+
     duration = script.waypoints[-1].time - script.waypoints[0].time
     elapsed = max(sim_time_seconds - script.delay_start, 0.0)
+
     if not script.loop or duration <= 0.0:
         return min(elapsed, duration)
 
@@ -104,6 +109,7 @@ def _trajectory_time(script: ActorScript, sim_time_seconds: float) -> float:
 
 def _tangents(positions: list[tuple[float, float, float]], tension: float) -> list[tuple]:
     """Catmull-Rom tangents as gz-math's Spline::RecalcTangents computes them."""
+
     scale = 0.5 * (1.0 - tension)
     last = len(positions) - 1
     closed = positions[0] == positions[last]
@@ -112,13 +118,14 @@ def _tangents(positions: list[tuple[float, float, float]], tension: float) -> li
         return tuple(scale * (a - b) for a, b in zip(after, before))
 
     tangents = []
+
     for index in range(len(positions)):
         if index == 0:
             before = positions[last - 1] if closed else positions[0]
             tangents.append(difference(positions[1], before))
         elif index == last:
             tangents.append(
-                tangents[0] if closed else difference(positions[last], positions[last - 1])
+                tangents[0] if closed else difference(positions[last], positions[last - 1]),
             )
         else:
             tangents.append(difference(positions[index + 1], positions[index - 1]))
@@ -166,6 +173,7 @@ def _slerp(start, end, fraction: float) -> tuple[float, float, float, float]:
         start_weight = math.sin((1.0 - fraction) * angle) / math.sin(angle)
         end_weight = math.sin(fraction * angle) / math.sin(angle)
         blended = tuple(start_weight * a + end_weight * b for a, b in zip(start, end))
+
     norm = math.sqrt(sum(component * component for component in blended))
 
     return tuple(component / norm for component in blended)
@@ -183,7 +191,8 @@ def subject_pose_at(script: ActorScript, sim_time_seconds: float) -> SubjectPose
         waypoint = waypoints[on_index]
 
         return SubjectPose(
-            position=waypoint.position, orientation_xyzw=_quaternion_xyzw(*waypoint.rpy)
+            position=waypoint.position,
+            orientation_xyzw=_quaternion_xyzw(*waypoint.rpy),
         )
 
     before_index = after_index - 1

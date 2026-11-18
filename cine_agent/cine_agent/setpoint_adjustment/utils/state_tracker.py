@@ -24,6 +24,7 @@ class StateTracker:
     def record_depth(self, depth_value_m: float):
         if depth_value_m <= 0 or np.isnan(depth_value_m):
             return
+
         self.recent_depth_samples.append(float(depth_value_m))
 
     def get_smoothed_depth(self) -> float | None:
@@ -35,6 +36,7 @@ class StateTracker:
     def rotate_to_next_target(self) -> int:
         self.last_target_switch_time_s = time.time()
         self.recent_depth_samples.clear()
+
         if self.current_target_id is None:
             self.current_target_id = 0
         else:

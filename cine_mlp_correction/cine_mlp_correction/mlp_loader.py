@@ -41,11 +41,13 @@ class MLPLoader:
         n = len(pos_pts)
 
         vel = np.empty_like(pos_pts)
+
         if n == 1:
             vel[0] = 0.0
         else:
             vel[0] = (pos_pts[1] - pos_pts[0]) / dt
             vel[-1] = (pos_pts[-1] - pos_pts[-2]) / dt
+
             if n > 2:
                 vel[1:-1] = (pos_pts[2:] - pos_pts[:-2]) / (2.0 * dt)
 

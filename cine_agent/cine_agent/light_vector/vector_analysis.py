@@ -13,7 +13,6 @@ from sensor_msgs.msg import Image
 def _quat_to_rot(q: np.ndarray) -> np.ndarray:
     x, y, z, w = float(q[0]), float(q[1]), float(q[2]), float(q[3])
     n = math.sqrt(x * x + y * y + z * z + w * w)
-
     if n <= 1e-12:
         return np.eye(3, dtype=float)
 
@@ -128,6 +127,7 @@ class LightVectorAnalysisNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = LightVectorAnalysisNode()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

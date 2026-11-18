@@ -93,7 +93,7 @@ class SitlFlightStarter(Node):
         ).value
         self._excitation_pattern = load_excitation_pattern(pattern_file)
         self._starter = FlightStarter(
-            StarterConfig(nav_source=nav_source, excitation_pattern=self._excitation_pattern)
+            StarterConfig(nav_source=nav_source, excitation_pattern=self._excitation_pattern),
         )
 
         self.exit_code = None
@@ -122,7 +122,10 @@ class SitlFlightStarter(Node):
             qos_profile_sensor_data,
         )
         self.create_subscription(
-            Odometry, '/vio/odometry', self._on_vio_odometry, qos_profile_sensor_data
+            Odometry,
+            '/vio/odometry',
+            self._on_vio_odometry,
+            qos_profile_sensor_data,
         )
         # Same QoS as the relay's subscription in cine_sensing_setpoint/mavros_setpoints.py.
         relay_qos = QoSProfile(
@@ -145,6 +148,7 @@ class SitlFlightStarter(Node):
         while rclpy.ok() and self.exit_code is None:
             rclpy.spin_once(self, timeout_sec=SPIN_TIMEOUT_S)
             self._check_disarm_wait()
+
         flush_deadline = time.monotonic() + EXIT_FLUSH_WALL_S
         while rclpy.ok() and time.monotonic() < flush_deadline:
             rclpy.spin_once(self, timeout_sec=SPIN_TIMEOUT_S)
@@ -198,14 +202,17 @@ class SitlFlightStarter(Node):
     def _on_step(self):
         if self.exit_code is not None or self._disarm_wait_started_wall_s is not None:
             return
+
         action = self._starter.step(self._observe(self._now_s()))
         if action.message and action.message != self._last_message:
             self.get_logger().info(action.message)
             self._last_message = action.message
+
         self._execute(action)
         state = self._starter.state
         if state in HOLD_STATES and self._hold_setpoint is not None:
             self._publish_setpoint(self._hold_setpoint)
+
         if state is StarterState.DONE:
             self.get_logger().info('flight starter done')
             self.exit_code = 0
@@ -217,12 +224,13 @@ class SitlFlightStarter(Node):
     def _check_disarm_wait(self):
         if self._disarm_wait_started_wall_s is None or self.exit_code is not None:
             return
+
         if self._state is None or not self._state.armed:
             self.get_logger().info('vehicle is disarmed; exiting')
             self.exit_code = 1
         elif time.monotonic() - self._disarm_wait_started_wall_s > DISARM_WAIT_WALL_S:
             self.get_logger().error(
-                f'vehicle still armed {DISARM_WAIT_WALL_S:g} s after the failure; exiting anyway'
+                f'vehicle still armed {DISARM_WAIT_WALL_S:g} s after the failure; exiting anyway',
             )
             self.exit_code = 1
 
@@ -250,46 +258,55 @@ class SitlFlightStarter(Node):
     def _land(self, now_s):
         if self._ekf_source_set != GPS_SOURCE_SET and self._land_switch_requested_s is None:
             self._land_switch_requested_s = now_s
+
         if land_request(self._ekf_source_set, now_s, self._land_switch_requested_s) == (
             'switch_source'
         ):
             self._request_source_set(GPS_SOURCE_SET)
 
             return
+
         if self._ekf_source_set != GPS_SOURCE_SET and not self._land_fallback_logged:
             self.get_logger().warning(
                 f'source set {GPS_SOURCE_SET} not accepted within {LAND_SWITCH_TIMEOUT_S:g} s '
                 f'({self._last_source_set_refusal or "no answer"}); landing on source set '
-                f'{self._ekf_source_set}'
+                f'{self._ekf_source_set}',
             )
             self._land_fallback_logged = True
+
         self._request_mode(LAND_MODE)
 
     def _call(self, kind, client, request, on_response):
         now_s = self._now_s()
         if not self._gate.may_send(kind, now_s):
             return
+
         if not client.service_is_ready():
             self.get_logger().warning(
-                f'{client.srv_name} is not available yet', throttle_duration_sec=5.0
+                f'{client.srv_name} is not available yet',
+                throttle_duration_sec=5.0,
             )
 
             return
+
         self._gate.sent(kind, now_s)
         future = client.call_async(request)
         future.add_done_callback(lambda done: self._on_answer(kind, client, done, on_response))
 
     def _on_answer(self, kind, client, future, on_response):
         self._gate.answered(kind)
+
         try:
             response = future.result()
         except Exception as exc:
             # The machine re-emits the command, so a failed call is logged and retried.
             self.get_logger().error(f'{client.srv_name} call failed: {exc}')
+
             if kind == 'switch_source':
                 self._last_source_set_refusal = f'call failed: {exc}'
 
             return
+
         on_response(response)
 
     def _request_mode(self, mode):
@@ -298,14 +315,17 @@ class SitlFlightStarter(Node):
                 self.get_logger().warning(f'autopilot refused mode {mode}')
 
         self._call(
-            'set_mode', self._set_mode_client, SetMode.Request(custom_mode=mode), on_response
+            'set_mode',
+            self._set_mode_client,
+            SetMode.Request(custom_mode=mode),
+            on_response,
         )
 
     def _request_arm(self):
         def on_response(response):
             if not response.success:
                 self.get_logger().warning(
-                    f'autopilot refused to arm (MAV_RESULT {response.result})'
+                    f'autopilot refused to arm (MAV_RESULT {response.result})',
                 )
 
         self._call('arm', self._arming_client, CommandBool.Request(value=True), on_response)
@@ -314,7 +334,7 @@ class SitlFlightStarter(Node):
         def on_response(response):
             if not response.success:
                 self.get_logger().warning(
-                    f'autopilot refused takeoff to {altitude_m:g} m (MAV_RESULT {response.result})'
+                    f'autopilot refused takeoff to {altitude_m:g} m (MAV_RESULT {response.result})',
                 )
 
         # ArduCopter in GUIDED reads only the altitude, in metres above home.
@@ -345,6 +365,7 @@ class SitlFlightStarter(Node):
         # vehicle finishing its last excitation leg.
         if self._hold_setpoint is not None or self._autopilot_odometry is None:
             return
+
         sample = _odometry_sample(self._autopilot_odometry, self._autopilot_received_s)
         self._hold_setpoint = (*sample.position, yaw_of(sample.orientation))
         self._target_index = None
@@ -365,8 +386,10 @@ class SitlFlightStarter(Node):
         message = PoseStamped()
         message.header.stamp = self.get_clock().now().to_msg()
         message.header.frame_id = SETPOINT_FRAME
+
         if self._autopilot_odometry is not None:
             message.pose = self._autopilot_odometry.pose.pose
+
         self._trigger_publisher.publish(message)
 
 
@@ -374,6 +397,7 @@ def main(args=None):
     rclpy.init(args=args)
     node = SitlFlightStarter()
     exit_code = 1
+
     try:
         exit_code = node.run()
     except (KeyboardInterrupt, ExternalShutdownException):

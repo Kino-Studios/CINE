@@ -15,12 +15,12 @@ OCP_PYTHON=/path/to/venv/bin/python BLENDER=blender \
 `OCP_PYTHON` needs the OpenCascade bindings (`pip install cadquery-ocp`) and `BLENDER`
 must be Blender 5. The build takes a few minutes, most of it splitting the Pi 5 STEP.
 
-| Script | Runs in | Does |
-| :-- | :-- | :-- |
-| `split_iges_bodies.py` | OCP Python | writes each body of the TBS Source One V5 IGES as `body_NNN.stl` |
-| `split_step_by_colour.py` | OCP Python | writes one STL per surface colour of a STEP, plus `colors.json` |
-| `parts.py` | Blender | printed parts, standoffs, spacers and battery leads, which no vendor CAD covers |
-| `build_meshes.py` | Blender | places everything, decimates each family to its budget, writes OBJ and MTL |
+| Script                    | Runs in    | Does                                                                            |
+| :------------------------ | :--------- | :------------------------------------------------------------------------------ |
+| `split_iges_bodies.py`    | OCP Python | writes each body of the TBS Source One V5 IGES as `body_NNN.stl`                |
+| `split_step_by_colour.py` | OCP Python | writes one STL per surface colour of a STEP, plus `colors.json`                 |
+| `parts.py`                | Blender    | printed parts, standoffs, spacers and battery leads, which no vendor CAD covers |
+| `build_meshes.py`         | Blender    | places everything, decimates each family to its budget, writes OBJ and MTL      |
 
 The `restricted_*` meshes (GrabCAD motor, prop and stack; CC BY-NC-SA guards) are written
 too but are git-ignored; `tools/download_assets.py` fetches the published copies.

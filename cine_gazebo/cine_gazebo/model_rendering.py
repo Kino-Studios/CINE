@@ -73,6 +73,7 @@ class MassBlock:
 
 def camera_spec_from_vins_camera(vins_camera: dict, rate_hz: float) -> CameraSpec:
     """Build the simulated camera from a VINS camera config (`vins_camera.json`)."""
+
     projection = vins_camera['projection_parameters']
     distortion = vins_camera['distortion_parameters']
 
@@ -101,11 +102,13 @@ def composite_inertia(
     theorem. Off-diagonal terms are dropped; blocks laid out symmetrically about the
     centre's axes, as the Source One's are, have none.
     """
+
     total_mass = sum(block.mass for block in blocks)
     centre_of_gravity = tuple(
         sum(block.mass * block.position[axis] for block in blocks) / total_mass for axis in range(3)
     )
     inertia = [0.0, 0.0, 0.0]
+
     for block in blocks:
         length_x, length_y, length_z = block.size
         own_inertia = (
@@ -234,6 +237,7 @@ def render_model(template: str, camera: CameraSpec, imu: ImuNoise | None) -> str
     `{{imu_axes_noise}}` is the noise elements alone, for a model that declares its own
     `<imu>` (the Source One).
     """
+
     imu_noise = '' if imu is None else _render_imu_noise(imu)
     imu_axes_noise = '' if imu is None else _render_imu_axes_noise(imu)
 

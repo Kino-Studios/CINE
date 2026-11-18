@@ -16,8 +16,9 @@ def test_repository_matches_interface_contract(capsys):
     if check is None:
         pytest.fail(
             'cine_interfaces is not installed: '
-            'pip install -e ../CINE-Interfaces/cine_interfaces (see CONTRIBUTING.md)'
+            'pip install -e ../CINE-Interfaces/cine_interfaces (see CONTRIBUTING.md)',
         )
+
     exit_code = check.main(['CINE', str(REPOSITORY_ROOT)])
 
     assert exit_code == 0, capsys.readouterr().out

@@ -15,7 +15,7 @@ def test_analyze_stats_runs_the_script_with_its_options(invoke, runner, reposito
                 'baseline',
             ],
             repository_root,
-        )
+        ),
     ]
 
 

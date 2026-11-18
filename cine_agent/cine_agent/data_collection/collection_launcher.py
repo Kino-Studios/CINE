@@ -79,12 +79,14 @@ def _ensure_display(
 ) -> None:
     if env.get('DISPLAY'):
         return
+
     # Under WSL the X server runs on the Windows host, whose address is the nameserver WSL
     # writes to resolv.conf. Elsewhere that nameserver is a local resolver, not an X server.
     try:
         is_wsl = 'microsoft' in proc_version.read_text(encoding='utf-8').lower()
     except OSError:
         is_wsl = False
+
     if is_wsl and resolv_conf.is_file():
         try:
             with open(resolv_conf, encoding='utf-8') as handle:
@@ -97,6 +99,7 @@ def _ensure_display(
                             return
         except OSError:
             pass
+
     env['DISPLAY'] = ':0'
 
 
@@ -106,6 +109,7 @@ def _prepare_environment(logging_severity: str, ros_log_dir: Path | None = None)
     _ensure_display(os.environ)
     os.environ.pop('ROS_LOCALHOST_ONLY', None)
     os.environ['RCUTILS_LOGGING_SEVERITY'] = logging_severity.upper()
+
     if ros_log_dir is not None:
         os.environ['ROS_LOG_DIR'] = str(ros_log_dir)
 
@@ -115,14 +119,18 @@ def _parse_env_file(path: Path) -> None:
         contents = path.read_text(encoding='utf-8')
     except OSError:
         return
+
     for line in contents.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith('#'):
             continue
+
         if stripped.startswith('export '):
             stripped = stripped[len('export ') :].strip()
+
         if '=' not in stripped:
             continue
+
         key, value = stripped.split('=', 1)
         os.environ[key.strip()] = value.strip().strip('"').strip("'")
 
@@ -137,6 +145,7 @@ def _parse_bool(value: Any) -> bool:
 def _parse_target_xyz(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [float(v) for v in value]
+
     if isinstance(value, str):
         text = value.strip()
         if text.startswith('[') and text.endswith(']'):
@@ -144,6 +153,7 @@ def _parse_target_xyz(value: Any) -> Any:
                 parsed = ast.literal_eval(text)
             except (ValueError, SyntaxError):
                 return value
+
             if isinstance(parsed, (list, tuple)):
                 return [float(v) for v in parsed]
 
@@ -174,8 +184,10 @@ def _resolve_param(
                 value = default
         else:
             value = default
+
     if parser is None:
         return value
+
     try:
         return parser(value)
     except (ValueError, TypeError, SyntaxError):
@@ -207,12 +219,15 @@ def _ros2_node_list() -> list[str]:
 def _wait_for_node(node_name: str, timeout_s: float = 30.0) -> bool:
     start_time = time.time()
     canonical_name = node_name if node_name.startswith('/') else '/' + node_name
+
     while time.time() - start_time < timeout_s:
         nodes = _ros2_node_list()
         if canonical_name in nodes or node_name in nodes:
             return True
+
         print('.', end='', flush=True)
         time.sleep(1.0)
+
     print()
 
     return False
@@ -228,6 +243,7 @@ def _cleanup_procs(procs: list[subprocess.Popen | None]) -> None:
     for proc in procs:
         if proc is None or proc.poll() is not None:
             continue
+
         try:
             pgid = os.getpgid(proc.pid)
             os.killpg(pgid, signal.SIGINT)
@@ -247,16 +263,21 @@ def _cleanup_procs(procs: list[subprocess.Popen | None]) -> None:
 
 def _safety_cleanup() -> None:
     _logger.info('performing final safety cleanup...')
+
     for target in _SAFETY_CLEANUP_TARGETS:
         subprocess.run(['pkill', '-f', target], capture_output=True)
 
 
 def _ros2_run_cmd(
-    executable: str, drone_ns: str, extra_params: dict[str, str] | None = None
+    executable: str,
+    drone_ns: str,
+    extra_params: dict[str, str] | None = None,
 ) -> list[str]:
     cmd = ['ros2', 'run', _ROS_PACKAGE, executable, '--ros-args']
+
     for key, val in (extra_params or {}).items():
         cmd.extend(['-p', f'{key}:={val}'])
+
     cmd.extend(['-r', f'__ns:={drone_ns}'])
 
     return cmd
@@ -268,13 +289,17 @@ def _declare_common_params(node: Node, defaults: dict[str, Any]) -> None:
 
 
 def _resolve_common_params(
-    node: Node, drone_ns: str, default_topics: dict[str, str]
+    node: Node,
+    drone_ns: str,
+    default_topics: dict[str, str],
 ) -> CollectionParams:
     return CollectionParams(
         odom_topic=_resolve_param(node, 'odom_topic', default_topics['odom']),
         baseline_topic=_resolve_param(node, 'baseline_bspline_topic', default_topics['baseline']),
         cinematic_topic=_resolve_param(
-            node, 'cinematic_bspline_topic', default_topics['cinematic']
+            node,
+            'cinematic_bspline_topic',
+            default_topics['cinematic'],
         ),
         frame_id=_resolve_param(node, 'frame_id', WaypointParams.FRAME_ID, env_key='FRAME_ID'),
         target_xyz=_resolve_param(
@@ -286,8 +311,11 @@ def _resolve_common_params(
         ),
         focus_depth_m=float(
             _resolve_param(
-                node, 'focus_depth_m', SimulationParams.FOCUS_DEPTH_M, env_key='FOCUS_DEPTH_M'
-            )
+                node,
+                'focus_depth_m',
+                SimulationParams.FOCUS_DEPTH_M,
+                env_key='FOCUS_DEPTH_M',
+            ),
         ),
         waypoints_topic=node.get_parameter('waypoints_topic').value or '',
         waypoints_file=node.get_parameter('waypoints_file').value or '',
@@ -304,7 +332,9 @@ def _make_default_topics(drone_ns: str) -> dict[str, str]:
 
 
 def _launch_simulation(
-    workspace_root: Path, drone_id: int, mode_label: str
+    workspace_root: Path,
+    drone_id: int,
+    mode_label: str,
 ) -> tuple[subprocess.Popen | None, Any | None, bool]:
     ego_node_name = f'drone_{drone_id}_ego_planner_node'
     if ego_node_name in _ros2_node_list():
@@ -312,7 +342,10 @@ def _launch_simulation(
 
     start_script = workspace_root / 'start_simulation.sh'
     log_handle = tempfile.NamedTemporaryFile(
-        mode='w', prefix=f'ego_planner_{mode_label}_', suffix='.log', delete=False
+        mode='w',
+        prefix=f'ego_planner_{mode_label}_',
+        suffix='.log',
+        delete=False,
     )
     log_path = Path(log_handle.name)
     sim_proc = subprocess.Popen(
@@ -376,14 +409,19 @@ def _launch_logger(params: CollectionParams, mode: str) -> subprocess.Popen:
 
 
 def _launch_waypoint_generator(
-    params: CollectionParams, extra_params: dict[str, str] | None = None
+    params: CollectionParams,
+    extra_params: dict[str, str] | None = None,
 ) -> subprocess.Popen:
     ros_params = {'odom_topic': params.odom_topic}
+
     if extra_params:
         ros_params.update(extra_params)
+
     cmd = _ros2_run_cmd('cinematic_waypoint_generator', params.drone_ns, ros_params)
+
     if params.waypoints_topic:
         cmd.extend(['-p', f'waypoints_topic:={params.waypoints_topic}'])
+
     if params.waypoints_file:
         cmd.extend(['-p', f'waypoints_file:={params.waypoints_file}'])
 
@@ -404,6 +442,7 @@ def _run_event_loop(procs: list[subprocess.Popen | None]) -> None:
             if proc is not None and proc.poll() is not None:
                 stop_event.set()
                 break
+
         time.sleep(0.5)
 
 
@@ -445,8 +484,10 @@ def _run_collection(
         'waypoints_topic': '',
         'waypoints_file': '',
     }
+
     if extra_node_params:
         base_params.update(extra_node_params)
+
     _declare_common_params(node, base_params)
 
     params = _resolve_common_params(node, drone_ns, default_topics)
@@ -459,6 +500,7 @@ def _run_collection(
         return
 
     child_procs: list[subprocess.Popen | None] = []
+
     if build_procs_fn:
         child_procs = build_procs_fn(params, node)
 
@@ -467,11 +509,15 @@ def _run_collection(
     finally:
         _logger.info('stopping data collection.')
         _cleanup_procs(child_procs + [sim_proc])
+
         if sim_log_handle:
             sim_log_handle.close()
+
         node.destroy_node()
+
         if rclpy.ok():
             rclpy.shutdown()
+
         _safety_cleanup()
 
 

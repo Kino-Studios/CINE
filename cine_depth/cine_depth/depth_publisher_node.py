@@ -66,12 +66,16 @@ class DepthPublisherNode(Node):
         focal_length_px = float(self.get_parameter('focal_length_px').value)
         if focal_length_px > 0.0:
             self.camera_focal_px = focal_length_px
+
         self.calibration_image_width = camera['image_width']
 
         self.initialize_depth_model()
 
         self.image_subscription = self.create_subscription(
-            Image, '/camera/image_raw', self.image_callback, 10
+            Image,
+            '/camera/image_raw',
+            self.image_callback,
+            10,
         )
 
         self.depth_publisher = self.create_publisher(Image, '/depth/image_raw', 10)
@@ -87,7 +91,7 @@ class DepthPublisherNode(Node):
             total_params = sum(param.numel() for param in self.depth_model.parameters())
             self.get_logger().info(
                 f'Model {self.model_id} loaded on {self.device}: '
-                f'{total_params / 1e6:.2f}M parameters'
+                f'{total_params / 1e6:.2f}M parameters',
             )
         except Exception as error:
             self.get_logger().error(f'Failed to initialize: {error}')
@@ -98,10 +102,12 @@ class DepthPublisherNode(Node):
 
     def image_callback(self, msg):
         self.get_logger().info('Received image callback')
+
         if self.processing:
             self.get_logger().debug('Skipping frame')
 
             return
+
         if self.depth_model is None:
             self.get_logger().error('Depth failure!')
 
@@ -115,16 +121,20 @@ class DepthPublisherNode(Node):
             height, width = image_rgb.shape[:2]
 
             prediction = self.depth_model.inference(
-                [image_rgb], process_res=self.process_resolution
+                [image_rgb],
+                process_res=self.process_resolution,
             )
             network_depth = prediction.depth[0]
 
             if self.model_is_metric:
                 depth_metres = metric_depth_metres(
-                    network_depth, self.camera_focal_px, self.calibration_image_width
+                    network_depth,
+                    self.camera_focal_px,
+                    self.calibration_image_width,
                 )
             else:
                 depth_metres = relative_depth_metres(network_depth, self.max_depth)
+
             depth_metres = cv2.resize(
                 depth_metres * self.depth_scale,
                 output_size(width, height, self.output_width, self.output_height),
@@ -133,7 +143,8 @@ class DepthPublisherNode(Node):
 
             if self.depth_encoding == '32FC1':
                 depth_msg = self.bridge.cv2_to_imgmsg(
-                    depth_metres.astype(np.float32), encoding='32FC1'
+                    depth_metres.astype(np.float32),
+                    encoding='32FC1',
                 )
             else:
                 depth_normalized = (depth_metres - depth_metres.min()) / (
@@ -147,7 +158,6 @@ class DepthPublisherNode(Node):
             self.depth_publisher.publish(depth_msg)
 
             self.get_logger().debug('Published depth image')
-
         except Exception as error:
             self.get_logger().error(f'Error: {error}')
             import traceback

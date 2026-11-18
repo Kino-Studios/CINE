@@ -45,6 +45,7 @@ def _pose_numbers(element):
 
 def _parameters():
     parameters = {}
+
     for line in PARAMETER_FILE.read_text().splitlines():
         content = line.split('#')[0].split()
         if content:

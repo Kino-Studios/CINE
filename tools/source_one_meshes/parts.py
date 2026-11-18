@@ -58,6 +58,7 @@ def rounded_rectangle_outline(center_x, center_y, length, width, radius, segment
     corners = ((1, 1), (-1, 1), (-1, -1), (1, -1))
     for corner_index, (sign_x, sign_y) in enumerate(corners):
         start_angle = math.pi / 2 * corner_index
+
         for index in range(segments + 1):
             angle = start_angle + math.pi / 2 * index / segments
             outline.append(
@@ -130,6 +131,7 @@ def build_battery():
 
 def build_battery_leads():
     """The ESC's capacitor, its two power leads, and the XT60 plug they end in."""
+
     add_to_group('black_plastic', rod('capacitor', (-22, 0, 9.0), (-40, 0, 9.0), 5.0, 24))
     add_to_group('silver', rod('cap_top', (-40, 0, 9.0), (-41, 0, 9.0), 4.6, 24))
     add_to_group('red_wire', rod('lead_red', (-18, 4, 8), (-52, 4, -12), 1.6))
@@ -139,11 +141,14 @@ def build_battery_leads():
 
 def assign_planar_uvs(obj):
     """Project the carbon twill texture flat onto top faces and along the sides elsewhere."""
+
     mesh_builder = bmesh.new()
     mesh_builder.from_mesh(obj.data)
     uv_layer = mesh_builder.loops.layers.uv.verify()
+
     for face in mesh_builder.faces:
         faces_up_or_down = abs(face.normal.z) > 0.7
+
         for loop in face.loops:
             x, y, z = loop.vert.co
             loop[uv_layer].uv = (
@@ -151,5 +156,6 @@ def assign_planar_uvs(obj):
                 if faces_up_or_down
                 else ((x + y) / CARBON_TILE_MM, z / CARBON_TILE_MM)
             )
+
     mesh_builder.to_mesh(obj.data)
     mesh_builder.free()

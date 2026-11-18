@@ -37,7 +37,8 @@ class CinematographicPlannerNode(Node):
 
         self.cost_calculator = CostCalculator(self)
         self.tracker = StateTracker(
-            look_duration_s=self.config.params.LOOK_DURATION_S, depth_window_size=15
+            look_duration_s=self.config.params.LOOK_DURATION_S,
+            depth_window_size=15,
         )
         self.target_computer = TargetComputer(self.config, self.tracker, self.cost_calculator)
         self.kinematics_controller = KinematicsController(self.config)
@@ -52,25 +53,42 @@ class CinematographicPlannerNode(Node):
         )
         self.waypoint_pub_node = WaypointPublisher(self, self.config.params.WAYPOINTS_TOPIC)
         self.timer = self.create_timer(
-            1.0 / max(1.0, self.config.params.WAYPOINT_RATE_HZ), self.tick
+            1.0 / max(1.0, self.config.params.WAYPOINT_RATE_HZ),
+            self.tick,
         )
 
     def setup_subscriptions(self) -> None:
         self.center_sub = self.create_subscription(
-            PolygonStamped, self.config.params.CENTER_TOPIC, self.center_callback, 10
+            PolygonStamped,
+            self.config.params.CENTER_TOPIC,
+            self.center_callback,
+            10,
         )
         self.depth_sub = self.create_subscription(
-            Image, self.config.params.DEPTH_TOPIC, self.depth_callback, 10
+            Image,
+            self.config.params.DEPTH_TOPIC,
+            self.depth_callback,
+            10,
         )
         self.bounding_box_sub = self.create_subscription(
-            PolygonStamped, self.config.params.BBOX_TOPIC, self.bounding_box_callback, 10
+            PolygonStamped,
+            self.config.params.BBOX_TOPIC,
+            self.bounding_box_callback,
+            10,
         )
         self.dimensions_sub = self.create_subscription(
-            PolygonStamped, self.config.params.DIMENSIONS_TOPIC, self.dimensions_callback, 10
+            PolygonStamped,
+            self.config.params.DIMENSIONS_TOPIC,
+            self.dimensions_callback,
+            10,
         )
         self.odom_sub = self.create_subscription(
-            Odometry, self.config.params.ODOM_TOPIC, self.odom_callback, 10
+            Odometry,
+            self.config.params.ODOM_TOPIC,
+            self.odom_callback,
+            10,
         )
+
         if self.config.light_avoidance_enabled:
             self.light_vector_sub = self.create_subscription(
                 Vector3Stamped,
@@ -82,12 +100,16 @@ class CinematographicPlannerNode(Node):
             self.light_vector_sub = None
 
         self.image_sub = self.create_subscription(
-            Image, self.config.params.IMAGE_TOPIC, self.image_callback, 10
+            Image,
+            self.config.params.IMAGE_TOPIC,
+            self.image_callback,
+            10,
         )
 
     def center_callback(self, msg: PolygonStamped):
         if len(msg.polygon.points) == 0:
             return
+
         u = int(msg.polygon.points[0].x)
         v = int(msg.polygon.points[0].y)
         self.target_computer.update_center(u, v)
@@ -102,7 +124,7 @@ class CinematographicPlannerNode(Node):
 
     def odom_callback(self, msg: Odometry):
         self.drone_position = np.array(
-            [msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z]
+            [msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z],
         )
         self.drone_orientation = np.array(
             [
@@ -110,7 +132,7 @@ class CinematographicPlannerNode(Node):
                 msg.pose.pose.orientation.y,
                 msg.pose.pose.orientation.z,
                 msg.pose.pose.orientation.w,
-            ]
+            ],
         )
         self.has_odom = True
         self.cost_calculator.update_odometry(msg)
@@ -118,6 +140,7 @@ class CinematographicPlannerNode(Node):
     def light_vector_callback(self, msg: Vector3Stamped):
         if not self.config.light_avoidance_enabled:
             return
+
         self.cost_calculator.update_light_vector(msg)
 
     def image_callback(self, msg: Image):
@@ -150,10 +173,12 @@ class CinematographicPlannerNode(Node):
 
     def _dt(self) -> float:
         now_s = self.get_clock().now().nanoseconds / 1e9
+
         if self.last_tick_time_s is None:
             self.last_tick_time_s = now_s
 
             return 1.0 / max(1.0, self.config.params.WAYPOINT_RATE_HZ)
+
         dt = now_s - self.last_tick_time_s
         self.last_tick_time_s = now_s
 
@@ -185,7 +210,8 @@ class CinematographicPlannerNode(Node):
         current_time_s = now.nanoseconds / 1e9
 
         target_world = self.target_computer.compute_target_world_position(
-            self.drone_position, self.has_odom
+            self.drone_position,
+            self.has_odom,
         )
         if target_world is None:
             return
@@ -201,6 +227,7 @@ class CinematographicPlannerNode(Node):
         opt_radius = self.waypoint_selector.optimized_radius
 
         tx, ty = float(target_world[0]), float(target_world[1])
+
         if opt_center is not None and opt_radius is not None:
             center_xy = opt_center
             radius = float(opt_radius)
@@ -221,10 +248,15 @@ class CinematographicPlannerNode(Node):
             return
 
         next_pos = self.kinematics_controller.next_kinematic_step(
-            desired, self.drone_position, dt, self.has_focus
+            desired,
+            self.drone_position,
+            dt,
+            self.has_focus,
         )
         self.waypoint_pub_node.publish_single_waypoint(
-            float(next_pos[0]), float(next_pos[1]), float(next_pos[2])
+            float(next_pos[0]),
+            float(next_pos[1]),
+            float(next_pos[2]),
         )
 
 
@@ -236,6 +268,7 @@ def main(args=None):
     executor.add_node(planner_node)
 
     noise_node = None
+
     if SensorNoiseParams.ENABLE_SENSOR_NOISE:
         noise_node = NoisyOdometryNode()
         executor.add_node(noise_node)
@@ -246,7 +279,9 @@ def main(args=None):
         pass
     finally:
         executor.shutdown()
+
         if noise_node is not None:
             noise_node.destroy_node()
+
         planner_node.destroy_node()
         rclpy.shutdown()

@@ -18,6 +18,7 @@ class GeometryMixin:
         x = max(x_min, min(x_max, float(x)))
         y = max(y_min, min(y_max, float(y)))
         original_z = float(z)
+
         if self.enable_z_clamp:
             ceiling = (
                 float(self.z_ceiling_override_m)
@@ -53,6 +54,7 @@ class GeometryMixin:
     def _closest_waypoint_index(self, target_world):
         if self.active_waypoints is None:
             return None
+
         best_idx = None
         best_dist_sq = float('inf')
         tx, ty, tz = (
@@ -60,6 +62,7 @@ class GeometryMixin:
             float(target_world[1]),
             float(target_world[2]),
         )
+
         for i, wp_rel in enumerate(self.active_waypoints):
             wp_world = self._rel_to_world(wp_rel)
             dx = float(wp_world[0]) - tx

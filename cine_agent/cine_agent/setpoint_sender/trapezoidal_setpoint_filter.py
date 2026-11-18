@@ -13,9 +13,12 @@ class TrapezoidalProfile:
         self.max_acceleration = max_acceleration
 
     def compute_profile(
-        self, start_pos: np.ndarray, target_pos: np.ndarray, current_vel: np.ndarray, dt: float
+        self,
+        start_pos: np.ndarray,
+        target_pos: np.ndarray,
+        current_vel: np.ndarray,
+        dt: float,
     ) -> tuple[np.ndarray, np.ndarray]:
-
         displacement = target_pos - start_pos
         distance = np.linalg.norm(displacement)
         if distance < 1e-6:
@@ -57,7 +60,6 @@ class TrapezoidalSetpointFilter:
         max_velocity: float | None = None,
         max_acceleration: float | None = None,
     ):
-
         self.node = node
 
         max_vel = max_velocity if max_velocity is not None else Constraints.MAX_VELOCITY
@@ -72,7 +74,10 @@ class TrapezoidalSetpointFilter:
 
         self.odom_sub = node.create_subscription(Odometry, '/odometry', self.odom_callback, 20)
         self.cmd_sub = node.create_subscription(
-            PoseStamped, '/cinematographic/pos_cmd_geo', self.position_cmd_callback, 10
+            PoseStamped,
+            '/cinematographic/pos_cmd_geo',
+            self.position_cmd_callback,
+            10,
         )
         self.cmd_pub = node.create_publisher(PoseStamped, '/cinematographic/trap_pos_cmd_geo', 10)
 
@@ -82,10 +87,10 @@ class TrapezoidalSetpointFilter:
 
     def odom_callback(self, msg: Odometry):
         self.current_pos = np.array(
-            [msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z]
+            [msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z],
         )
         self.current_vel = np.array(
-            [msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z]
+            [msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z],
         )
         self.has_odom = True
 
@@ -106,12 +111,15 @@ class TrapezoidalSetpointFilter:
                 self.target_cmd.pose.position.x,
                 self.target_cmd.pose.position.y,
                 self.target_cmd.pose.position.z,
-            ]
+            ],
         )
 
         dt = 1.0 / self.publish_rate
         next_pos, next_vel = self.profile.compute_profile(
-            self.current_pos, target_pos, self.current_vel, dt
+            self.current_pos,
+            target_pos,
+            self.current_vel,
+            dt,
         )
 
         smoothed_cmd = PoseStamped()

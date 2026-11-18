@@ -48,7 +48,7 @@ SPIN_TIMEOUT_S = 0.1
 # ros2 launch reports each process's exit in these forms (launch.actions.ExecuteLocal).
 STARTER_FINISHED_PATTERN = re.compile(r'\[sitl_flight_starter-\d+\]: process has finished cleanly')
 STARTER_DIED_PATTERN = re.compile(
-    r'\[sitl_flight_starter-\d+\]: process has died \[pid \d+, exit code (-?\d+)'
+    r'\[sitl_flight_starter-\d+\]: process has died \[pid \d+, exit code (-?\d+)',
 )
 
 
@@ -63,7 +63,9 @@ class PositionSample:
 
 def closest_distances(samples, target):
     """Return each required source's closest approach to `target`; inf if it never reported."""
+
     closest = dict.fromkeys(REQUIRED_SOURCES, math.inf)
+
     for sample in samples:
         if sample.source in closest:
             closest[sample.source] = min(closest[sample.source], math.dist(sample.position, target))
@@ -73,6 +75,7 @@ def closest_distances(samples, target):
 
 def reached_setpoint(samples, target, tolerance_m, deadline_s):
     """True when every required source came within `tolerance_m` of `target` by `deadline_s`."""
+
     in_time = [sample for sample in samples if sample.time_s <= deadline_s]
     closest = closest_distances(in_time, target)
 
@@ -97,12 +100,15 @@ class _LaunchWatcher:
         for line in self.process.stdout:
             sys.stdout.write(line)
             sys.stdout.flush()
+
             if self.starter_exited.is_set():
                 continue
+
             if STARTER_FINISHED_PATTERN.search(line):
                 self.starter_exit_code = 0
                 self.starter_exited.set()
                 continue
+
             died = STARTER_DIED_PATTERN.search(line)
             if died:
                 self.starter_exit_code = int(died.group(1))
@@ -134,8 +140,10 @@ def _start_launch():
 def _stop_launch(process):
     if process.poll() is not None:
         return
+
     for stop_signal in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
         os.killpg(process.pid, stop_signal)
+
         try:
             process.wait(timeout=LAUNCH_SHUTDOWN_WALL_S)
 
@@ -162,7 +170,8 @@ def _fly(watcher):
 
     rclpy.init()
     node = rclpy.create_node(
-        'smoke_flight', parameter_overrides=[Parameter('use_sim_time', value=True)]
+        'smoke_flight',
+        parameter_overrides=[Parameter('use_sim_time', value=True)],
     )
     takeoff_points = {}
     latest_autopilot_pose = None
@@ -176,8 +185,10 @@ def _fly(watcher):
         # The first pose each source reports is taken before arming: the starter waits
         # for the EKF's local position before it asks for GUIDED and arms.
         takeoff_points.setdefault(source, point)
+
         if setpoint_published_s is None:
             return
+
         takeoff_point = takeoff_points[source]
         samples.append(
             PositionSample(
@@ -187,7 +198,7 @@ def _fly(watcher):
                     coordinate - origin
                     for coordinate, origin in zip(point, takeoff_point, strict=True)
                 ),
-            )
+            ),
         )
 
     def on_autopilot_odometry(message):
@@ -201,10 +212,16 @@ def _fly(watcher):
         record(GROUND_TRUTH_SOURCE, (position.x, position.y, position.z))
 
     node.create_subscription(
-        Odometry, AUTOPILOT_ODOMETRY_TOPIC, on_autopilot_odometry, qos_profile_sensor_data
+        Odometry,
+        AUTOPILOT_ODOMETRY_TOPIC,
+        on_autopilot_odometry,
+        qos_profile_sensor_data,
     )
     node.create_subscription(
-        PoseStamped, GROUND_TRUTH_POSE_TOPIC, on_ground_truth_pose, qos_profile_sensor_data
+        PoseStamped,
+        GROUND_TRUTH_POSE_TOPIC,
+        on_ground_truth_pose,
+        qos_profile_sensor_data,
     )
     # Same QoS as the relay's subscription in cine_sensing_setpoint/mavros_setpoints.py.
     relay_qos = QoSProfile(
@@ -217,11 +234,13 @@ def _fly(watcher):
 
     try:
         wall_deadline = time.monotonic() + STARTER_WAIT_WALL_S
+
         while not watcher.starter_exited.is_set():
             if watcher.process.poll() is not None:
                 print('FAIL: the launch exited before sitl_flight_starter finished', flush=True)
 
                 return 1
+
             if time.monotonic() > wall_deadline:
                 print(
                     f'FAIL: sitl_flight_starter did not exit within {STARTER_WAIT_WALL_S:g} s '
@@ -230,7 +249,9 @@ def _fly(watcher):
                 )
 
                 return 1
+
             rclpy.spin_once(node, timeout_sec=SPIN_TIMEOUT_S)
+
         if watcher.starter_exit_code != 0:
             print(f'FAIL: sitl_flight_starter exited {watcher.starter_exit_code}', flush=True)
 
@@ -243,11 +264,13 @@ def _fly(watcher):
             return 1
 
         wall_deadline = time.monotonic() + RELAY_DISCOVERY_WALL_S
+
         while setpoint_publisher.get_subscription_count() == 0:
             if time.monotonic() > wall_deadline:
                 print(f'FAIL: nothing subscribes to {SETPOINT_TOPIC}', flush=True)
 
                 return 1
+
             rclpy.spin_once(node, timeout_sec=SPIN_TIMEOUT_S)
 
         takeoff_point = takeoff_points[AUTOPILOT_SOURCE]
@@ -268,19 +291,24 @@ def _fly(watcher):
         )
 
         wall_deadline = time.monotonic() + FLIGHT_WALL_S
+
         while now_s() - setpoint_published_s <= DEADLINE_S:
             if reached_setpoint(samples, target, TOLERANCE_M, DEADLINE_S):
                 break
+
             if time.monotonic() > wall_deadline:
                 print(f'Sim time stalled; stopping after {FLIGHT_WALL_S:g} s of wall time')
                 break
+
             rclpy.spin_once(node, timeout_sec=SPIN_TIMEOUT_S)
 
         distances = _format_distances(closest_distances(samples, target))
+
         if reached_setpoint(samples, target, TOLERANCE_M, DEADLINE_S):
             print(f'PASS: closest distance to the setpoint: {distances}', flush=True)
 
             return 0
+
         print(
             f'FAIL: not within {TOLERANCE_M:g} m inside {DEADLINE_S:g} s of sim time; '
             f'closest distance to the setpoint: {distances}',
@@ -295,6 +323,7 @@ def _fly(watcher):
 
 def main():
     process = _start_launch()
+
     try:
         return _fly(_LaunchWatcher(process))
     finally:

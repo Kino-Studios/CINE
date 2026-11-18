@@ -15,16 +15,16 @@ per run to its `output_dir` parameter, by default `data/trajectories` under the
 directory it starts in (the collection scripts start it from the repository root). It
 writes one row per sample, taken at 50 Hz from the latest odometry:
 
-| Column | Unit | Meaning |
-| --- | --- | --- |
-| `time` | s | Odometry stamp minus the first stamped odometry of the run |
-| `odom_x`, `odom_y`, `odom_z` | m | Drone position relative to where the run started |
-| `odom_vx`, `odom_vy`, `odom_vz` | m/s | Drone velocity |
-| `odom_speed` | m/s | Norm of the drone velocity |
-| `planned_x`, `planned_y`, `planned_z` | m | Planned position from the current baseline B-spline at the same time, relative to the start; empty before the first plan |
-| `planned_vx`, `planned_vy`, `planned_vz` | m/s | Planned velocity; empty before the first plan |
-| `planned_speed` | m/s | Norm of the planned velocity; empty before the first plan |
-| `cinematic_framing_active` | bool | Whether cinematic framing was active at that sample (absent from the 2025 runs in the release, which predate it) |
+| Column                                   | Unit | Meaning                                                                                                                  |
+| ---------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------ |
+| `time`                                   | s    | Odometry stamp minus the first stamped odometry of the run                                                               |
+| `odom_x`, `odom_y`, `odom_z`             | m    | Drone position relative to where the run started                                                                         |
+| `odom_vx`, `odom_vy`, `odom_vz`          | m/s  | Drone velocity                                                                                                           |
+| `odom_speed`                             | m/s  | Norm of the drone velocity                                                                                               |
+| `planned_x`, `planned_y`, `planned_z`    | m    | Planned position from the current baseline B-spline at the same time, relative to the start; empty before the first plan |
+| `planned_vx`, `planned_vy`, `planned_vz` | m/s  | Planned velocity; empty before the first plan                                                                            |
+| `planned_speed`                          | m/s  | Norm of the planned velocity; empty before the first plan                                                                |
+| `cinematic_framing_active`               | bool | Whether cinematic framing was active at that sample (absent from the 2025 runs in the release, which predate it)         |
 
 While framing, it also writes `distance_<mode>_<timestamp>.csv` with the drone-to-subject
 distance, its target and the error against the tolerance.

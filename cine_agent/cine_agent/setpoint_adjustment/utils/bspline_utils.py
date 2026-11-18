@@ -11,7 +11,9 @@ def msg_to_arrays(msg: Bspline):
 
 
 def arrays_to_msg(
-    original: Bspline, pos_pts: np.ndarray, knots: np.ndarray | None = None
+    original: Bspline,
+    pos_pts: np.ndarray,
+    knots: np.ndarray | None = None,
 ) -> Bspline:
     out = Bspline()
     out.drone_id = original.drone_id

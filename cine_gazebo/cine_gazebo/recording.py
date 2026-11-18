@@ -12,7 +12,6 @@ def bag_directory_name(now: datetime, nav_source: str, world: str, wind: str) ->
 
 def recorded_topics(drone_id: int) -> list[str]:
     return [
-        # Ground truth from Gazebo.
         '/gazebo/drone_pose',
         '/gazebo/subject_pose',
         # The estimates the flight is judged against that truth.

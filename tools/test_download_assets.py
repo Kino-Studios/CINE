@@ -39,7 +39,7 @@ def test_asset_is_fetched_from_the_release_named_by_the_tag(tmp_path):
     download_assets.fetch_asset(TEST_ASSET, tmp_path, 'v1.0.0', recording_download)
 
     assert requested_urls == [
-        'https://github.com/Kino-Studios/CINE/releases/download/v1.0.0/baseline_run.csv'
+        'https://github.com/Kino-Studios/CINE/releases/download/v1.0.0/baseline_run.csv',
     ]
 
 
@@ -67,7 +67,10 @@ def test_present_asset_with_wrong_checksum_is_refused_and_left_alone(tmp_path):
 def test_downloaded_asset_with_wrong_checksum_is_deleted(tmp_path):
     with pytest.raises(download_assets.ChecksumMismatchError, match='baseline_run.csv'):
         download_assets.fetch_asset(
-            TEST_ASSET, tmp_path, 'v1.0.0', _download_writing(b'other bytes')
+            TEST_ASSET,
+            tmp_path,
+            'v1.0.0',
+            _download_writing(b'other bytes'),
         )
 
     assert list((tmp_path / 'data/trajectories/baseline').iterdir()) == []
@@ -89,6 +92,7 @@ def _clone_writing(file_names):
     def clone(url, directory):
         meshes_directory = Path(directory) / 'meshes'
         meshes_directory.mkdir(parents=True)
+
         for file_name in file_names:
             (meshes_directory / file_name).write_text(file_name)
 
@@ -103,7 +107,8 @@ def _clone_that_fails(url, directory):
 
 def test_private_meshes_are_copied_into_the_source_one_model(tmp_path):
     download_assets.fetch_private_meshes(
-        tmp_path, _clone_writing(['restricted_motors.obj', 'restricted_motors.mtl'])
+        tmp_path,
+        _clone_writing(['restricted_motors.obj', 'restricted_motors.mtl']),
     )
 
     meshes_directory = tmp_path / 'cine_gazebo/models/cine_source_one/meshes'

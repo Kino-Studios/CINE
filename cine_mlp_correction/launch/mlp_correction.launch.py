@@ -22,8 +22,8 @@ def generate_launch_description():
                 parameters=[
                     {
                         'mlp_weights_path': LaunchConfiguration('mlp_weights_path'),
-                    }
+                    },
                 ],
             ),
-        ]
+        ],
     )

@@ -18,21 +18,25 @@ class NoisyOdometryNode(Node):
             self.declare_parameter(
                 'enable_sensor_noise',
                 SensorNoiseParams.ENABLE_SENSOR_NOISE,
-            ).value
+            ).value,
         )
         self.linear_noise_std = float(
-            self.declare_parameter('linear_noise_std_m', SensorNoiseParams.LINEAR_NOISE_STD_M).value
+            self.declare_parameter(
+                'linear_noise_std_m',
+                SensorNoiseParams.LINEAR_NOISE_STD_M,
+            ).value,
         )
         self.angular_noise_std = float(
             self.declare_parameter(
-                'angular_noise_std_rad', SensorNoiseParams.ANGULAR_NOISE_STD_RAD
-            ).value
+                'angular_noise_std_rad',
+                SensorNoiseParams.ANGULAR_NOISE_STD_RAD,
+            ).value,
         )
         self.raw_topic = str(
-            self.declare_parameter('raw_odom_topic', SensorNoiseParams.RAW_ODOM_TOPIC).value
+            self.declare_parameter('raw_odom_topic', SensorNoiseParams.RAW_ODOM_TOPIC).value,
         )
         self.noisy_topic = str(
-            self.declare_parameter('noisy_odom_topic', SensorNoiseParams.NOISY_ODOM_TOPIC).value
+            self.declare_parameter('noisy_odom_topic', SensorNoiseParams.NOISY_ODOM_TOPIC).value,
         )
 
         self._rng = random.Random()
@@ -48,6 +52,7 @@ class NoisyOdometryNode(Node):
     def _apply_orientation_noise(self, orientation):
         if not self.enable_noise or self.angular_noise_std <= 0.0:
             return
+
         x = self._add_noise(orientation.x, self.angular_noise_std)
         y = self._add_noise(orientation.y, self.angular_noise_std)
         z = self._add_noise(orientation.z, self.angular_noise_std)
@@ -71,13 +76,16 @@ class NoisyOdometryNode(Node):
         msg.twist.twist.linear.z = self._add_noise(msg.twist.twist.linear.z, self.linear_noise_std)
 
         msg.twist.twist.angular.x = self._add_noise(
-            msg.twist.twist.angular.x, self.angular_noise_std
+            msg.twist.twist.angular.x,
+            self.angular_noise_std,
         )
         msg.twist.twist.angular.y = self._add_noise(
-            msg.twist.twist.angular.y, self.angular_noise_std
+            msg.twist.twist.angular.y,
+            self.angular_noise_std,
         )
         msg.twist.twist.angular.z = self._add_noise(
-            msg.twist.twist.angular.z, self.angular_noise_std
+            msg.twist.twist.angular.z,
+            self.angular_noise_std,
         )
 
     def _odom_callback(self, msg: Odometry):
@@ -89,6 +97,7 @@ class NoisyOdometryNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = NoisyOdometryNode()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

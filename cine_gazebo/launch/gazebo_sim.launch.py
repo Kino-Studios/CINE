@@ -100,20 +100,24 @@ def _render_model(share_directory, airframe):
         raise ValueError(f"Unknown airframe '{airframe}'; choose one of {sorted(AIRFRAME_MODELS)}")
 
     camera = camera_spec_from_vins_camera(
-        cine_sensing_config.load('vins_camera'), _camera_rate_hz()
+        cine_sensing_config.load('vins_camera'),
+        _camera_rate_hz(),
     )
     imu_noise = imu_noise_from_vins(cine_sensing_config.load('vins')['vins_config'])
     template_directory = share_directory / 'models' / AIRFRAME_MODELS[airframe]
     model_directory = RENDER_DIRECTORY / WORLD_MODEL_NAME
     model_directory.mkdir(parents=True, exist_ok=True)
     rendered = render_model(
-        (template_directory / 'model.sdf.template').read_text(), camera, imu_noise
+        (template_directory / 'model.sdf.template').read_text(),
+        camera,
+        imu_noise,
     )
     (model_directory / 'model.sdf').write_text(rendered)
     shutil.copyfile(template_directory / 'model.config', model_directory / 'model.config')
     # Replace rather than merge, so switching airframes never leaves the other model's
     # meshes behind under the shared WORLD_MODEL_NAME directory.
     shutil.rmtree(model_directory / 'meshes', ignore_errors=True)
+
     if (template_directory / 'meshes').is_dir():
         shutil.copytree(template_directory / 'meshes', model_directory / 'meshes')
 
@@ -162,7 +166,7 @@ def _start_gazebo(context):
                     'world_file': str(world_path),
                     'publish_rate_hz': SUBJECT_POSE_RATE_HZ,
                     'use_sim_time': True,
-                }
+                },
             ],
             output='screen',
         ),
@@ -176,7 +180,7 @@ def _position_parameter_file(share_directory, nav_source):
     parameter_file = share_directory / 'config' / 'ardupilot' / f'{nav_source}_position.parm'
     if not parameter_file.is_file():
         raise FileNotFoundError(
-            f"nav_source '{nav_source}' needs {parameter_file}, which does not exist"
+            f"nav_source '{nav_source}' needs {parameter_file}, which does not exist",
         )
 
     return parameter_file
@@ -287,7 +291,7 @@ def _require_pinned_weights():
     if not weights_file.is_file():
         raise RuntimeError(
             f'{weights_file} is missing; fetch the pinned weights with fetch_weights.py '
-            'instead of letting Ultralytics download an unpinned copy'
+            'instead of letting Ultralytics download an unpinned copy',
         )
 
 
@@ -295,7 +299,7 @@ def _require_depth_weights():
     if not DEPTH_MODEL_DIRECTORY.exists():
         raise RuntimeError(
             f'{DEPTH_MODEL_DIRECTORY} is missing; fetch the pinned weights with '
-            'fetch_weights.py instead of letting Hugging Face download an unpinned copy'
+            'fetch_weights.py instead of letting Hugging Face download an unpinned copy',
         )
 
 
@@ -305,6 +309,7 @@ def _virtual_env_site_packages():
     virtual_env = os.environ.get('VIRTUAL_ENV')
     if not virtual_env:
         return {}
+
     python_version = f'python{sys.version_info.major}.{sys.version_info.minor}'
     site_packages = Path(virtual_env) / 'lib' / python_version / 'site-packages'
     existing_path = os.environ.get('PYTHONPATH', '')
@@ -335,7 +340,7 @@ def _start_mission(context):
                     'output_height': DEPTH_OUTPUT_HEIGHT,
                     'focal_length_px': SIMULATED_CAMERA_FOCAL_PX,
                     'use_sim_time': True,
-                }
+                },
             ],
             additional_env={'PYTHONNOUSERSITE': '1', **_virtual_env_site_packages()},
             output='screen',
@@ -349,7 +354,7 @@ def _start_mission(context):
                     'drone_id': PLANNER_DRONE_ID,
                     'odometry_topic': odometry_topic,
                     'use_sim_time': True,
-                }
+                },
             ],
             output='screen',
         ),
@@ -372,7 +377,7 @@ def _start_mission(context):
                         'use_mlp_correction': 'false',
                         'odometry_topic': odometry_topic,
                         'waypoints_file': str(
-                            share_directory / 'config' / 'mission_waypoints.yaml'
+                            share_directory / 'config' / 'mission_waypoints.yaml',
                         ),
                         'drone_id': str(PLANNER_DRONE_ID),
                         'depth_topic': '/depth/image_raw',
@@ -382,7 +387,7 @@ def _start_mission(context):
                         'planner_virtual_ceil_height': str(PLANNER_VIRTUAL_CEILING),
                         **PLANNER_INTRINSICS,
                     }.items(),
-                )
+                ),
             ],
             scoped=True,
         ),
@@ -499,7 +504,8 @@ def generate_launch_description():
             # Set before rendering: the camera is read through this profile, and later
             # CINE-Sensing nodes started from this launch inherit it.
             SetEnvironmentVariable(
-                cine_sensing_config.PROFILE_ENVIRONMENT_VARIABLE, SIMULATION_PROFILE
+                cine_sensing_config.PROFILE_ENVIRONMENT_VARIABLE,
+                SIMULATION_PROFILE,
             ),
             AppendEnvironmentVariable('GZ_SIM_RESOURCE_PATH', str(RENDER_DIRECTORY), prepend=True),
             OpaqueFunction(function=_start_gazebo),
@@ -522,5 +528,5 @@ def generate_launch_description():
             OpaqueFunction(function=_start_sensing),
             OpaqueFunction(function=_start_mission),
             OpaqueFunction(function=_start_recording),
-        ]
+        ],
     )

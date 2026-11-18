@@ -103,10 +103,12 @@ def build_printed_parts():
         (TRAY_FRONT, TRAY_SIDE, TRAY_BOTTOM),
     )
     parts.add_to_group('pla_blue', adapter_plate)
+
     for post_x in (-45.14, -65.14):
         for post_y in (-10.0, 10.0):
             post = parts.cylinder('tray_post', post_x, post_y, 6.0, TRAY_BOTTOM, HEX_RADIUS, 6)
             parts.add_to_group('black_metal', post)
+
     for hole_x in (3.5, 61.5):
         for hole_y in (3.5, 52.5):
             standoff = parts.cylinder(
@@ -119,6 +121,7 @@ def build_printed_parts():
                 6,
             )
             parts.add_to_group('brass', standoff)
+
     # Under the top plate's middle screws, each resting on the Pi part measured beneath it.
     for spacer_y, resting_height in ((9.5, 5.29), (-9.5, 2.54)):
         spacer = parts.cylinder(
@@ -130,6 +133,7 @@ def build_printed_parts():
             2.5,
         )
         parts.add_to_group('white_plastic', spacer)
+
     camera_mount = parts.import_stl(
         parts.CAD_DIRECTORY / 'rasp_pi_camera_mount_drone.stl',
         -90,
@@ -138,9 +142,11 @@ def build_printed_parts():
     camera_mount.data.transform(CAMERA_MOUNT_FLIP)
     parts.add_to_group('pla_blue', camera_mount)
     parts.build_battery_leads()
+
     for group, objects in parts.material_groups.items():
         red, green, blue, metallic, roughness = PALETTE[group]
         group_material = material(group, (red, green, blue), metallic, roughness)
+
         for obj in objects:
             obj.data.materials.clear()
             obj.data.materials.append(group_material)
@@ -166,26 +172,35 @@ def build_frame(parts_directory):
         )
 
     lift = Matrix.Translation((0, 0, TOP_PLATE_LIFT))
+
     for index in (52, 53, 54, 55, 56, 2, 4):
         place_body(index, carbon)
+
     place_body(3, carbon, lift)
+
     for index in (7, 9, 11, 13):
         place_body(index, aluminium, stretch_upwards(-3.0, 27.0, 27.0 + TOP_PLATE_LIFT))
+
     for index in (12, 14):
         place_body(index, aluminium, stretch_upwards(5.0, 27.0, 27.0 + TOP_PLATE_LIFT))
+
     lower_screws = (19, 24, 25, 36, 28, 29, 39, 40, 30, 31, 41, 42, 26, 27, 37, 38)
     for index in (*lower_screws, *range(44, 52), *range(15, 19)):
         place_body(index, steel)
+
     for index in (21, 22, 32, 33, 34, 43):
         place_body(index, steel, lift)
+
     for index in (23, 35):
         place_body(index, steel, Matrix.Translation((0, 0, TOP_PLATE_LIFT - 2.0)))
+
     place_body(0, material('pad', (0.05, 0.05, 0.05), 0, 0.9))
 
 
 def build_guards(guards_directory):
     guard_material = material('guard_pla', (0.8, 0.12, 0.05), 0, 0.5)
     guards = []
+
     for sign_x, sign_y in parts.MOTOR_SIGNS:
         x, y = sign_x * MOTOR_X, sign_y * MOTOR_Y
         end = 'front' if sign_x > 0 else 'back'
@@ -207,8 +222,10 @@ def build_guards(guards_directory):
 
 def place_coloured_part(parts_directory, folder, transform):
     """Import every colour of one split STEP part, each with a material of that colour."""
+
     rows = json.loads((parts_directory / folder / 'colors.json').read_text())
     objects = []
+
     for row in rows:
         obj = import_stl(parts_directory / folder / row['file'], transform)
         rgb = tuple(row['rgb'])
@@ -221,6 +238,7 @@ def place_coloured_part(parts_directory, folder, transform):
 
 def build_vendor_parts(parts_directory):
     families = {'restricted_motors': [], 'restricted_stack': [], 'pi5': [], 'camera': []}
+
     for sign_x, sign_y in parts.MOTOR_SIGNS:
         motor_transform = Matrix.Translation((sign_x * MOTOR_X, sign_y * MOTOR_Y, 8.0))
         families['restricted_motors'] += place_coloured_part(
@@ -228,6 +246,7 @@ def build_vendor_parts(parts_directory):
             'motor',
             motor_transform,
         )
+
     families['restricted_stack'] = place_coloured_part(
         parts_directory,
         'stack',
@@ -249,13 +268,17 @@ def build_vendor_parts(parts_directory):
 
 def build_props(parts_directory):
     """One prop of each spin direction at the origin; model.sdf.template places them."""
+
     props = {}
+
     for family, mirrored in (('restricted_prop_ccw', False), ('restricted_prop_cw', True)):
         mirror = Matrix.Scale(-1, 4, (1, 0, 0)) if mirrored else Matrix.Identity(4)
         transform = Matrix.Scale(PROP_SCALE, 4) @ mirror @ Matrix.Rotation(math.radians(90), 4, 'X')
         prop = import_stl(parts_directory / 'prop' / 'color_00.stl', transform)
+
         if mirrored:
             prop.data.flip_normals()
+
         props[family] = [prop]
 
     return props
@@ -279,16 +302,22 @@ def export_family(name, objects, mesh_directory):
     bpy.ops.object.select_all(action='DESELECT')
     total = sum(triangle_count(obj) for obj in objects)
     ratio = min(1.0, TRIANGLE_BUDGETS.get(name, total) / total)
+
     for obj in objects:
         decimate(obj, ratio)
         obj.select_set(True)
+
     bpy.context.view_layer.objects.active = objects[0]
+
     if len(objects) > 1:
         bpy.ops.object.join()
+
     joined = bpy.context.view_layer.objects.active
     joined.name = name
+
     if name == 'carbon':
         parts.assign_planar_uvs(joined)
+
     bpy.ops.wm.obj_export(
         filepath=str(mesh_directory / f'{name}.obj'),
         export_selected_objects=True,
@@ -315,16 +344,21 @@ def rewrite_mtl_colours(mtl_path):
     Blender writes linear Kd and a white Ka, while Gazebo shows Kd as an sRGB colour and
     lights Ka as ambient, so unconverted parts render washed out and glow in shadow.
     """
+
     rewritten = []
+
     for line in mtl_path.read_text().splitlines():
         if line.startswith('Ka '):
             continue
+
         if line.startswith('Kd '):
             srgb = ' '.join(f'{_to_srgb(float(value)):.6f}' for value in line.split()[1:4])
             line = f'Ka {srgb}\nKd {srgb}'
         elif line.startswith('Ks '):
             line = 'Ks 0.300000 0.300000 0.300000'
+
         rewritten.append(line)
+
     mtl_path.write_text('\n'.join(rewritten) + '\n')
 
 
@@ -340,14 +374,16 @@ def main():
     families = {'restricted_guards': build_guards(guards_directory)}
     families |= build_vendor_parts(parts_directory)
     assigned = {obj.name for objects in families.values() for obj in objects}
+
     for obj in bpy.context.scene.objects:
         if obj.type == 'MESH' and obj.name not in assigned:
             is_carbon = obj.data.materials[0].name.startswith('tbs_carbon')
             families.setdefault('carbon' if is_carbon else 'airframe', []).append(obj)
-    families |= build_props(parts_directory)
 
+    families |= build_props(parts_directory)
     for name, objects in families.items():
         export_family(name, objects, mesh_directory)
+
     for mtl_path in mesh_directory.glob('*.mtl'):
         rewrite_mtl_colours(mtl_path)
 

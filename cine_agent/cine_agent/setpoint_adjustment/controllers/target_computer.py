@@ -8,7 +8,10 @@ from ..utils.trajectory_planner import clamp_depth_to_preference, pixel_to_camer
 
 class TargetComputer:
     def __init__(
-        self, config: ConfigLoader, tracker: StateTracker, cost_calculator: CostCalculator
+        self,
+        config: ConfigLoader,
+        tracker: StateTracker,
+        cost_calculator: CostCalculator,
     ):
         self.config = config
         self.tracker = tracker
@@ -17,6 +20,7 @@ class TargetComputer:
 
     def update_center(self, u: int, v: int) -> None:
         """Update the raw target center point from bounding box or other sources, applying rule of thirds."""
+
         adjusted = self._apply_rule_of_thirds((u, v))
         self.center_uv = adjusted
         self.tracker.set_target_observation(adjusted)
@@ -54,7 +58,6 @@ class TargetComputer:
             return None
 
         median_depth = self.cost_calculator.get_median_depth_roi()
-
         if median_depth is not None:
             smoothed_depth = median_depth
         else:
@@ -80,10 +83,11 @@ class TargetComputer:
         return x_cam, y_cam, preferred_depth
 
     def compute_target_world_position(
-        self, drone_position: np.ndarray, has_odom: bool
+        self,
+        drone_position: np.ndarray,
+        has_odom: bool,
     ) -> np.ndarray | None:
         target_cam = self.compute_target_xy()
-
         if target_cam is None or not has_odom:
             return None
 

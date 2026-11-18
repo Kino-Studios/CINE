@@ -10,7 +10,10 @@ SOURCE_MISSING_BLANK_BEFORE_RETURN = (
 
 def _run_formatter(*arguments):
     return subprocess.run(
-        [sys.executable, str(FORMATTER), *arguments], capture_output=True, text=True, check=False
+        [sys.executable, str(FORMATTER), *arguments],
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
 

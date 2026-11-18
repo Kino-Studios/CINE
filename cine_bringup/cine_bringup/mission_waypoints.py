@@ -26,7 +26,6 @@ def _to_point(point, index: int) -> tuple[float, float, float]:
     is_numeric = is_triple and all(
         isinstance(value, numbers.Real) and not isinstance(value, bool) for value in point
     )
-
     if not is_numeric:
         raise ValueError(f'waypoint {index} must be 3 numbers [x, y, z], got {point!r}')
 

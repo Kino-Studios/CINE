@@ -4,5 +4,6 @@ import os
 from pathlib import Path
 
 os.environ.setdefault(
-    'CINE_CONFIG_ROOT', str(Path(__file__).resolve().parent / 'cine_config' / 'config')
+    'CINE_CONFIG_ROOT',
+    str(Path(__file__).resolve().parent / 'cine_config' / 'config'),
 )

@@ -57,6 +57,7 @@ class ColourSplitter:
 
     def label_colour(self, label):
         color = Quantity_Color()
+
         for kind in (XCAFDoc_ColorSurf, XCAFDoc_ColorGen):
             if XCAFDoc_ColorTool.GetColor_s(label, kind, color):
                 return _rounded_rgb(color)
@@ -65,6 +66,7 @@ class ColourSplitter:
 
     def shape_colour(self, shape):
         color = Quantity_Color()
+
         for kind in (XCAFDoc_ColorSurf, XCAFDoc_ColorGen):
             if self.color_tool.GetColor(shape, kind, color):
                 return _rounded_rgb(color)
@@ -73,6 +75,7 @@ class ColourSplitter:
 
     def walk(self, label, location, inherited_colour):
         colour = self.label_colour(label) or inherited_colour
+
         if self.shape_tool.IsReference_s(label):
             referred = TDF_Label()
             self.shape_tool.GetReferredShape_s(label, referred)
@@ -80,6 +83,7 @@ class ColourSplitter:
         elif self.shape_tool.IsAssembly_s(label):
             components = Sequence_TDF_Label()
             self.shape_tool.GetComponents_s(label, components)
+
             for index in range(1, components.Length() + 1):
                 self.walk(components.Value(index), location, colour)
         else:
@@ -90,6 +94,7 @@ class ColourSplitter:
         sub_shape_colours = {}
         sub_shapes = Sequence_TDF_Label()
         self.shape_tool.GetSubShapes_s(label, sub_shapes)
+
         for index in range(1, sub_shapes.Length() + 1):
             sub_label = sub_shapes.Value(index)
             sub_colour = self.label_colour(sub_label)
@@ -97,6 +102,7 @@ class ColourSplitter:
                 sub_shape = self.shape_tool.GetShape_s(sub_label).Moved(location)
                 for face in _faces(sub_shape):
                     sub_shape_colours[hash(face)] = sub_colour
+
         shape = self.shape_tool.GetShape_s(label).Moved(location)
         for face in _faces(shape):
             colour = (
@@ -113,8 +119,10 @@ def read_step(path):
     reader = STEPCAFControl_Reader()
     reader.SetColorMode(True)
     reader.SetNameMode(True)
+
     if reader.ReadFile(str(path)) != IFSelect_RetDone:
         raise SystemExit(f'cannot read {path}')
+
     reader.Transfer(document)
 
     return document
@@ -127,8 +135,10 @@ def write_colour_stls(faces_by_colour, output_directory, deflection):
     for number, (colour, faces) in enumerate(by_face_count):
         compound = TopoDS_Compound()
         builder.MakeCompound(compound)
+
         for face in faces:
             builder.Add(compound, face)
+
         BRepMesh_IncrementalMesh(compound, deflection, False, 0.3, True).Perform()
         stl_path = output_directory / f'color_{number:02d}.stl'
         writer = StlAPI_Writer()
@@ -146,10 +156,13 @@ def main():
     splitter = ColourSplitter(document)
     free_shapes = Sequence_TDF_Label()
     splitter.shape_tool.GetFreeShapes(free_shapes)
+
     for index in range(1, free_shapes.Length() + 1):
         splitter.walk(free_shapes.Value(index), TopLoc_Location(), None)
+
     rows = write_colour_stls(splitter.faces_by_colour, output_directory, deflection)
     (output_directory / 'colors.json').write_text(json.dumps(rows, indent=1))
+
     for row in rows:
         print(row)
 

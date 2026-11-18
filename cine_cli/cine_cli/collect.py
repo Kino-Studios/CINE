@@ -25,8 +25,11 @@ def collect(
     as_json: JsonFlag = False,
 ) -> None:
     """Collect training data by running the matching tools/collect_*_data.sh script."""
+
     environment = get_environment(context)
     require_root(environment)
+
     if not dry_run:
         require_ros2(environment)
+
     execute(environment, ['bash', f'tools/collect_{mode.value}_data.sh'], dry_run, as_json)

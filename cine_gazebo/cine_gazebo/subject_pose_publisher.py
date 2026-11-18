@@ -40,6 +40,7 @@ class SubjectPosePublisher(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = SubjectPosePublisher()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

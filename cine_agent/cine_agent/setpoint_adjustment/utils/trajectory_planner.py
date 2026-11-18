@@ -38,7 +38,6 @@ def generate_cost_optimized_orbit_waypoints(
     num_radius_samples: int = 5,
     radius_range: tuple[float, float] = (0.8, 2.0),
 ) -> list[tuple[float, float, float, float]]:
-
     cx, cy = center_xy_m
     num_points = max(1, int(duration_s * waypoint_rate_hz))
     dt = 1.0 / waypoint_rate_hz
@@ -98,7 +97,6 @@ def optimize_orbit_center_and_radius(
         for test_y in y_samples:
             for test_radius in radius_candidates:
                 cost = cost_function(test_x, test_y, altitude_m)
-
                 if cost is not None and cost < best_cost:
                     best_cost = cost
                     best_center = (float(test_x), float(test_y))

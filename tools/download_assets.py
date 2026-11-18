@@ -148,6 +148,7 @@ def release_tag(version_file=VERSION_FILE):
 
 def file_sha256(path):
     digest = hashlib.sha256()
+
     with open(path, 'rb') as file_handle:
         for chunk in iter(lambda: file_handle.read(1 << 20), b''):
             digest.update(chunk)
@@ -165,12 +166,13 @@ def fetch_asset(asset, destination_root, tag, download=_download_with_urllib):
     Raises ChecksumMismatchError when a present file or a fresh download does not
     match the recorded checksum; a present file is never overwritten.
     """
+
     target_path = Path(destination_root) / asset.destination / asset.name
     if target_path.exists():
         if asset.sha256 is not None and file_sha256(target_path) != asset.sha256:
             raise ChecksumMismatchError(
                 f'{target_path} exists but its sha256 is not {asset.sha256}; '
-                'not overwriting it. Delete the file to download it again.'
+                'not overwriting it. Delete the file to download it again.',
             )
 
         print(f'present: {target_path}')
@@ -181,11 +183,13 @@ def fetch_asset(asset, destination_root, tag, download=_download_with_urllib):
     partial_path = target_path.with_name(target_path.name + '.part')
     url = f'https://github.com/{GITHUB_REPO}/releases/download/{tag}/{asset.name}'
     print(f'downloading {url}')
+
     try:
         download(url, partial_path)
+
         if asset.sha256 is not None and file_sha256(partial_path) != asset.sha256:
             raise ChecksumMismatchError(
-                f'downloaded {asset.name} does not match sha256 {asset.sha256}; discarded'
+                f'downloaded {asset.name} does not match sha256 {asset.sha256}; discarded',
             )
     except BaseException:
         partial_path.unlink(missing_ok=True)
@@ -193,13 +197,16 @@ def fetch_asset(asset, destination_root, tag, download=_download_with_urllib):
         raise
 
     partial_path.rename(target_path)
+
     if asset.sha256 is None:
         print(f'warning: no checksum recorded for {asset.name}; not verified')
+
     print(f'done: {target_path}')
 
 
 def _clone_meshes_with_git(url, directory):
     """Clone only the `meshes/` folder of `url` into `directory`; True on success."""
+
     no_password_prompt = {**os.environ, 'GIT_TERMINAL_PROMPT': '0'}
     clone_result = subprocess.run(
         ['git', 'clone', '--depth', '1', '--filter=blob:none', '--sparse', url, str(directory)],
@@ -223,7 +230,9 @@ def fetch_private_meshes(destination_root, clone=_clone_meshes_with_git):
     A failed clone, usually a missing login or access, is a warning rather than an error,
     because the simulator runs without these visuals.
     """
+
     print(f'cloning meshes from {PRIVATE_CAD_URL}', flush=True)
+
     with tempfile.TemporaryDirectory() as clone_directory:
         if not clone(PRIVATE_CAD_URL, clone_directory):
             print(
@@ -237,6 +246,7 @@ def fetch_private_meshes(destination_root, clone=_clone_meshes_with_git):
 
         target_directory = Path(destination_root) / PRIVATE_MESHES_DESTINATION
         target_directory.mkdir(parents=True, exist_ok=True)
+
         for mesh_path in sorted((Path(clone_directory) / 'meshes').iterdir()):
             shutil.copy2(mesh_path, target_directory / mesh_path.name)
             print(f'done: {target_directory / mesh_path.name}')

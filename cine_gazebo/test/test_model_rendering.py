@@ -177,7 +177,8 @@ def test_camera_spec_uses_default_image_noise():
 
 
 @pytest.mark.skipif(
-    not SHIPPED_GAZEBO_CAMERA.is_file(), reason='CINE-Sensing is not checked out beside CINE'
+    not SHIPPED_GAZEBO_CAMERA.is_file(),
+    reason='CINE-Sensing is not checked out beside CINE',
 )
 def test_shipped_gazebo_profile_gives_full_fov_horizontal_fov():
     vins_camera = json.loads(SHIPPED_GAZEBO_CAMERA.read_text())
@@ -275,23 +276,23 @@ def test_rendered_model_publishes_its_true_pose():
 
 def test_rendered_model_with_imu_noise_sets_accelerometer_stddev():
     params = _rendered_model(ImuNoise(0.1, 0.01, 2e-5, 3e-5)).find(
-        f'model/include/{EXPERIMENTAL}params'
+        f'model/include/{EXPERIMENTAL}params',
     )
 
     stddev = params.find(
-        "sensor[@element_id='imu_link::imu_sensor']/imu/linear_acceleration/x/noise/stddev"
+        "sensor[@element_id='imu_link::imu_sensor']/imu/linear_acceleration/x/noise/stddev",
     )
     assert float(stddev.text) == 0.1
 
 
 def test_rendered_model_with_imu_noise_sets_gyroscope_bias_random_walk():
     params = _rendered_model(ImuNoise(0.1, 0.01, 2e-5, 3e-5)).find(
-        f'model/include/{EXPERIMENTAL}params'
+        f'model/include/{EXPERIMENTAL}params',
     )
 
     bias = params.find(
         "sensor[@element_id='imu_link::imu_sensor']"
-        '/imu/angular_velocity/z/noise/dynamic_bias_stddev'
+        '/imu/angular_velocity/z/noise/dynamic_bias_stddev',
     )
     assert float(bias.text) == 3e-5
 
@@ -349,7 +350,7 @@ def test_rendered_world_pins_the_walking_subject_to_fuel_version_one():
 
 def test_rendered_world_walks_the_subject_round_a_closed_loop():
     waypoints = _rendered_world(GUSTY).findall(
-        "world/actor[@name='subject']/script/trajectory/waypoint"
+        "world/actor[@name='subject']/script/trajectory/waypoint",
     )
 
     first_position = waypoints[0].find('pose').text.split()[:3]

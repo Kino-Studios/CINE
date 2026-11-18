@@ -116,7 +116,6 @@ _FAKE_ROS_MODULES = {
     'visualization_msgs': _fake_module('visualization_msgs'),
     'visualization_msgs.msg': _fake_module('visualization_msgs.msg', Marker=FakeMarker),
 }
-
 with patch.dict(sys.modules, _FAKE_ROS_MODULES):
     from cine_agent.setpoint_adjustment.controllers.waypoint_selector import WaypointSelector
 
@@ -178,7 +177,7 @@ def test_radius_inside_range_sweeps_five_distinct_radii():
     selection = _select(radius_m=1.5)
 
     assert _distinct_radii(selection.evaluated_positions) == pytest.approx(
-        [1.05, 1.2875, 1.525, 1.7625, 2.0]
+        [1.05, 1.2875, 1.525, 1.7625, 2.0],
     )
 
 
@@ -192,7 +191,7 @@ def test_radius_below_range_falls_back_to_the_configured_range():
     selection = _select(radius_m=0.2)
 
     assert _distinct_radii(selection.evaluated_positions) == pytest.approx(
-        [0.8, 1.1, 1.4, 1.7, 2.0]
+        [0.8, 1.1, 1.4, 1.7, 2.0],
     )
 
 
@@ -200,7 +199,7 @@ def test_radius_above_range_falls_back_to_the_configured_range():
     selection = _select(radius_m=3.0)
 
     assert _distinct_radii(selection.evaluated_positions) == pytest.approx(
-        [0.8, 1.1, 1.4, 1.7, 2.0]
+        [0.8, 1.1, 1.4, 1.7, 2.0],
     )
 
 

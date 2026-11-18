@@ -11,7 +11,7 @@ extend-exclude = [
 quote-style = "single"
 
 [lint]
-select = ["E", "F", "W", "I", "B", "UP"]
+select = ["E", "F", "W", "I", "B", "UP", "COM812"]
 ignore = [
     "E501",   # line length handled by formatter
     "E402",   # test_cost_calculator stubs rclpy in sys.modules before importing the code under test

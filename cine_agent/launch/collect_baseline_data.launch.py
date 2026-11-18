@@ -47,7 +47,7 @@ def generate_launch_description():
                 'waypoints_topic': waypoints_topic,
                 'waypoints_file': waypoints_file,
                 'baseline_mode': True,
-            }
+            },
         ],
     )
 
@@ -57,5 +57,5 @@ def generate_launch_description():
             waypoints_topic_arg,
             waypoints_file_arg,
             baseline_collection,
-        ]
+        ],
     )

@@ -23,7 +23,7 @@ readonly BLENDER="${BLENDER:-blender}"
 split_step() {
   local step_file="$1" part="$2" deflection_mm="$3"
   "${OCP_PYTHON}" -I "${SCRIPT_DIRECTORY}/split_step_by_colour.py" \
-    "${step_file}" "${PARTS}/${part}" "${deflection_mm}" > /dev/null
+    "${step_file}" "${PARTS}/${part}" "${deflection_mm}" >/dev/null
 }
 
 "${OCP_PYTHON}" -I "${SCRIPT_DIRECTORY}/split_iges_bodies.py" \

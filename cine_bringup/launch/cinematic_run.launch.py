@@ -68,8 +68,8 @@ def _camera_parameters(use_simulation):
                     f'{simulated_value!r} if "',
                     use_simulation,
                     f'".lower() == "true" else {hardware_values[name]!r}',
-                ]
-            )
+                ],
+            ),
         }
         for name, simulated_value in SIMULATED_DEPTH_CAMERA.items()
     ]
@@ -77,8 +77,10 @@ def _camera_parameters(use_simulation):
 
 def _if_all_true(*flags):
     expression = ['"true" if all(flag.lower() == "true" for flag in [']
+
     for index, flag in enumerate(flags):
         expression += ([', '] if index else []) + ['"', flag, '"']
+
     expression.append(']) else "false"')
 
     return IfCondition(PythonExpression(expression))
@@ -113,7 +115,8 @@ def generate_launch_description():
     waypoints_file_cmd = DeclareLaunchArgument('waypoints_file', default_value='')
     depth_topic_cmd = DeclareLaunchArgument('depth_topic', default_value=depth_topic)
     camera_pose_topic_cmd = DeclareLaunchArgument(
-        'camera_pose_topic', default_value=camera_pose_topic
+        'camera_pose_topic',
+        default_value=camera_pose_topic,
     )
     cloud_topic_cmd = DeclareLaunchArgument('cloud_topic', default_value=cloud_topic)
 
@@ -136,7 +139,8 @@ def generate_launch_description():
 
     planner_virtual_ceil_height = LaunchConfiguration('planner_virtual_ceil_height', default='2.9')
     planner_virtual_ceil_height_cmd = DeclareLaunchArgument(
-        'planner_virtual_ceil_height', default_value='2.9'
+        'planner_virtual_ceil_height',
+        default_value='2.9',
     )
 
     use_mockamap = LaunchConfiguration('use_mockamap', default=False)
@@ -149,32 +153,38 @@ def generate_launch_description():
     use_cinematic_bspline_cmd = DeclareLaunchArgument('use_cinematic_bspline', default_value='true')
 
     use_mlp_correction = LaunchConfiguration(
-        'use_mlp_correction', default=str(MLPParams.USE_MLP_CORRECTION).lower()
+        'use_mlp_correction',
+        default=str(MLPParams.USE_MLP_CORRECTION).lower(),
     )
     use_mlp_correction_cmd = DeclareLaunchArgument(
-        'use_mlp_correction', default_value=str(MLPParams.USE_MLP_CORRECTION).lower()
+        'use_mlp_correction',
+        default_value=str(MLPParams.USE_MLP_CORRECTION).lower(),
     )
 
     mlp_weights_path = LaunchConfiguration('mlp_weights_path', default=MLPParams.MLP_WEIGHTS_PATH)
     mlp_weights_path_cmd = DeclareLaunchArgument(
-        'mlp_weights_path', default_value=MLPParams.MLP_WEIGHTS_PATH
+        'mlp_weights_path',
+        default_value=MLPParams.MLP_WEIGHTS_PATH,
     )
 
     use_simulation = LaunchConfiguration(
-        'use_simulation', default='true' if SimulationParams.USE_SIMULATION else 'false'
+        'use_simulation',
+        default='true' if SimulationParams.USE_SIMULATION else 'false',
     )
     use_simulation_cmd = DeclareLaunchArgument(
-        'use_simulation', default_value='true' if SimulationParams.USE_SIMULATION else 'false'
+        'use_simulation',
+        default_value='true' if SimulationParams.USE_SIMULATION else 'false',
     )
 
     # The collection scripts start these nodes themselves, with their own parameters, and so
     # they pass false here to keep two copies from running.
     start_cinematography_nodes = LaunchConfiguration('start_cinematography_nodes', default='true')
     start_cinematography_nodes_cmd = DeclareLaunchArgument(
-        'start_cinematography_nodes', default_value='true'
+        'start_cinematography_nodes',
+        default_value='true',
     )
     not_use_simulation = PythonExpression(
-        ['"false" if "', use_simulation, '".lower() == "true" else "true"']
+        ['"false" if "', use_simulation, '".lower() == "true" else "true"'],
     )
     # Simulation keeps the per-drone '/drone_<id>_<odom_topic>' name; otherwise odometry_topic is
     # used as given. The planner's clock follows use_simulation when it is true.
@@ -189,10 +199,10 @@ def generate_launch_description():
             "'.lower() == 'true' else '",
             odometry_topic,
             "'",
-        ]
+        ],
     )
     planner_use_sim_time = PythonExpression(
-        ["'true' if '", use_simulation, "'.lower() == 'true' else '", use_sim_time, "'"]
+        ["'true' if '", use_simulation, "'.lower() == 'true' else '", use_sim_time, "'"],
     )
     planner_odometry_topic = PythonExpression(
         [
@@ -203,74 +213,93 @@ def generate_launch_description():
             "'.lower() == 'true' else '",
             odometry_topic,
             "'",
-        ]
+        ],
     )
 
     use_distinctive_trajs = LaunchConfiguration('use_distinctive_trajs', default='false')
     use_distinctive_trajs_cmd = DeclareLaunchArgument(
-        'use_distinctive_trajs', default_value=use_distinctive_trajs
+        'use_distinctive_trajs',
+        default_value=use_distinctive_trajs,
     )
 
     # Kinematic and cinematographic constraints (loaded from CinematicConstraints / JSON config)
     default_max_vel = LaunchConfiguration(
-        'default_max_vel', default=constraints.DEFAULT_MAX_VELOCITY_MPS
+        'default_max_vel',
+        default=constraints.DEFAULT_MAX_VELOCITY_MPS,
     )
     default_max_acc = LaunchConfiguration(
-        'default_max_acc', default=constraints.DEFAULT_MAX_ACCEL_MPS2
+        'default_max_acc',
+        default=constraints.DEFAULT_MAX_ACCEL_MPS2,
     )
     focus_max_vel = LaunchConfiguration('focus_max_vel', default=constraints.FOCUS_MAX_VELOCITY_MPS)
     focus_max_acc = LaunchConfiguration('focus_max_acc', default=constraints.FOCUS_MAX_ACCEL_MPS2)
     vel_damping = LaunchConfiguration('vel_damping', default=constraints.VEL_DAMPING)
     acc_damping = LaunchConfiguration('acc_damping', default=constraints.ACC_DAMPING)
     default_speed_scale = LaunchConfiguration(
-        'default_speed_scale', default=constraints.DEFAULT_SPEED_SCALE
+        'default_speed_scale',
+        default=constraints.DEFAULT_SPEED_SCALE,
     )
     focus_speed_scale = LaunchConfiguration(
-        'focus_speed_scale', default=constraints.FOCUS_SPEED_SCALE
+        'focus_speed_scale',
+        default=constraints.FOCUS_SPEED_SCALE,
     )
     target_distance_m = LaunchConfiguration(
-        'target_distance_m', default=constraints.TARGET_DISTANCE_M
+        'target_distance_m',
+        default=constraints.TARGET_DISTANCE_M,
     )
     target_distance_tol_m = LaunchConfiguration(
-        'target_distance_tol_m', default=constraints.TARGET_DISTANCE_TOL_M
+        'target_distance_tol_m',
+        default=constraints.TARGET_DISTANCE_TOL_M,
     )
     target_distance_gate_m = LaunchConfiguration(
-        'target_distance_gate_m', default=constraints.TARGET_DISTANCE_GATE_M
+        'target_distance_gate_m',
+        default=constraints.TARGET_DISTANCE_GATE_M,
     )
     yawdot_max = LaunchConfiguration('yawdot_max', default=constraints.YAWDOT_MAX)
     light_avoid_gain = LaunchConfiguration('light_avoid_gain', default=constraints.LIGHT_AVOID_GAIN)
     light_influence_distance_m = LaunchConfiguration(
-        'light_influence_distance_m', default=constraints.LIGHT_INFLUENCE_DISTANCE_M
+        'light_influence_distance_m',
+        default=constraints.LIGHT_INFLUENCE_DISTANCE_M,
     )
     light_avoid_speed_threshold = LaunchConfiguration(
-        'light_avoid_speed_threshold', default=constraints.LIGHT_AVOID_SPEED_THRESHOLD_MPS
+        'light_avoid_speed_threshold',
+        default=constraints.LIGHT_AVOID_SPEED_THRESHOLD_MPS,
     )
     light_avoid_blend_base = LaunchConfiguration(
-        'light_avoid_blend_base', default=constraints.LIGHT_AVOID_BLEND_BASE
+        'light_avoid_blend_base',
+        default=constraints.LIGHT_AVOID_BLEND_BASE,
     )
     light_avoid_max_blend = LaunchConfiguration(
-        'light_avoid_max_blend', default=constraints.LIGHT_AVOID_MAX_BLEND
+        'light_avoid_max_blend',
+        default=constraints.LIGHT_AVOID_MAX_BLEND,
     )
     light_avoid_transition_s = LaunchConfiguration(
-        'light_avoid_transition_s', default=constraints.LIGHT_AVOID_TRANSITION_S
+        'light_avoid_transition_s',
+        default=constraints.LIGHT_AVOID_TRANSITION_S,
     )
     light_cooldown_after_framing_s = LaunchConfiguration(
-        'light_cooldown_after_framing_s', default=constraints.LIGHT_COOLDOWN_AFTER_FRAMING_S
+        'light_cooldown_after_framing_s',
+        default=constraints.LIGHT_COOLDOWN_AFTER_FRAMING_S,
     )
     light_disable_near_finish_s = LaunchConfiguration(
-        'light_disable_near_finish_s', default=constraints.LIGHT_DISABLE_NEAR_FINISH_S
+        'light_disable_near_finish_s',
+        default=constraints.LIGHT_DISABLE_NEAR_FINISH_S,
     )
     light_distance_blend_gain = LaunchConfiguration(
-        'light_distance_blend_gain', default=constraints.LIGHT_DISTANCE_BLEND_GAIN
+        'light_distance_blend_gain',
+        default=constraints.LIGHT_DISTANCE_BLEND_GAIN,
     )
     light_rotation_damping = LaunchConfiguration(
-        'light_rotation_damping', default=constraints.LIGHT_ROTATION_DAMPING
+        'light_rotation_damping',
+        default=constraints.LIGHT_ROTATION_DAMPING,
     )
     light_yaw_smooth_alpha = LaunchConfiguration(
-        'light_yaw_smooth_alpha', default=constraints.LIGHT_YAW_SMOOTH_ALPHA
+        'light_yaw_smooth_alpha',
+        default=constraints.LIGHT_YAW_SMOOTH_ALPHA,
     )
     use_target_yaw = LaunchConfiguration(
-        'use_target_yaw', default=str(constraints.USE_TARGET_YAW).lower()
+        'use_target_yaw',
+        default=str(constraints.USE_TARGET_YAW).lower(),
     )
     use_light_avoid_yaw = LaunchConfiguration('use_light_avoid_yaw', default='true')
     debug_light_yaw = LaunchConfiguration('debug_light_yaw', default='true')
@@ -283,59 +312,76 @@ def generate_launch_description():
     vel_damping_cmd = DeclareLaunchArgument('vel_damping', default_value=vel_damping)
     acc_damping_cmd = DeclareLaunchArgument('acc_damping', default_value=acc_damping)
     default_speed_scale_cmd = DeclareLaunchArgument(
-        'default_speed_scale', default_value=default_speed_scale
+        'default_speed_scale',
+        default_value=default_speed_scale,
     )
     focus_speed_scale_cmd = DeclareLaunchArgument(
-        'focus_speed_scale', default_value=focus_speed_scale
+        'focus_speed_scale',
+        default_value=focus_speed_scale,
     )
     target_distance_m_cmd = DeclareLaunchArgument(
-        'target_distance_m', default_value=target_distance_m
+        'target_distance_m',
+        default_value=target_distance_m,
     )
     target_distance_tol_m_cmd = DeclareLaunchArgument(
-        'target_distance_tol_m', default_value=target_distance_tol_m
+        'target_distance_tol_m',
+        default_value=target_distance_tol_m,
     )
     target_distance_gate_m_cmd = DeclareLaunchArgument(
-        'target_distance_gate_m', default_value=target_distance_gate_m
+        'target_distance_gate_m',
+        default_value=target_distance_gate_m,
     )
     yawdot_max_cmd = DeclareLaunchArgument('yawdot_max', default_value=yawdot_max)
     light_avoid_gain_cmd = DeclareLaunchArgument('light_avoid_gain', default_value=light_avoid_gain)
     light_influence_distance_m_cmd = DeclareLaunchArgument(
-        'light_influence_distance_m', default_value=light_influence_distance_m
+        'light_influence_distance_m',
+        default_value=light_influence_distance_m,
     )
     light_avoid_speed_threshold_cmd = DeclareLaunchArgument(
-        'light_avoid_speed_threshold', default_value=light_avoid_speed_threshold
+        'light_avoid_speed_threshold',
+        default_value=light_avoid_speed_threshold,
     )
     light_avoid_blend_base_cmd = DeclareLaunchArgument(
-        'light_avoid_blend_base', default_value=light_avoid_blend_base
+        'light_avoid_blend_base',
+        default_value=light_avoid_blend_base,
     )
     light_avoid_max_blend_cmd = DeclareLaunchArgument(
-        'light_avoid_max_blend', default_value=light_avoid_max_blend
+        'light_avoid_max_blend',
+        default_value=light_avoid_max_blend,
     )
     light_avoid_transition_s_cmd = DeclareLaunchArgument(
-        'light_avoid_transition_s', default_value=light_avoid_transition_s
+        'light_avoid_transition_s',
+        default_value=light_avoid_transition_s,
     )
     light_cooldown_after_framing_s_cmd = DeclareLaunchArgument(
-        'light_cooldown_after_framing_s', default_value=light_cooldown_after_framing_s
+        'light_cooldown_after_framing_s',
+        default_value=light_cooldown_after_framing_s,
     )
     light_disable_near_finish_s_cmd = DeclareLaunchArgument(
-        'light_disable_near_finish_s', default_value=light_disable_near_finish_s
+        'light_disable_near_finish_s',
+        default_value=light_disable_near_finish_s,
     )
     light_distance_blend_gain_cmd = DeclareLaunchArgument(
-        'light_distance_blend_gain', default_value=light_distance_blend_gain
+        'light_distance_blend_gain',
+        default_value=light_distance_blend_gain,
     )
     light_rotation_damping_cmd = DeclareLaunchArgument(
-        'light_rotation_damping', default_value=light_rotation_damping
+        'light_rotation_damping',
+        default_value=light_rotation_damping,
     )
     light_yaw_smooth_alpha_cmd = DeclareLaunchArgument(
-        'light_yaw_smooth_alpha', default_value=light_yaw_smooth_alpha
+        'light_yaw_smooth_alpha',
+        default_value=light_yaw_smooth_alpha,
     )
     use_target_yaw_cmd = DeclareLaunchArgument('use_target_yaw', default_value=use_target_yaw)
     use_light_avoid_yaw_cmd = DeclareLaunchArgument(
-        'use_light_avoid_yaw', default_value=use_light_avoid_yaw
+        'use_light_avoid_yaw',
+        default_value=use_light_avoid_yaw,
     )
     debug_light_yaw_cmd = DeclareLaunchArgument('debug_light_yaw', default_value=debug_light_yaw)
     debug_light_period_s_cmd = DeclareLaunchArgument(
-        'debug_light_period_s', default_value=debug_light_period_s
+        'debug_light_period_s',
+        default_value=debug_light_period_s,
     )
 
     map_generator_node = Node(
@@ -372,8 +418,8 @@ def generate_launch_description():
                     '" == "true" and "',
                     use_mockamap,
                     '" == "false" else "false"',
-                ]
-            )
+                ],
+            ),
         ),
     )
 
@@ -406,7 +452,7 @@ def generate_launch_description():
                                 get_package_share_directory('ego_planner'),
                                 'launch',
                                 'advanced_param.launch.py',
-                            )
+                            ),
                         ),
                         launch_arguments={
                             'drone_id': drone_id,
@@ -428,15 +474,15 @@ def generate_launch_description():
                             'planning_horizon': str(7.5),
                             'use_distinctive_trajs': use_distinctive_trajs,
                             'realworld_experiment': PythonExpression(
-                                ["'false' if '", use_simulation, "' == 'true' else 'true'"]
+                                ["'false' if '", use_simulation, "' == 'true' else 'true'"],
                             ),
                             'use_sim_time': planner_use_sim_time,
                             **waypoint_args,
                         }.items(),
-                    )
+                    ),
                 ],
                 scoped=True,
-            )
+            ),
         ]
 
     advanced_param_include = OpaqueFunction(function=planner_include)
@@ -539,13 +585,13 @@ def generate_launch_description():
             {'use_sim_time': use_sim_time},
             {
                 'bspline_in_topic': PythonExpression(
-                    ["'/drone_' + str(", drone_id, ") + '_planning/bspline'"]
-                )
+                    ["'/drone_' + str(", drone_id, ") + '_planning/bspline'"],
+                ),
             },
             {
                 'bspline_out_topic': PythonExpression(
-                    ["'/drone_' + str(", drone_id, ") + '_planning/cinematic_bspline'"]
-                )
+                    ["'/drone_' + str(", drone_id, ") + '_planning/cinematic_bspline'"],
+                ),
             },
         ],
     )
@@ -621,8 +667,10 @@ def generate_launch_description():
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(
-                        get_package_share_directory('ego_planner'), 'launch', 'simulator.launch.py'
-                    )
+                        get_package_share_directory('ego_planner'),
+                        'launch',
+                        'simulator.launch.py',
+                    ),
                 ),
                 launch_arguments={
                     'use_dynamic': use_dynamic,
@@ -655,8 +703,10 @@ def generate_launch_description():
     ld.add_action(camera_pose_topic_cmd)
     ld.add_action(cloud_topic_cmd)
     ld.add_action(planner_virtual_ceil_height_cmd)
+
     for planner_intrinsic_cmd in planner_intrinsic_cmds:
         ld.add_action(planner_intrinsic_cmd)
+
     ld.add_action(obj_num_cmd)
     ld.add_action(drone_id_cmd)
     ld.add_action(use_dynamic_cmd)

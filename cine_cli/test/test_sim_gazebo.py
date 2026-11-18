@@ -95,7 +95,7 @@ def test_gazebo_without_docker_exits_3(invoke_gazebo):
 
 def test_gazebo_without_image_exits_3_and_names_build_command(invoke_gazebo):
     runner = RecordingRunner(
-        captures={IMAGE_INSPECT_PREFIX: CapturedOutput(returncode=1, stdout='')}
+        captures={IMAGE_INSPECT_PREFIX: CapturedOutput(returncode=1, stdout='')},
     )
 
     result = invoke_gazebo(runner=runner)

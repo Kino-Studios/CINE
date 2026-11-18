@@ -8,10 +8,8 @@ CONFIG_ROOT_ENV = 'CINE_CONFIG_ROOT'
 
 
 def config_root() -> Path:
-    """Directory holding the JSON config tree.
+    """The JSON config tree: ``$CINE_CONFIG_ROOT`` when set, else the installed package share."""
 
-    ``$CINE_CONFIG_ROOT`` wins when set; otherwise the installed package share.
-    """
     override = os.environ.get(CONFIG_ROOT_ENV)
     if override:
         return Path(override)
@@ -24,7 +22,9 @@ def config_root() -> Path:
 
 def load(relative_path: str) -> dict:
     """Parse ``<config root>/<relative_path>.json``, e.g. ``load('camera/camera-params')``."""
+
     path = config_root() / f'{relative_path}.json'
+
     try:
         text = path.read_text()
     except FileNotFoundError as exc:

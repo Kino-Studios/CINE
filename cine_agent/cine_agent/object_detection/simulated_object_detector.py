@@ -41,13 +41,18 @@ class SimulatedObjectDetector(Node):
 
         self.depth_sub = self.create_subscription(Image, 'depth/image_raw', self.depth_callback, 10)
         self._framing_sub = self.create_subscription(
-            Bool, '/cinematography/framing_active', self._framing_cb, 10
+            Bool,
+            '/cinematography/framing_active',
+            self._framing_cb,
+            10,
         )
 
         self.detection_pub = self.create_publisher(Float32MultiArray, 'object_detections', 10)
 
         self.center_pub = self.create_publisher(
-            PolygonStamped, '/object_detection/center_point', 10
+            PolygonStamped,
+            '/object_detection/center_point',
+            10,
         )
 
         self.bbox_pub = self.create_publisher(PolygonStamped, '/object_detection/bounding_box', 10)
@@ -56,7 +61,7 @@ class SimulatedObjectDetector(Node):
 
         self.get_logger().info('Simulated Object Detector initialized')
         self.get_logger().info(
-            f'Camera: {self.width}x{self.height}, f=({self.fx:.2f}, {self.fy:.2f})'
+            f'Camera: {self.width}x{self.height}, f=({self.fx:.2f}, {self.fy:.2f})',
         )
 
     def depth_callback(self, msg):
@@ -64,12 +69,10 @@ class SimulatedObjectDetector(Node):
             depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1')
 
             detections = self.detect_objects(depth_image)
-
             if detections:
                 self.publish_detections(detections)
             else:
                 self._republish_cached_detection()
-
         except (CvBridgeError, ValueError, cv2.error) as error:
             self.get_logger().warn(f'Error processing depth image: {error}')
 
@@ -81,7 +84,6 @@ class SimulatedObjectDetector(Node):
 
         depth_normalized = np.zeros_like(depth_clean, dtype=np.uint8)
         valid_mask = depth_clean > 0
-
         if np.any(valid_mask):
             depth_min = depth_clean[valid_mask].min()
             depth_max = depth_clean[valid_mask].max()
@@ -99,7 +101,6 @@ class SimulatedObjectDetector(Node):
 
         for contour in contours:
             area = cv2.contourArea(contour)
-
             if area < self.min_area:
                 continue
 
@@ -111,12 +112,10 @@ class SimulatedObjectDetector(Node):
             mask = np.zeros(depth_clean.shape, dtype=np.uint8)
             cv2.drawContours(mask, [contour], -1, 255, -1)
             object_depths = depth_clean[mask > 0]
-
             if len(object_depths) == 0:
                 continue
 
             avg_depth = np.median(object_depths[object_depths > 0])
-
             if avg_depth <= 0 or avg_depth > self.max_range:
                 continue
 
@@ -144,7 +143,7 @@ class SimulatedObjectDetector(Node):
                     'bbox_y': float(y),
                     'bbox_w': float(w),
                     'bbox_h': float(h),
-                }
+                },
             )
 
         return detections
@@ -165,21 +164,24 @@ class SimulatedObjectDetector(Node):
                     det['centering_score'],
                     det['normalized_x'],
                     det['normalized_y'],
-                ]
+                ],
             )
 
         msg.data = data
         self.detection_pub.publish(msg)
 
         primary = max(detections, key=lambda d: d.get('area_pixels', 0.0))
+
         if cache_last:
             self._last_primary_detection = dict(primary)
             self._last_detection_time = self.get_clock().now()
+
         self._publish_polygons(primary)
 
     def _republish_cached_detection(self):
         if not self._framing_active or self._last_primary_detection is None:
             return
+
         self.publish_detections([self._last_primary_detection], cache_last=False)
 
     def _framing_cb(self, msg: Bool):

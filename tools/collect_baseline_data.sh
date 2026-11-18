@@ -77,7 +77,7 @@ SIMULATED_FOCUS_PID=""
 if ! ros2 node list 2>/dev/null | grep -q "drone_0_ego_planner_node"; then
   SIM_LOG=$(mktemp /tmp/ego_planner_baseline.XXXXXX)
   LOG_FILE="${SIM_LOG}"
-  "${SCRIPT_DIR}/start_simulation.sh" baseline start_cinematography_nodes:=false > "$SIM_LOG" 2>&1 &
+  "${SCRIPT_DIR}/start_simulation.sh" baseline start_cinematography_nodes:=false >"$SIM_LOG" 2>&1 &
   SIM_PID=$!
 
   tail -f "$SIM_LOG" &

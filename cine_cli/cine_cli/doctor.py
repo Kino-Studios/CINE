@@ -29,9 +29,11 @@ def _format_check(check: Check) -> str:
 
 def doctor(context: typer.Context, as_json: JsonFlag = False) -> None:
     """Check that ROS 2 is sourced and the CINE workspace is built."""
+
     environment = get_environment(context)
     ros2_path = environment.which('ros2')
     checks: list[Check] = []
+
     if ros2_path is None:
         checks.append(Check('ros2', False, ROS2_MISSING_MESSAGE))
         exit_code = ExitCode.ENVIRONMENT
@@ -40,7 +42,9 @@ def doctor(context: typer.Context, as_json: JsonFlag = False) -> None:
         domain_id = environment.variables.get('ROS_DOMAIN_ID')
         checks.append(Check('ROS_DOMAIN_ID', True, domain_id or 'unset (0)'))
         prefix = environment.runner.capture(
-            ['ros2', 'pkg', 'prefix', 'cine_bringup'], Path.cwd(), WORKSPACE_TIMEOUT_SECONDS
+            ['ros2', 'pkg', 'prefix', 'cine_bringup'],
+            Path.cwd(),
+            WORKSPACE_TIMEOUT_SECONDS,
         )
         built = prefix.returncode == 0
         checks.append(
@@ -48,9 +52,10 @@ def doctor(context: typer.Context, as_json: JsonFlag = False) -> None:
                 'workspace built',
                 built,
                 prefix.stdout.strip() if built else 'cine_bringup not found: build and source it',
-            )
+            ),
         )
         exit_code = ExitCode.OK if all(check.passed for check in checks) else ExitCode.FAILED
+
     if as_json:
         typer.echo(json.dumps({'checks': [asdict(check) for check in checks]}))
     else:

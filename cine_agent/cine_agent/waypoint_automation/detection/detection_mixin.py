@@ -40,6 +40,7 @@ class DetectionMixin:
         target = self.target_world or self.last_target_world
         if target is None:
             return
+
         msg = PointStamped()
         stamp = self.get_clock().now().to_msg()
         msg.header.stamp = stamp
@@ -55,6 +56,7 @@ class DetectionMixin:
             self._last_published_target_stamp = None
 
             return
+
         try:
             p = msg.point
             self.target_world = (float(p.x), float(p.y), float(p.z))
@@ -91,6 +93,7 @@ class DetectionMixin:
 
             norm_x = None
             norm_y = None
+
             if len(data) >= 9:
                 norm_x = data[7]
                 norm_y = data[8]
@@ -123,12 +126,12 @@ class DetectionMixin:
     def _compute_object_world(self, detection):
         if detection is None:
             return None
+
         obj_depth = float(detection['depth'])
         center_x = float(detection['center_x'])
         center_y = float(detection['center_y'])
         norm_x = detection.get('norm_x', None)
         norm_y = detection.get('norm_y', None)
-
         if norm_x is not None and norm_y is not None:
             u = float(norm_x) * float(self.image_width)
             v = float(norm_y) * float(self.image_height)
@@ -159,7 +162,9 @@ class DetectionMixin:
     def detection_callback(self, msg: Float32MultiArray):
         if self.baseline_mode:
             return
+
         now = self.get_clock().now()
+
         if self.object_detection_time is not None:
             elapsed = (now - self.object_detection_time).nanoseconds / 1e9
             if elapsed < self.DETECTION_DEBOUNCE:
@@ -181,8 +186,10 @@ class DetectionMixin:
             if target_world_pos is not None:
                 self.target_world = target_world_pos
                 self.last_target_world = target_world_pos
+
             if computed_depth is not None:
                 obj_depth = computed_depth
+
         self._publish_target_world()
         self._set_anchors(target_world=self.target_world, obj_depth=obj_depth)
         self._rebuild_active_with_detection()
@@ -197,9 +204,10 @@ class DetectionMixin:
             success = bool(self.last_cinematic_waypoints)
             self.use_dynamic_waypoints = success
             self.pending_detection_merge = not success
+
             if not success:
                 self.get_logger().warn(
-                    'Dynamic waypoints requested but unavailable; inserting anchor splicing'
+                    'Dynamic waypoints requested but unavailable; inserting anchor splicing',
                 )
         else:
             self.use_dynamic_waypoints = False

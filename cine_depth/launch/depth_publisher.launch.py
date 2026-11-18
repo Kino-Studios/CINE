@@ -12,6 +12,7 @@ def _virtual_env_site_packages():
     virtual_env = os.environ.get('VIRTUAL_ENV')
     if not virtual_env:
         return {}
+
     python_version = f'python{sys.version_info.major}.{sys.version_info.minor}'
     site_packages = Path(virtual_env) / 'lib' / python_version / 'site-packages'
     existing_path = os.environ.get('PYTHONPATH', '')
@@ -31,6 +32,6 @@ def generate_launch_description():
                 # Keeps packages from ~/.local out of the node, so the venv's torch is the
                 # one imported.
                 additional_env={'PYTHONNOUSERSITE': '1', **_virtual_env_site_packages()},
-            )
-        ]
+            ),
+        ],
     )

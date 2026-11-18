@@ -23,7 +23,8 @@ def test_five_point_file_is_accepted(tmp_path):
 
 def test_six_point_file_raises_naming_the_limit(tmp_path):
     path = write_waypoints(
-        tmp_path, '[[0, 0, 1], [1, 0, 1], [2, 0, 1], [3, 0, 1], [4, 0, 1], [5, 0, 1]]'
+        tmp_path,
+        '[[0, 0, 1], [1, 0, 1], [2, 0, 1], [3, 0, 1], [4, 0, 1], [5, 0, 1]]',
     )
 
     with pytest.raises(ValueError, match='at most 5 waypoints'):

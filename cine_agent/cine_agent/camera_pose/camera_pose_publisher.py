@@ -10,10 +10,16 @@ from cine_agent.camera_pose.camera_pose import Pose, compose_camera_pose
 def load_body_to_camera() -> Pose:
     config = ConfigLoader()
     translation = config.get(
-        'camera', 'camera_params', 'body_to_camera_translation', [0.05, 0.0, 0.0]
+        'camera',
+        'camera_params',
+        'body_to_camera_translation',
+        [0.05, 0.0, 0.0],
     )
     quaternion = config.get(
-        'camera', 'camera_params', 'body_to_camera_quaternion', [-0.5, 0.5, -0.5, 0.5]
+        'camera',
+        'camera_params',
+        'body_to_camera_quaternion',
+        [-0.5, 0.5, -0.5, 0.5],
     )
 
     return Pose(*(float(value) for value in (*translation, *quaternion)))
@@ -30,7 +36,10 @@ class CameraPosePublisher(Node):
         self._body_to_camera = load_body_to_camera()
         self._publisher = self.create_publisher(PoseStamped, f'drone_{drone_id}_camera_pose', 10)
         self._subscription = self.create_subscription(
-            Odometry, odometry_topic, self._on_odometry, 10
+            Odometry,
+            odometry_topic,
+            self._on_odometry,
+            10,
         )
 
     def _on_odometry(self, odometry: Odometry):
@@ -63,6 +72,7 @@ class CameraPosePublisher(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = CameraPosePublisher()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

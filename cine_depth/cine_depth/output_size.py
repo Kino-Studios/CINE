@@ -2,16 +2,22 @@
 
 
 def output_size(
-    input_width: int, input_height: int, requested_width: int, requested_height: int
+    input_width: int,
+    input_height: int,
+    requested_width: int,
+    requested_height: int,
 ) -> tuple[int, int]:
     """Returns (width, height); 0 for a requested value means it is not requested.
 
     With neither requested the input size is kept; with one, the input aspect ratio is.
     """
+
     if requested_width and requested_height:
         return requested_width, requested_height
+
     if requested_width:
         return requested_width, round(input_height * requested_width / input_width)
+
     if requested_height:
         return round(input_width * requested_height / input_height), requested_height
 

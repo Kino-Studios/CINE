@@ -34,10 +34,14 @@ class SimulatedFocusPublisher(Node):
 
         self._focus_depth_pub = self.create_publisher(Float32, '/cinematography/focus_depth_m', 10)
         self._target_world_pub = self.create_publisher(
-            PointStamped, '/cinematography/target_world', 10
+            PointStamped,
+            '/cinematography/target_world',
+            10,
         )
         self._costs_pub = self.create_publisher(
-            CinematographyCosts, '/cinematography/cinematography_costs', 10
+            CinematographyCosts,
+            '/cinematography/cinematography_costs',
+            10,
         )
 
         period = 1.0 / max(1.0, self.publish_rate_hz)
@@ -45,6 +49,7 @@ class SimulatedFocusPublisher(Node):
 
     def _odom_cb(self, msg: Odometry):
         self._last_odom = msg
+
         if self._odom_origin is None:
             p = msg.pose.pose.position
             self._odom_origin = (float(p.x), float(p.y), float(p.z))
@@ -58,8 +63,10 @@ class SimulatedFocusPublisher(Node):
     def _target_from_odom(self) -> tuple[float, float, float] | None:
         if not self.use_odom or self._last_odom is None:
             return None
+
         if self._target_world is not None:
             return self._target_world
+
         p = self._last_odom.pose.pose.position
         ox, oy, oz = self.target_offset_xyz
 
@@ -95,11 +102,13 @@ class SimulatedFocusPublisher(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = SimulatedFocusPublisher()
+
     try:
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
+
         if rclpy.ok():
             rclpy.shutdown()

@@ -29,6 +29,7 @@ HASH_CHUNK_BYTES = 1 << 20
 
 def verify_sha256(path, expected):
     digest = hashlib.sha256()
+
     with open(path, 'rb') as file_handle:
         for chunk in iter(lambda: file_handle.read(HASH_CHUNK_BYTES), b''):
             digest.update(chunk)
@@ -42,16 +43,20 @@ def fetch_yolo(weights_dir):
         print(f'{destination} present with the pinned hash')
 
         return
+
     # Download beside the destination and rename, so an interrupted download never
     # leaves a file at the final path.
     partial = destination.with_name(destination.name + '.partial')
     print(f'Downloading {YOLO_URL}')
+
     with urllib.request.urlopen(YOLO_URL) as response, open(partial, 'wb') as file_handle:
         shutil.copyfileobj(response, file_handle)
+
     if not verify_sha256(partial, YOLO_SHA256):
         partial.unlink()
 
         raise RuntimeError(f'{YOLO_URL} does not match sha256 {YOLO_SHA256}')
+
     partial.replace(destination)
 
 

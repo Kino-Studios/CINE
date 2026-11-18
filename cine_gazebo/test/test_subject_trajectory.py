@@ -93,7 +93,7 @@ def test_orientation_on_a_waypoint_is_its_yaw():
     script = parse_actor_script(LOOP_WORLD)
 
     assert subject_pose_at(script, 6.0).orientation_xyzw == pytest.approx(
-        (0.0, 0.0, 0.7071080798, 0.7071054825)
+        (0.0, 0.0, 0.7071080798, 0.7071054825),
     )
 
 
@@ -101,7 +101,8 @@ def test_orientation_halfway_through_a_turn_is_half_the_yaw():
     script = parse_actor_script(LOOP_WORLD)
 
     assert subject_pose_at(script, 5.5).orientation_xyzw == pytest.approx(
-        (0.0, 0.0, 0.3826842, 0.9238792), abs=1e-6
+        (0.0, 0.0, 0.3826842, 0.9238792),
+        abs=1e-6,
     )
 
 

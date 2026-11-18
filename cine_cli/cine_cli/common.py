@@ -45,8 +45,11 @@ class Runner(Protocol):
 class SubprocessRunner:
     def run(self, command: list[str], cwd: Path, stdout_to_stderr: bool = False) -> int:
         process = subprocess.Popen(
-            command, cwd=cwd, stdout=sys.stderr if stdout_to_stderr else None
+            command,
+            cwd=cwd,
+            stdout=sys.stderr if stdout_to_stderr else None,
         )
+
         try:
             return process.wait()
         except KeyboardInterrupt:
@@ -90,6 +93,7 @@ def default_environment() -> Environment:
 
     variables = dict(os.environ)
     repository_root = None
+
     if 'CINE_ROOT' in variables:
         repository_root = Path(variables['CINE_ROOT'])
     else:
@@ -125,6 +129,7 @@ def require_ros2(environment: Environment) -> None:
 
 def execute(environment: Environment, command: list[str], dry_run: bool, as_json: bool) -> None:
     root = require_root(environment)
+
     if dry_run:
         if as_json:
             typer.echo(json.dumps({'command': command, 'cwd': str(root)}))
@@ -132,18 +137,23 @@ def execute(environment: Environment, command: list[str], dry_run: bool, as_json
             typer.echo(shlex.join(command))
 
         return
+
     exit_code = environment.runner.run(command, root, stdout_to_stderr=as_json)
+
     if as_json:
         typer.echo(json.dumps({'command': command, 'exit_code': exit_code}))
+
     if exit_code != 0:
         raise typer.Exit(exit_code)
 
 
 JsonFlag = Annotated[
-    bool, typer.Option('--json', help='Print one JSON object on stdout instead of text.')
+    bool,
+    typer.Option('--json', help='Print one JSON object on stdout instead of text.'),
 ]
 DryRunFlag = Annotated[
-    bool, typer.Option('--dry-run', '-n', help='Print the command and start nothing.')
+    bool,
+    typer.Option('--dry-run', '-n', help='Print the command and start nothing.'),
 ]
 
 

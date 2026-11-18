@@ -12,41 +12,54 @@ import numpy as np
 
 
 def read_run(
-    csv_path: Path, columns_order: OrderedDict[str, None]
+    csv_path: Path,
+    columns_order: OrderedDict[str, None],
 ) -> tuple[dict[str, tuple[list[float], list[float]]], float, float] | None:
     column_points: dict[str, list[tuple[float, float]]] = defaultdict(list)
     min_time = math.inf
     max_time = -math.inf
+
     with csv_path.open(newline='') as handle:
         reader = csv.DictReader(handle)
         if reader.fieldnames is None or 'time' not in reader.fieldnames:
             return None
+
         for row in reader:
             raw_time = (row.get('time') or '').strip()
             if not raw_time:
                 continue
+
             try:
                 time_value = float(raw_time)
             except ValueError:
                 continue
+
             min_time = min(min_time, time_value)
             max_time = max(max_time, time_value)
+
             for column, raw_value in row.items():
                 if column == 'time' or raw_value is None:
                     continue
+
                 value_str = raw_value.strip()
                 if not value_str:
                     continue
+
                 try:
                     numeric = float(value_str)
                 except ValueError:
                     continue
+
                 column_points[column].append((time_value, numeric))
+
                 if column not in columns_order:
                     columns_order[column] = None
+
     if min_time == math.inf:
         return None
+
     column_series: dict[str, tuple[list[float], list[float]]] = {}
+
     for column, points in column_points.items():
         points.sort(key=lambda pair: pair[0])
         times, values = zip(*points)
@@ -62,10 +75,12 @@ def load_runs(
     columns_order: OrderedDict[str, None] = OrderedDict()
     min_time = math.inf
     max_time = -math.inf
+
     for csv_path in sorted(csv_paths):
         result = read_run(csv_path, columns_order)
         if result is None:
             continue
+
         run_data, run_min, run_max = result
         runs.append(run_data)
         min_time = min(min_time, run_min)
@@ -77,8 +92,10 @@ def load_runs(
 def build_time_grid(min_time: float, max_time: float, step: float) -> list[float]:
     if min_time == math.inf or max_time == -math.inf:
         return []
+
     if max_time <= min_time:
         return [min_time]
+
     count = max(1, int(math.floor((max_time - min_time) / step)))
     grid = [min_time + i * step for i in range(count + 1)]
     if grid[-1] < max_time - 1e-12:
@@ -88,12 +105,15 @@ def build_time_grid(min_time: float, max_time: float, step: float) -> list[float
 
 
 def resample_run(
-    series: dict[str, tuple[list[float], list[float]]], grid: list[float]
+    series: dict[str, tuple[list[float], list[float]]],
+    grid: list[float],
 ) -> dict[str, np.ndarray]:
     resampled: dict[str, np.ndarray] = {}
+
     for column, (times, values) in series.items():
         if not times:
             continue
+
         if len(times) == 1:
             # Use np.isclose to vectorize comparison against single time-point
             mask = np.isclose(grid, times[0], rtol=1e-9, atol=1e-12)
@@ -101,6 +121,7 @@ def resample_run(
             data[mask] = values[0]
             resampled[column] = data
             continue
+
         interpolated = np.interp(grid, times, values, left=np.nan, right=np.nan)
         resampled[column] = interpolated
 
@@ -117,6 +138,7 @@ def aggregate_runs(
     column_stats: dict[str, np.ndarray] = {
         column: np.zeros((grid_len, 3)) for column in columns_order
     }
+
     for run in runs:
         resampled = resample_run(run, grid)
         for column, values in resampled.items():
@@ -125,6 +147,7 @@ def aggregate_runs(
             mask = ~np.isnan(values)
             if not np.any(mask):
                 continue
+
             v = values[mask]
             stats[mask, 0] += v
             stats[mask, 1] += v * v
@@ -134,16 +157,20 @@ def aggregate_runs(
 
 
 def compute_mean(
-    csv_files: Sequence[Path], time_step: float
+    csv_files: Sequence[Path],
+    time_step: float,
 ) -> tuple[list[float], OrderedDict[str, None], dict[str, np.ndarray]]:
     if not csv_files:
         raise FileNotFoundError('No CSV files provided for averaging.')
+
     runs, columns_order, min_time, max_time = load_runs(csv_files)
     if not runs or not columns_order:
         raise FileNotFoundError('No numeric data found in provided CSVs.')
+
     grid = build_time_grid(min_time, max_time, time_step)
     if not grid:
         raise FileNotFoundError('Unable to construct a time grid from the provided data.')
+
     column_stats = aggregate_runs(runs, grid, columns_order)
 
     return grid, columns_order, column_stats
@@ -161,30 +188,37 @@ def write_mean_std_csv(
         *(f'{col}_mean' for col in columns_order),
         *(f'{col}_std' for col in columns_order),
     ]
+
     with output_path.open('w', newline='') as handle:
         writer = csv.writer(handle)
         writer.writerow(columns)
+
         for idx, time_value in enumerate(grid):
             row = [f'{time_value:.9f}']
             mean_cells = []
             std_cells = []
+
             for column in columns_order:
                 stats = column_stats.get(column)
                 if stats is None or idx >= len(stats):
                     mean_cells.append('')
                     std_cells.append('')
                     continue
+
                 sum_value, sum_sq, count = stats[idx]
                 if count == 0:
                     mean_cells.append('')
                     std_cells.append('')
                     continue
+
                 mean = sum_value / count
                 variance = sum_sq / count - mean * mean
                 if variance < 0.0:
                     variance = 0.0
+
                 mean_cells.append(f'{mean:.9e}')
                 std_cells.append(f'{math.sqrt(variance):.9e}')
+
             row.extend(mean_cells)
             row.extend(std_cells)
             writer.writerow(row)
@@ -212,7 +246,7 @@ def discover_csvs(root: Path, dataset: str) -> list[Path]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description='Resample trajectories onto a uniform time base and average the runs.'
+        description='Resample trajectories onto a uniform time base and average the runs.',
     )
     parser.add_argument(
         '--trajectory-root',
@@ -250,20 +284,24 @@ def main() -> int:
     output_dir = args.output_dir or root
     combined_candidates: list[Path] = []
     exit_status = 0
+
     for dataset in args.datasets:
         csv_paths = discover_csvs(root, dataset)
         if not csv_paths:
             print(f'Skipping {dataset}: no CSVs found in {root / dataset}')
             exit_status = 1
             continue
+
         combined_candidates.extend(csv_paths)
         output_path = output_dir / f'{dataset}_mean_std_trajectory.csv'
+
         try:
             written_path = process_dataset(dataset, csv_paths, output_path, args.time_step)
         except FileNotFoundError as exc:
             print(f'Error for {dataset}: {exc}')
             exit_status = 1
             continue
+
         print(f'Wrote time-aligned mean+std trajectory for {dataset} to {written_path}')
 
     if args.combined_output:
@@ -272,6 +310,7 @@ def main() -> int:
             exit_status = 1
         else:
             combined_path = args.combined_output
+
             try:
                 process_dataset(
                     'combined',

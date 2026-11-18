@@ -13,6 +13,7 @@ def resolve_weights_dir(configured_dir, share_directory_of=_installed_share_dire
     An empty setting means the copy installed with this package from its ``weights/``
     folder, where users place their own weights before ``colcon build``.
     """
+
     configured_dir = str(configured_dir).strip()
     if configured_dir:
         return configured_dir

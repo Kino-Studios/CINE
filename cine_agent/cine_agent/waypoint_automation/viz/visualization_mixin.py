@@ -9,6 +9,7 @@ class VisualizationMixin:
         target = self.target_world or self.last_target_world
         if target is None:
             return
+
         now = self.get_clock().now().to_msg()
         scale = max(0.01, float(self.target_marker_scale_m))
         marker = Marker()
@@ -40,6 +41,7 @@ class VisualizationMixin:
         marker.header.frame_id = self.frame_id
         marker.ns = 'cinematography_arc'
         marker.id = 0
+
         if not arc_pts:
             marker.action = Marker.DELETE
             self.arc_marker_pub.publish(marker)
@@ -53,36 +55,44 @@ class VisualizationMixin:
         marker.color.g = 0.8
         marker.color.b = 1.0
         marker.color.a = 0.9
+
         for wp in arc_pts:
             p = Point()
             p.x = float(wp[0])
             p.y = float(wp[1])
             p.z = float(wp[2])
             marker.points.append(p)
+
         self.arc_marker_pub.publish(marker)
 
         if target_world is None:
             return
+
         now = self.get_clock().now()
+
         if self.last_arc_log_time is not None:
             elapsed = (now - self.last_arc_log_time).nanoseconds / 1e9
             if elapsed < self.debug_arc_log_period_s:
                 return
+
         self.last_arc_log_time = now
 
         desired = float(desired_distance)
         errors = []
+
         for wp in arc_pts:
             dist = math.dist(wp, target_world)
             if math.isfinite(dist):
                 errors.append(abs(dist - desired))
+
         if not errors:
             return
+
         max_err = max(errors)
         mean_err = sum(errors) / len(errors)
         self.get_logger().info(
             f'Arc debug: points={len(arc_pts)} desired={desired:.3f} '
-            f'max_err={max_err:.3f} mean_err={mean_err:.3f}'
+            f'max_err={max_err:.3f} mean_err={mean_err:.3f}',
         )
 
     def _publish_debug_visualization(self):
@@ -107,8 +117,9 @@ class VisualizationMixin:
                     0.02,
                     now,
                     0,
-                )
+                ),
             )
+
             for i, wp in enumerate(static_pts):
                 markers.markers.append(
                     self._create_waypoint_sphere(
@@ -118,7 +129,7 @@ class VisualizationMixin:
                         (0.0, 1.0, 1.0, 0.8),
                         0.15,
                         now,
-                    )
+                    ),
                 )
 
         if self.viz_arc_only and self.viz_data['cinematographic_waypoints'] is not None:
@@ -133,8 +144,9 @@ class VisualizationMixin:
                     0.06,
                     now,
                     100,
-                )
+                ),
             )
+
             for i, wp in enumerate(arc_pts):
                 markers.markers.append(
                     self._create_waypoint_sphere(
@@ -144,7 +156,7 @@ class VisualizationMixin:
                         arc_point_color,
                         self._waypoint_diameter(),
                         now,
-                    )
+                    ),
                 )
 
         if self.viz_transitions:
@@ -158,8 +170,9 @@ class VisualizationMixin:
                         0.04,
                         now,
                         300,
-                    )
+                    ),
                 )
+
             transition_out = self.viz_data['transition_out'] or []
             if transition_out:
                 markers.markers.extend(
@@ -170,8 +183,9 @@ class VisualizationMixin:
                         0.04,
                         now,
                         400,
-                    )
+                    ),
                 )
+
         if self.viz_data['arc_start'] is not None:
             markers.markers.append(
                 self._create_waypoint_sphere(
@@ -181,7 +195,7 @@ class VisualizationMixin:
                     (1.0, 0.0, 0.0, 1.0),
                     0.12,
                     now,
-                )
+                ),
             )
             markers.markers.append(
                 self._create_text_marker(
@@ -192,7 +206,7 @@ class VisualizationMixin:
                     (1.0, 1.0, 1.0, 1.0),
                     0.15,
                     now,
-                )
+                ),
             )
 
         if self.viz_data['arc_end'] is not None:
@@ -204,7 +218,7 @@ class VisualizationMixin:
                     (0.0, 0.0, 1.0, 1.0),
                     0.12,
                     now,
-                )
+                ),
             )
             markers.markers.append(
                 self._create_text_marker(
@@ -215,7 +229,7 @@ class VisualizationMixin:
                     (1.0, 1.0, 1.0, 1.0),
                     0.15,
                     now,
-                )
+                ),
             )
 
         if self.viz_dynamic_path and self.viz_data['combined_world'] is not None:
@@ -227,7 +241,7 @@ class VisualizationMixin:
                     0.03,
                     now,
                     600,
-                )
+                ),
             )
 
         if self.viz_active_path and self.active_waypoints is not None:
@@ -244,8 +258,9 @@ class VisualizationMixin:
                     0.05,
                     now,
                     700,
-                )
+                ),
             )
+
             if 0 <= self.current_target_index < len(active_world):
                 current_wp = active_world[self.current_target_index]
                 markers.markers.append(
@@ -256,7 +271,7 @@ class VisualizationMixin:
                         (1.0, 0.0, 1.0, 1.0),
                         self._waypoint_diameter(),
                         now,
-                    )
+                    ),
                 )
                 markers.markers.append(
                     self._create_text_marker(
@@ -267,8 +282,9 @@ class VisualizationMixin:
                         (1.0, 1.0, 0.0, 1.0),
                         0.2,
                         now,
-                    )
+                    ),
                 )
+
             if self.active_waypoints and self.last_published_index >= self.current_target_index:
                 queued_world = active_world[
                     self.current_target_index : self.last_published_index + 1
@@ -282,8 +298,9 @@ class VisualizationMixin:
                             0.04,
                             now,
                             8000,
-                        )
+                        ),
                     )
+
                     for i, wp in enumerate(queued_world):
                         markers.markers.append(
                             self._create_waypoint_sphere(
@@ -293,7 +310,7 @@ class VisualizationMixin:
                                 (1.0, 0.6, 0.0, 0.8),
                                 self._waypoint_diameter() * 0.4,
                                 now,
-                            )
+                            ),
                         )
 
         self.debug_markers_pub.publish(markers)
@@ -302,6 +319,7 @@ class VisualizationMixin:
     def _publish_transition_viz(self, stamp):
         if self.transition_viz_pub is None:
             return
+
         markers = MarkerArray()
         paths = [
             (
@@ -322,7 +340,9 @@ class VisualizationMixin:
         for pts, ns, color, width, base_id in paths:
             if not pts:
                 continue
+
             markers.markers.extend(self._create_path_markers(pts, ns, color, width, stamp, base_id))
+
         self.transition_viz_pub.publish(markers)
 
     def _waypoint_diameter(self):
@@ -415,7 +435,15 @@ class VisualizationMixin:
         self.sent_waypoints_viz_pub.publish(markers)
 
     def _create_text_marker(
-        self, position, text, marker_id, namespace, color, scale, stamp, offset_z=0.2
+        self,
+        position,
+        text,
+        marker_id,
+        namespace,
+        color,
+        scale,
+        stamp,
+        offset_z=0.2,
     ):
         marker = Marker()
         marker.header.stamp = stamp

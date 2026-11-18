@@ -36,11 +36,11 @@ class WaypointSelector:
         target_world: np.ndarray,
         drone_position: np.ndarray,
         cost_estimation_func: Callable[
-            [float, float, float, float, float, float, float, float, float], float | None
+            [float, float, float, float, float, float, float, float, float],
+            float | None,
         ],
         dt: float,
     ) -> np.ndarray | None:
-
         cx, cy = center_xy
         tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
 
@@ -73,7 +73,6 @@ class WaypointSelector:
         base_r = float(radius_m)
         r_low = max(0.1, r_min, base_r * 0.7)
         r_high = min(r_max, base_r * 1.5)
-
         if r_high < r_low:
             r_low, r_high = r_min, r_max
 
@@ -97,6 +96,7 @@ class WaypointSelector:
 
                 cost = cost_function(x, y, z)
                 evaluated_positions.append((x, y, z))
+
                 if cost is None or not math.isfinite(cost):
                     continue
 
@@ -158,10 +158,10 @@ class WaypointSelector:
         target_world: np.ndarray,
         drone_position: np.ndarray,
         cost_estimation_func: Callable[
-            [float, float, float, float, float, float, float, float, float], float | None
+            [float, float, float, float, float, float, float, float, float],
+            float | None,
         ],
     ) -> list[tuple[float, float, float, float]]:
-
         tx, ty, tz = float(target_world[0]), float(target_world[1]), float(target_world[2])
 
         if self.optimized_center is not None and self.optimized_radius is not None:
@@ -223,7 +223,8 @@ class WaypointSelector:
         target_world: np.ndarray,
         drone_position: np.ndarray,
         cost_estimation_func: Callable[
-            [float, float, float, float, float, float, float, float, float], float | None
+            [float, float, float, float, float, float, float, float, float],
+            float | None,
         ],
     ) -> None:
         if (
@@ -263,7 +264,7 @@ class WaypointSelector:
             self.last_optimization_time = current_time
             self.node.get_logger().info(
                 f'Optimized orbit: center=({opt_center[0]:.2f}, {opt_center[1]:.2f}), '
-                f'radius={opt_radius:.2f}m'
+                f'radius={opt_radius:.2f}m',
             )
         except (ValueError, ZeroDivisionError, np.linalg.LinAlgError) as error:
             self.node.get_logger().warn(f'Orbit optimization failed: {error}')

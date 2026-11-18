@@ -26,7 +26,10 @@ def _rotate(pose: Pose, x: float, y: float, z: float) -> tuple[float, float, flo
 
 def compose_camera_pose(body: Pose, body_to_camera: Pose) -> Pose:
     offset_x, offset_y, offset_z = _rotate(
-        body, body_to_camera.x, body_to_camera.y, body_to_camera.z
+        body,
+        body_to_camera.x,
+        body_to_camera.y,
+        body_to_camera.z,
     )
 
     return Pose(

@@ -67,17 +67,18 @@ def _rendered_imu_noise_stddev(group, axis):
     vins_config = json.loads(SHIPPED_GAZEBO_VINS.read_text())['vins_config']
     camera = CameraSpec(1152, 648, 497.0, 497.0, 576.0, 324.0, 0.0, 0.0, 0.0, 0.0, 30.0, 0.007)
     model = ET.fromstring(
-        render_model(MODEL_TEMPLATE.read_text(), camera, imu_noise_from_vins(vins_config))
+        render_model(MODEL_TEMPLATE.read_text(), camera, imu_noise_from_vins(vins_config)),
     )
     imu_sensor = model.find(
-        f"model/include/{EXPERIMENTAL}params/sensor[@element_id='imu_link::imu_sensor']"
+        f"model/include/{EXPERIMENTAL}params/sensor[@element_id='imu_link::imu_sensor']",
     )
 
     return float(imu_sensor.find(f'imu/{group}/{axis}/noise/stddev').text)
 
 
 @pytest.mark.skipif(
-    not SHIPPED_GAZEBO_VINS.is_file(), reason='CINE-Sensing is not checked out beside CINE'
+    not SHIPPED_GAZEBO_VINS.is_file(),
+    reason='CINE-Sensing is not checked out beside CINE',
 )
 def test_rendered_imu_noise_uses_vins_values():
     assert _rendered_imu_noise_stddev('linear_acceleration', 'x') == 0.1

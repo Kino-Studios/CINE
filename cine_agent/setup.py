@@ -39,6 +39,7 @@ except ImportError:
 def _cleanup_existing_targets(self):
     if not self.data_files:
         return
+
     for entry in self.data_files:
         if isinstance(entry, str):
             target = os.path.join(self.install_dir, os.path.basename(entry))
@@ -80,6 +81,7 @@ class symlink_data(_symlink_data if _symlink_data is not None else _install_data
 
 
 cmdclass = {'install_data': install_data}
+
 if _symlink_data is not None:
     cmdclass['symlink_data'] = symlink_data
 

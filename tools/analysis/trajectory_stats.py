@@ -27,10 +27,10 @@ class ColumnSummary:
 
 def collect_statistics(files: Iterable[Path]) -> OrderedDict[str, ColumnSummary]:
     dfs = []
+
     for csv_path in sorted(files):
         try:
-            # Read CSV, let pandas infer types.
-            # We will coerce to numeric later.
+            # Columns are coerced to numeric later.
             df = pd.read_csv(csv_path)
             dfs.append(df)
         except pd.errors.EmptyDataError:
@@ -44,6 +44,7 @@ def collect_statistics(files: Iterable[Path]) -> OrderedDict[str, ColumnSummary]
     full_df = pd.concat(dfs, axis=0, ignore_index=True, sort=False)
 
     stats = OrderedDict()
+
     for col in full_df.columns:
         # Convert column to numeric, coercing errors to NaN
         # This mimics the try-except ValueError block in the original code
@@ -86,9 +87,11 @@ def format_float(value: float) -> str:
 
 def emit_csv(output_path: Path, summary: OrderedDict[str, ColumnSummary]) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
     with output_path.open('w', newline='') as handle:
         writer = csv.writer(handle)
         writer.writerow(['column', 'count', 'mean', 'std', 'min', 'max', 'median'])
+
         for column, stats in summary.items():
             writer.writerow(
                 [
@@ -99,7 +102,7 @@ def emit_csv(output_path: Path, summary: OrderedDict[str, ColumnSummary]) -> Non
                     format_float(stats.min),
                     format_float(stats.max),
                     format_float(stats.median),
-                ]
+                ],
             )
 
 
@@ -113,7 +116,7 @@ def summarize_dataset(dataset_path: Path) -> OrderedDict[str, ColumnSummary]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description=('Compute dataset-level statistics for each trajectory CSV directory.')
+        description=('Compute dataset-level statistics for each trajectory CSV directory.'),
     )
     parser.add_argument(
         '--trajectory-root',
@@ -138,18 +141,21 @@ def main() -> int:
     root = args.trajectory_root
     output_dir = args.output_dir or root
     status = 0
+
     for dataset in args.datasets:
         dataset_path = root / dataset
         if not dataset_path.is_dir():
             print(f'Skipping {dataset}: {dataset_path} is not a directory', file=sys.stderr)
             status = 1
             continue
+
         try:
             summary = summarize_dataset(dataset_path)
         except FileNotFoundError as error:
             print(f'{error}', file=sys.stderr)
             status = 1
             continue
+
         output_path = output_dir / f'{dataset}_stats.csv'
         emit_csv(output_path, summary)
         print(f'Wrote summary for {dataset} to {output_path}')

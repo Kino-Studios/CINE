@@ -36,6 +36,7 @@ def read_iges(path):
     reader = IGESControl_Reader()
     if reader.ReadFile(str(path)) != IFSelect_RetDone:
         raise SystemExit(f'cannot read {path}')
+
     reader.TransferRoots()
 
     return reader.OneShape()
@@ -61,6 +62,7 @@ def main():
     shape = read_iges(iges_path)
     has_solids = next(_sub_shapes(shape, TopAbs_SOLID), None) is not None
     rows = []
+
     for index, body in enumerate(_sub_shapes(shape, TopAbs_SOLID if has_solids else TopAbs_SHELL)):
         file_name = f'body_{index:03d}.stl'
         # Measured before meshing: once a body has triangles, its bounds come from those instead.
@@ -69,6 +71,7 @@ def main():
         writer = StlAPI_Writer()
         writer.ASCIIMode = False
         writer.Write(body, str(output_directory / file_name))
+
     (output_directory / 'bodies.json').write_text(json.dumps(rows, indent=1))
     print(f'{len(rows)} bodies written to {output_directory}')
 

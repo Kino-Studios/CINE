@@ -88,7 +88,8 @@ class CostCalculator:
         self.light_vector = None
         self.light_distance = None
         self._declare_parameter(
-            'light_distance_attenuation_m', CostParams.LIGHT_DISTANCE_ATTENUATION_M
+            'light_distance_attenuation_m',
+            CostParams.LIGHT_DISTANCE_ATTENUATION_M,
         )
         self.angular_velocity = None
         self.orientation = None
@@ -117,27 +118,34 @@ class CostCalculator:
         self._declare_parameter('light_avoidance_enabled', LightAvoidanceParams.ENABLED)
         self._declare_parameter('light_yaw_deadband_rad', LightOrientationParams.YAW_DEADBAND_RAD)
         self._declare_parameter(
-            'light_pitch_deadband_rad', LightOrientationParams.PITCH_DEADBAND_RAD
+            'light_pitch_deadband_rad',
+            LightOrientationParams.PITCH_DEADBAND_RAD,
         )
         self._declare_parameter('light_roll_deadband_rad', LightOrientationParams.ROLL_DEADBAND_RAD)
         self._declare_parameter(
-            'light_pitch_weight_factor', LightOrientationParams.PITCH_WEIGHT_FACTOR
+            'light_pitch_weight_factor',
+            LightOrientationParams.PITCH_WEIGHT_FACTOR,
         )
         self._declare_parameter(
-            'light_roll_weight_factor', LightOrientationParams.ROLL_WEIGHT_FACTOR
+            'light_roll_weight_factor',
+            LightOrientationParams.ROLL_WEIGHT_FACTOR,
         )
         self._declare_parameter('light_pitch_max_rad', LightOrientationParams.PITCH_MAX_RAD)
         self._declare_parameter(
-            'light_pitch_damping_factor', LightOrientationParams.PITCH_DAMPING_FACTOR
+            'light_pitch_damping_factor',
+            LightOrientationParams.PITCH_DAMPING_FACTOR,
         )
         self._declare_parameter(
-            'light_setpoint_smooth_alpha', LightOrientationParams.SETPOINT_SMOOTH_ALPHA
+            'light_setpoint_smooth_alpha',
+            LightOrientationParams.SETPOINT_SMOOTH_ALPHA,
         )
         self._declare_parameter(
-            'light_planar_norm_threshold', LightOrientationParams.PLANAR_NORM_THRESHOLD
+            'light_planar_norm_threshold',
+            LightOrientationParams.PLANAR_NORM_THRESHOLD,
         )
         self._declare_parameter(
-            'light_yaw_change_limit_rad', LightOrientationParams.YAW_CHANGE_LIMIT_RAD
+            'light_yaw_change_limit_rad',
+            LightOrientationParams.YAW_CHANGE_LIMIT_RAD,
         )
         self._declare_parameter(
             'light_pitch_change_limit_rad',
@@ -150,7 +158,8 @@ class CostCalculator:
         self._declare_parameter('light_distance_bias_m', CostParams.LIGHT_DISTANCE_BIAS_M)
         self._declare_parameter('light_distance_gain', CostParams.LIGHT_DISTANCE_GAIN)
         self._declare_parameter(
-            'light_cost_increase_when_close', CostParams.LIGHT_COST_INCREASE_WHEN_CLOSE
+            'light_cost_increase_when_close',
+            CostParams.LIGHT_COST_INCREASE_WHEN_CLOSE,
         )
         self._declare_parameter('use_simulated_light', SimulationParams.USE_SIMULATED_LIGHT)
         self._declare_parameter('light_tau', CostParams.LIGHT_TAU)
@@ -230,11 +239,12 @@ class CostCalculator:
 
         if self.light_distance is None:
             return 1.0
+
         try:
             max_range = float(self.node.get_parameter('light_distance_attenuation_m').value)
-
         except PARAMETER_READ_ERRORS:
             max_range = 0.0
+
         if max_range <= 0.0:
             return 1.0
 
@@ -305,10 +315,10 @@ class CostCalculator:
     def _camera_forward_vector(self) -> np.ndarray | None:
         if self.orientation is None:
             return None
+
         x, y, z, w = self.orientation
 
         norm = math.sqrt(x * x + y * y + z * z + w * w)
-
         if norm == 0:
             return None
 
@@ -338,7 +348,6 @@ class CostCalculator:
 
         x, y, z, w = quat
         norm = math.sqrt(x * x + y * y + z * z + w * w)
-
         if norm == 0.0:
             return None
 
@@ -392,13 +401,13 @@ class CostCalculator:
             center_y = max(0, min(center_y, h - 1))
 
             depth_value = self.depth_image[center_y, center_x]
-
             if depth_value > 0 and not np.isnan(depth_value):
                 self.center_depth = float(depth_value)
 
     def _compute_yaw_to_target(self) -> float | None:
         if self.position is None or self.target_world is None:
             return None
+
         dx = float(self.target_world[0]) - self.position[0]
         dy = float(self.target_world[1]) - self.position[1]
         if abs(dx) < self.SimulationParams.EPSILON and abs(dy) < self.SimulationParams.EPSILON:
@@ -416,7 +425,6 @@ class CostCalculator:
         y = int(max(0, min(y, h - 1)))
 
         depth_value = self.depth_image[y, x]
-
         if depth_value > 0 and not np.isnan(depth_value):
             return float(depth_value)
         else:
@@ -439,14 +447,12 @@ class CostCalculator:
         x_max = int(min(w - 1, max(x_coords)))
         y_min = int(max(0, min(y_coords)))
         y_max = int(min(h - 1, max(y_coords)))
-
         if x_min >= x_max or y_min >= y_max:
             return None
 
         depth_region = self.depth_image[y_min : y_max + 1, x_min : x_max + 1]
 
         valid_depths = depth_region[(depth_region > 0) & ~np.isnan(depth_region)]
-
         if len(valid_depths) == 0:
             return None
 
@@ -481,13 +487,11 @@ class CostCalculator:
         x_max = min(w - 1, center_x + half_size)
         y_min = max(0, center_y - half_size)
         y_max = min(h - 1, center_y + half_size)
-
         if x_min > x_max or y_min > y_max:
             return None
 
         depth_region = self.depth_image[y_min : y_max + 1, x_min : x_max + 1]
         valid_depths = depth_region[(depth_region > 0) & ~np.isnan(depth_region)]
-
         if valid_depths.size == 0:
             return None
 
@@ -496,6 +500,7 @@ class CostCalculator:
     def huber_function(self, r, delta=None):
         if delta is None:
             delta = float(self.CostParams.HUBER_DELTA_PX)
+
         a = abs(r)
 
         return 0.5 * math.pow(a, 2) if a <= delta else delta * (a - 0.5 * delta)
@@ -524,12 +529,10 @@ class CostCalculator:
         y_max = min(h - 1, bright_y + half_size)
 
         roi = img[y_min : y_max + 1, x_min : x_max + 1]
-
         if roi.size == 0:
             return 0.0
 
         sat_thresh = float(self.node.get_parameter('light_saturation_threshold').value)
-
         if roi.dtype == np.uint8 and sat_thresh <= 1.0:
             adjusted_thresh = sat_thresh * 255.0
         else:
@@ -542,7 +545,6 @@ class CostCalculator:
 
         saturated_pixels = np.sum(intensity >= adjusted_thresh)
         total_pixels = intensity.size
-
         if total_pixels == 0:
             return 0.0
 
@@ -578,6 +580,7 @@ class CostCalculator:
 
     def calculate_cost(self) -> dict[str, float] | None:
         logger = self.node.get_logger()
+
         if self.depth_image is None:
             logger.debug('CostCalculator: waiting for depth image input')
 
@@ -589,6 +592,7 @@ class CostCalculator:
             return None
 
         current_time = None
+
         try:
             current_time = self.node.get_clock().now().nanoseconds / 1e9
         except (AttributeError, TypeError):
@@ -610,9 +614,11 @@ class CostCalculator:
                 v_current = np.mean(y_coords)
             else:
                 logger.debug('CostCalculator: insufficient bbox points (%d)', len(points))
+
                 return None
         else:
             logger.debug('CostCalculator: unexpected detection fall-through')
+
             return None
 
         deadband = float(self.node.get_parameter('deadband_px').value)
@@ -635,7 +641,6 @@ class CostCalculator:
         d_min = self.UserRequestedParams.FOCUS_DISTANCE_MIN_M
 
         Z = self.get_median_depth_object()
-
         if Z is None:
             if self.center_depth is None:
                 logger.debug('CostCalculator: depth unknown (no median or center depth)')
@@ -643,6 +648,7 @@ class CostCalculator:
                 return None
 
             Z = float(self.center_depth)
+
         Z = float(Z)
 
         J_dist = math.pow(Z - d_star, 2)
@@ -659,6 +665,7 @@ class CostCalculator:
                 J_stab = math.pow(dz / dt, 2)
 
         self._prev_Z = Z
+
         if current_time is not None:
             self._prev_depth_timestamp = current_time
 
@@ -692,7 +699,10 @@ class CostCalculator:
             sat_frac = self._calculate_saturation_fraction()
 
             lighting_cost = self._calculate_lighting_cost(
-                forward, self.light_vector, attenuation, sat_frac
+                forward,
+                self.light_vector,
+                attenuation,
+                sat_frac,
             )
             w_light = float(self.node.get_parameter('w_light').value)
 
@@ -709,17 +719,15 @@ class CostCalculator:
             if self.light_vector is not None:
                 target_dir = -self.light_vector.copy()
                 target_norm = np.linalg.norm(target_dir)
-
                 if target_norm > self.SimulationParams.EPSILON:
                     target_dir /= target_norm
 
                 planar_norm = math.hypot(target_dir[0], target_dir[1])
 
                 planar_deadzone = float(
-                    self.node.get_parameter('light_planar_norm_threshold').value
+                    self.node.get_parameter('light_planar_norm_threshold').value,
                 )
                 planar_deadzone = max(0.0, planar_deadzone)
-
                 if planar_norm >= planar_deadzone:
                     raw_yaw = math.atan2(target_dir[1], target_dir[0])
                 else:
@@ -750,7 +758,6 @@ class CostCalculator:
 
                 yaw_limit = max(0.0, yaw_limit)
                 yaw_delta = self._angle_diff(smooth_setpoints[2], self._last_light_setpoint[2])
-
                 if yaw_delta > yaw_limit:
                     yaw_delta = yaw_limit
                 elif yaw_delta < -yaw_limit:
@@ -762,7 +769,6 @@ class CostCalculator:
                 pitch_limit = max(0.0, pitch_limit)
 
                 pitch_delta = self._angle_diff(smooth_setpoints[1], self._last_light_setpoint[1])
-
                 if pitch_delta > pitch_limit:
                     pitch_delta = pitch_limit
                 elif pitch_delta < -pitch_limit:
@@ -809,6 +815,7 @@ class CostCalculator:
             roll_error = self._angle_diff(roll_setpoint, roll_val)
 
         focus_deadband = FOCUS_YAW_HOLD_DEADBAND_RAD
+
         try:
             focus_deadband = max(
                 0.0,
@@ -920,7 +927,6 @@ class CostCalculator:
         target_world_y: float,
         target_world_z: float,
     ) -> bool:
-
         if self.depth_image is None or self.orientation is None or self.position is None:
             return False
 
@@ -963,13 +969,11 @@ class CostCalculator:
         cam_x = r00 * rx + r10 * ry + r20 * rz
         cam_y = r01 * rx + r11 * ry + r21 * rz
         cam_z = r02 * rx + r12 * ry + r22 * rz
-
         if cam_z <= 0.1:
             return False
 
         u = int(round((cam_x * fx) / cam_z + cx))
         v = int(round((cam_y * fy) / cam_z + cy))
-
         if u < 0 or u >= w or v < 0 or v >= h:
             return False
 
@@ -996,7 +1000,6 @@ class CostCalculator:
         include_framing: bool,
         include_lighting: bool,
     ) -> tuple[float, float, float, float]:
-
         if self._is_waypoint_occluded(target_world_x, target_world_y, target_world_z):
             return (float('inf'), 0.0, 0.0, 0.0)
 
@@ -1004,7 +1007,6 @@ class CostCalculator:
         dy = target_world_y - drone_y
         dz = target_world_z - drone_z
         distance = math.sqrt(dx * dx + dy * dy + dz * dz)
-
         if not math.isfinite(distance) or distance <= self.SimulationParams.EPSILON:
             return (float('inf'), 0.0, 0.0, 0.0)
 
@@ -1036,10 +1038,13 @@ class CostCalculator:
         desired_forward = np.array([dx, dy, dz], dtype=float) / float(distance)
 
         lighting_cost = 0.0
+
         if include_lighting and self._light_avoidance_enabled():
             attenuation = self._light_attenuation()
             lighting_cost = self._calculate_lighting_cost(
-                desired_forward, self.light_vector, attenuation
+                desired_forward,
+                self.light_vector,
+                attenuation,
             )
 
         smoothness_cost = 0.0

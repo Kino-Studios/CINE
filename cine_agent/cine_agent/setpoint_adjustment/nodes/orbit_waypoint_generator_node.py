@@ -28,14 +28,23 @@ class OrbitWaypointGenerator(Node):
         self.focus_depth_m: float | None = None
 
         self.camera_info_sub = self.create_subscription(
-            CameraInfo, '/camera/camera_info', self.camera_info_callback, 10
+            CameraInfo,
+            '/camera/camera_info',
+            self.camera_info_callback,
+            10,
         )
         self.pose_sub = self.create_subscription(PoseStamped, '/vio/pose', self.pose_callback, 10)
         self.target_world_sub = self.create_subscription(
-            PointStamped, '/cinematography/target_world', self.target_world_callback, 10
+            PointStamped,
+            '/cinematography/target_world',
+            self.target_world_callback,
+            10,
         )
         self.focus_depth_sub = self.create_subscription(
-            Float32, '/cinematography/focus_depth_m', self.focus_depth_callback, 10
+            Float32,
+            '/cinematography/focus_depth_m',
+            self.focus_depth_callback,
+            10,
         )
 
         try:
@@ -43,7 +52,9 @@ class OrbitWaypointGenerator(Node):
 
             self._PositionTarget = PositionTarget
             self.setpoint_pub = self.create_publisher(
-                PositionTarget, '/mavros/setpoint_raw/local', 10
+                PositionTarget,
+                '/mavros/setpoint_raw/local',
+                10,
             )
         except ImportError:
             self.get_logger().warn('mavros_msgs unavailable; setpoint publishing disabled')
@@ -68,6 +79,7 @@ class OrbitWaypointGenerator(Node):
 
     def pose_callback(self, msg: PoseStamped):
         self.current_pose = msg
+
         if (
             not self.publishing_active
             and self.camera_info is not None
@@ -121,11 +133,16 @@ class OrbitWaypointGenerator(Node):
         altitude = float(self.get_parameter('altitude').value)
 
         center = (center_x, center_y)
+
         if self.target_world is not None:
             center = (float(self.target_world[0]), float(self.target_world[1]))
+
         if optimize:
             center, radius = optimize_orbit_center_and_radius(
-                center, radius, altitude, self.evaluate_cost_at_position
+                center,
+                radius,
+                altitude,
+                self.evaluate_cost_at_position,
             )
             self.waypoints = generate_cost_optimized_orbit_waypoints(
                 center_xy_m=center,
@@ -138,7 +155,12 @@ class OrbitWaypointGenerator(Node):
             )
         else:
             self.waypoints = generate_orbit_waypoints_xy(
-                center, radius, angular_velocity, duration, waypoint_rate, altitude
+                center,
+                radius,
+                angular_velocity,
+                duration,
+                waypoint_rate,
+                altitude,
             )
 
         self.waypoint_index = 0
@@ -175,9 +197,11 @@ class OrbitWaypointGenerator(Node):
         msg.position.z = float(z)
         cy = float(self.get_parameter('center_y').value)
         cx = float(self.get_parameter('center_x').value)
+
         if self.target_world is not None:
             cx = float(self.target_world[0])
             cy = float(self.target_world[1])
+
         msg.yaw = math.atan2(float(cy) - float(y), float(cx) - float(x))
         self.setpoint_pub.publish(msg)
         self.waypoint_index += 1
@@ -186,6 +210,7 @@ class OrbitWaypointGenerator(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = OrbitWaypointGenerator()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

@@ -18,15 +18,16 @@ class SimulatedLightPublisher(Node):
         self.light_distance_m = float(self.declare_parameter('light_distance_m', 4.8).value)
         self.topic = str(self.declare_parameter('topic', '/cinematography/light_vector').value)
         self.light_point_topic = str(
-            self.declare_parameter('light_point_topic', '/cinematography/light_point').value
+            self.declare_parameter('light_point_topic', '/cinematography/light_point').value,
         )
         self.use_start_position = bool(self.declare_parameter('use_start_position', True).value)
         self.odom_topic = str(
-            self.declare_parameter('odom_topic', '/drone_0_visual_slam/odom').value
+            self.declare_parameter('odom_topic', '/drone_0_visual_slam/odom').value,
         )
 
         self.start_position = None
         self.current_position = None
+
         if self.use_start_position:
             self.create_subscription(Odometry, self.odom_topic, self._odom_callback, 10)
 
@@ -37,8 +38,10 @@ class SimulatedLightPublisher(Node):
 
     def _odom_callback(self, msg: Odometry):
         pose = msg.pose.pose.position
+
         if self.start_position is None:
             self.start_position = (pose.x, pose.y, pose.z)
+
         self.current_position = (pose.x, pose.y, pose.z)
 
     def _tick(self):
@@ -106,6 +109,7 @@ class SimulatedLightPublisher(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = SimulatedLightPublisher()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

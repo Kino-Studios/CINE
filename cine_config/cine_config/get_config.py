@@ -24,7 +24,6 @@ def main():
     ]:
         if hasattr(params_class, param_name):
             value = getattr(params_class, param_name)
-
             if isinstance(value, bool):
                 print('1' if value else '0')
             else:

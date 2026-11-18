@@ -50,14 +50,14 @@ The command checks that Docker and the image exist (exit code 3 if not), then ru
 container through `docker/gazebo-sim/compose.yaml`. For the Gazebo window on an X11
 desktop, run `xhost +local:root` first.
 
-| Option | Default | Meaning |
-| --- | --- | --- |
-| `--nav-source sim\|vins` | `sim` | Where the autopilot gets its position; see the next section. |
-| `--headless` | off | Run Gazebo's server without a window. |
-| `--wind calm\|gusty` | `calm` | Wind profile; see "Wind". |
-| `--no-mission` | off | Start the world and the smoke-flight starter only; no planner, no depth model. |
-| `--check` | off | Take off, fly to one setpoint 2 m away, and exit non-zero on failure. |
-| `--json` | off | Print one JSON object on stdout; the simulator's output goes to stderr. |
+| Option                   | Default | Meaning                                                                        |
+| ------------------------ | ------- | ------------------------------------------------------------------------------ |
+| `--nav-source sim\|vins` | `sim`   | Where the autopilot gets its position; see the next section.                   |
+| `--headless`             | off     | Run Gazebo's server without a window.                                          |
+| `--wind calm\|gusty`     | `calm`  | Wind profile; see "Wind".                                                      |
+| `--no-mission`           | off     | Start the world and the smoke-flight starter only; no planner, no depth model. |
+| `--check`                | off     | Take off, fly to one setpoint 2 m away, and exit non-zero on failure.          |
+| `--json`                 | off     | Print one JSON object on stdout; the simulator's output goes to stderr.        |
 
 The launch file `cine_gazebo/launch/gazebo_sim.launch.py` has two more arguments the
 command does not pass: `world` (default `cine_field`) and `airframe` (default `iris`; see

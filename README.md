@@ -91,11 +91,11 @@ The Gazebo simulator, which simulates the drone stack in a container, has a sepa
 
 Over 15 trials in kinematic simulation, CINE changed the flights as follows:
 
-| What was measured | Without | With |
-| --- | --- | --- |
-| Peak speed while filming | 3.0 m/s | 1.2 m/s |
-| Time the subject stayed within 0.1 m of the focus distance | 23.6% | 76.4% |
-| Position error (root mean square), without and with the drift correction | 0.25 m | 0.05 m |
+| What was measured                                                        | Without | With    |
+| ------------------------------------------------------------------------ | ------- | ------- |
+| Peak speed while filming                                                 | 3.0 m/s | 1.2 m/s |
+| Time the subject stayed within 0.1 m of the focus distance               | 23.6%   | 76.4%   |
+| Position error (root mean square), without and with the drift correction | 0.25 m  | 0.05 m  |
 
 The two recordings at the top of this page show the same comparison, recorded in RViz
 in January 2026: plain EGO-Planner on the left, and CINE on the right. In both, the blue
@@ -107,15 +107,15 @@ results, is in [docs/results.md](docs/results.md).
 
 ## 5. Code layout
 
-| Package | Purpose |
-| --- | --- |
-| `cine_msgs` | The `CinematographyCosts` message: per-term cinematography costs and attitude setpoints. |
-| `cine_config` | All tunable constants as JSON in `cine_config/config/`, read by a Python module and a C++ library. `CINE_CONFIG_ROOT` points it at another config directory. |
-| `cine_agent` | Cost functions, the cinematic B-spline filter, waypoint generation, simulated sensors and the trajectory data logger. |
-| `cine_mlp_correction` | Applies the learned position correction to the cinematic B-spline. |
-| `cine_depth` | Publishes Depth Anything 3 depth images, in metres, from the camera feed (optional). |
-| `cine_bringup` | The launch file that starts a full pipeline, and the RViz layout. |
-| `third_party/ego_planner_swarm/` | Upstream EGO-Planner-Swarm local planner and quadrotor simulator, modified; changes listed in its `UPSTREAM.md`. |
+| Package                          | Purpose                                                                                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cine_msgs`                      | The `CinematographyCosts` message: per-term cinematography costs and attitude setpoints.                                                                     |
+| `cine_config`                    | All tunable constants as JSON in `cine_config/config/`, read by a Python module and a C++ library. `CINE_CONFIG_ROOT` points it at another config directory. |
+| `cine_agent`                     | Cost functions, the cinematic B-spline filter, waypoint generation, simulated sensors and the trajectory data logger.                                        |
+| `cine_mlp_correction`            | Applies the learned position correction to the cinematic B-spline.                                                                                           |
+| `cine_depth`                     | Publishes Depth Anything 3 depth images, in metres, from the camera feed (optional).                                                                         |
+| `cine_bringup`                   | The launch file that starts a full pipeline, and the RViz layout.                                                                                            |
+| `third_party/ego_planner_swarm/` | Upstream EGO-Planner-Swarm local planner and quadrotor simulator, modified; changes listed in its `UPSTREAM.md`.                                             |
 
 The way these packages pass data to each other is drawn out in
 [docs/how-it-works.md](docs/how-it-works.md).

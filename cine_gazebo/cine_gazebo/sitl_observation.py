@@ -6,6 +6,8 @@ without rclpy. Quaternions are (x, y, z, w) tuples; vectors are (x, y, z) tuples
 MAVROS's local frame (x east, y north, z up) unless a name says otherwise.
 """
 
+# format-hooks: allow-comments
+
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,14 +49,16 @@ class OdometrySample:
 
 def load_excitation_pattern(path):
     """Read [x, y, z, yaw] points from the excitation pattern YAML file."""
+
     raw_points = yaml.safe_load(Path(path).read_text())['excitation_pattern']
     points = tuple(tuple(float(value) for value in point) for point in raw_points)
     if any(len(point) != 4 for point in points):
         raise ValueError(f'{path}: every excitation point must be [x, y, z, yaw]')
+
     if len(set(points)) != len(points):
         raise ValueError(
             f'{path}: excitation points must be distinct, because the node finds the '
-            'index of a setpoint from its value'
+            'index of a setpoint from its value',
         )
 
     return points
@@ -62,6 +66,7 @@ def load_excitation_pattern(path):
 
 def rotate_by_quaternion(orientation, vector):
     """Rotate `vector` by the unit quaternion `orientation`."""
+
     axis_x, axis_y, axis_z, scalar = orientation
     axis = (axis_x, axis_y, axis_z)
 
@@ -82,6 +87,7 @@ def rotate_by_quaternion(orientation, vector):
 
 def yaw_of(orientation):
     """Heading in radians from x, counter-clockwise about z."""
+
     x, y, z, w = orientation
 
     return math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
@@ -109,6 +115,7 @@ def vio_velocity_in_local(autopilot, vio):
     VINS's world frame is gravity aligned but has an arbitrary heading, so the velocity is
     turned by the heading difference between the two orientations.
     """
+
     heading_offset = yaw_of(autopilot.orientation) - yaw_of(vio.orientation)
 
     return rotate_about_vertical(vio.linear_velocity, heading_offset)
@@ -116,8 +123,10 @@ def vio_velocity_in_local(autopilot, vio):
 
 def position_error(position, excitation_pattern, target_index, hold_setpoint):
     """Distance from the excitation point at `target_index`, else from the hold point."""
+
     if target_index is not None:
         return math.dist(position, excitation_pattern[target_index][:3])
+
     if hold_setpoint is not None:
         return math.dist(position, hold_setpoint[:3])
 
@@ -140,8 +149,10 @@ def build_observation(
     the index of the last excitation setpoint sent, and the error is measured against that
     same point.
     """
+
     if ekf_source_set is None:
         raise ValueError('the active EKF source set must be known; the autopilot boots on 1')
+
     has_odometry = autopilot is not None
     has_vio = has_odometry and vio is not None
     position = autopilot.position if has_odometry else (0.0, 0.0, 0.0)
@@ -177,8 +188,10 @@ def land_request(active_source_set, now_s, switch_requested_s):
     `switch_requested_s` (None before it). The machine repeats the land action until the
     mode reads LAND, so the requests follow each other on consecutive steps.
     """
+
     if active_source_set == GPS_SOURCE_SET:
         return 'land_mode'
+
     if switch_requested_s is None or now_s - switch_requested_s < LAND_SWITCH_TIMEOUT_S:
         return 'switch_source'
 
@@ -196,7 +209,9 @@ class CommandGate:
         last_sent_s = self._last_sent_s.get(kind)
         if last_sent_s is None:
             return True
+
         waited_s = now_s - last_sent_s
+
         if kind in self._pending:
             return waited_s >= COMMAND_RESPONSE_TIMEOUT_S
 

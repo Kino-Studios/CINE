@@ -33,7 +33,9 @@ class MLPNode(Node):
         self.publisher = self.create_publisher(Bspline, _CORRECTED_BSPLINE_TOPIC, 10)
 
         self.correction_publisher = self.create_publisher(
-            Vector3Stamped, _CORRECTION_DELTA_TOPIC, 10
+            Vector3Stamped,
+            _CORRECTION_DELTA_TOPIC,
+            10,
         )
 
     def listener_callback(self, msg: Bspline) -> None:

@@ -5,6 +5,7 @@ PARAMETER_FILE = Path(__file__).resolve().parents[1] / 'config' / 'ardupilot' / 
 
 def _parameters():
     parameters = {}
+
     for line in PARAMETER_FILE.read_text().splitlines():
         stripped = line.strip()
         if stripped and not stripped.startswith('#'):

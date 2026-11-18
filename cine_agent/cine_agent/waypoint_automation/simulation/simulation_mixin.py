@@ -8,24 +8,31 @@ class SimulationMixin:
         simulated_detection = Float32MultiArray()
         simulated_detection.data = [1.0, 320.0, 240.0, 1.5, 5000.0, 0.05, 0.9, 0.5, 0.5]
         self.simulated_detection_pub.publish(simulated_detection)
+
         if not self.simulate_object:
             return
+
         if not self.simulated_detection_active and self.detected_object is not None:
             return
+
         parsed = self._parse_detection(simulated_detection)
         if parsed is None:
             return
+
         now = self.get_clock().now()
+
         if self.object_detection_time is not None:
             elapsed = (now - self.object_detection_time).nanoseconds / 1e9
             if elapsed < self.DETECTION_DEBOUNCE:
                 return
+
         self.detected_object = parsed
         self.object_detection_time = now
         self.simulated_detection_active = True
         self.use_dynamic_waypoints = True
         self.pending_detection_merge = True
         self._set_anchors(target_world=self.target_world, obj_depth=self.detected_object['depth'])
+
         if self.dynamic_waypoints is None or not self.use_dynamic_waypoints:
             self._rebuild_active_with_detection()
 
@@ -34,6 +41,7 @@ class SimulationMixin:
         num_pts = 16
         waypoints = []
         z = max(self.min_altitude_m, min(self.max_altitude_m, base_z))
+
         for i in range(num_pts):
             t = 2.0 * math.pi * i / num_pts
             x = obj_world[0] + radius * math.cos(t)
@@ -48,6 +56,7 @@ class SimulationMixin:
         with an optional absolute offset. This keeps the orbit circular and offset
         from the nominal path.
         """
+
         base_x, base_y, base_z = anchor_wp
         yaw = self.current_yaw
 

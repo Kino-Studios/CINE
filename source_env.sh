@@ -17,38 +17,38 @@ unset ROS_LOCALHOST_ONLY
 # Optional virtual environment for the pip-only packages (requirements.txt); the one in
 # the workspace is tried first.
 if [ -f "$CINE_WS/venv/bin/activate" ]; then
-    source "$CINE_WS/venv/bin/activate"
+  source "$CINE_WS/venv/bin/activate"
 elif [ -f "$CINE_REPO/venv/bin/activate" ]; then
-    source "$CINE_REPO/venv/bin/activate"
+  source "$CINE_REPO/venv/bin/activate"
 fi
 
 # ROS starts Python nodes with /usr/bin/python3, which ignores an activated venv, and so the
 # venv's packages are put on PYTHONPATH for the nodes to import.
 if [ -n "${VIRTUAL_ENV:-}" ]; then
-    CINE_VENV_SITE="$("$VIRTUAL_ENV/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
-    export PYTHONPATH="$CINE_VENV_SITE${PYTHONPATH:+:$PYTHONPATH}"
-    unset CINE_VENV_SITE
+  CINE_VENV_SITE="$("$VIRTUAL_ENV/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
+  export PYTHONPATH="$CINE_VENV_SITE${PYTHONPATH:+:$PYTHONPATH}"
+  unset CINE_VENV_SITE
 fi
 
 # The ROS setup scripts read unset variables, so they fail under `set -u`.
 if set -o | grep -q 'nounset *on'; then
-    _CINE_RESTORE_NOUNSET=1
-    set +u
+  _CINE_RESTORE_NOUNSET=1
+  set +u
 fi
 
 if [ -f /opt/ros/jazzy/setup.bash ]; then
-    source /opt/ros/jazzy/setup.bash
+  source /opt/ros/jazzy/setup.bash
 else
-    echo "source_env.sh: /opt/ros/jazzy/setup.bash not found; install ROS 2 Jazzy first." >&2
+  echo "source_env.sh: /opt/ros/jazzy/setup.bash not found; install ROS 2 Jazzy first." >&2
 fi
 
 if [ -f "$CINE_WS/install/setup.bash" ]; then
-    source "$CINE_WS/install/setup.bash"
+  source "$CINE_WS/install/setup.bash"
 else
-    echo "source_env.sh: $CINE_WS/install/setup.bash not found; run colcon build in $CINE_WS." >&2
+  echo "source_env.sh: $CINE_WS/install/setup.bash not found; run colcon build in $CINE_WS." >&2
 fi
 
 if [ "${_CINE_RESTORE_NOUNSET-}" = "1" ]; then
-    set -u
-    unset _CINE_RESTORE_NOUNSET
+  set -u
+  unset _CINE_RESTORE_NOUNSET
 fi

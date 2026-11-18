@@ -43,7 +43,7 @@ class CostFunctionCalculatorNode(Node):
         super().__init__('cost_function_calculator')
         self.params = CinematographyParams()
         self.light_avoidance_enabled = bool(
-            self.declare_parameter('light_avoidance_enabled', LightAvoidanceParams.ENABLED).value
+            self.declare_parameter('light_avoidance_enabled', LightAvoidanceParams.ENABLED).value,
         )
         self._framing_active = False
         self.cost_calculator = CostCalculator(self)
@@ -77,16 +77,26 @@ class CostFunctionCalculatorNode(Node):
 
         self._depth_sub = self.create_subscription(Image, depth_topic, self._depth_cb, 10)
         self._center_sub = self.create_subscription(
-            PolygonStamped, center_topic, self._center_cb, 10
+            PolygonStamped,
+            center_topic,
+            self._center_cb,
+            10,
         )
         self._bbox_sub = self.create_subscription(PolygonStamped, bbox_topic, self._bbox_cb, 10)
         self._dims_sub = self.create_subscription(
-            PolygonStamped, dimensions_topic, self._dims_cb, 10
+            PolygonStamped,
+            dimensions_topic,
+            self._dims_cb,
+            10,
         )
         self._odom_sub = self.create_subscription(Odometry, odom_topic, self._odom_cb, 10)
+
         if self.light_avoidance_enabled:
             self._light_sub = self.create_subscription(
-                Vector3Stamped, light_vector_topic, self._light_cb, 10
+                Vector3Stamped,
+                light_vector_topic,
+                self._light_cb,
+                10,
             )
         else:
             self._light_sub = None
@@ -94,13 +104,19 @@ class CostFunctionCalculatorNode(Node):
         self._pub = self.create_publisher(CinematographyCosts, publish_topic, 10)
         self._focus_depth_pub = self.create_publisher(Float32, '/cinematography/focus_depth_m', 10)
         self._focus_center_depth_pub = self.create_publisher(
-            Float32, '/cinematography/focus_center_depth_m', 10
+            Float32,
+            '/cinematography/focus_center_depth_m',
+            10,
         )
         self._focus_roi_depth_pub = self.create_publisher(
-            Float32, '/cinematography/focus_roi_depth_median_m', 10
+            Float32,
+            '/cinematography/focus_roi_depth_median_m',
+            10,
         )
         self._target_world_pub = self.create_publisher(
-            PointStamped, '/cinematography/target_world', 10
+            PointStamped,
+            '/cinematography/target_world',
+            10,
         )
         self._timer = self.create_timer(1.0 / max(1.0, publish_rate_hz), self._tick)
         self._framing_sub = self.create_subscription(
@@ -123,6 +139,7 @@ class CostFunctionCalculatorNode(Node):
             if bridge is None:
                 bridge = CvBridge()
                 self._bridge = bridge
+
             depth = bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1')
             self.cost_calculator.update_depth_image(depth)
         except CvBridgeError as error:
@@ -175,6 +192,7 @@ class CostFunctionCalculatorNode(Node):
 
         target_world = self._estimate_target_world_position(focus_depth)
         self.cost_calculator.update_target_world(target_world)
+
         if target_world is not None:
             msg = PointStamped()
             msg.header.stamp = now_msg
@@ -209,15 +227,17 @@ class CostFunctionCalculatorNode(Node):
         self.get_logger().debug(
             f'Attitude yaw(set={msg.yaw_setpoint:.2f}, act={msg.actual_yaw:.2f}), '
             f'pitch(set={msg.pitch_setpoint:.2f}, act={msg.actual_pitch:.2f}), '
-            f'roll(set={msg.roll_setpoint:.2f}, act={msg.actual_roll:.2f})'
+            f'roll(set={msg.roll_setpoint:.2f}, act={msg.actual_roll:.2f})',
         )
         self._pub.publish(msg)
 
     def _estimate_target_world_position(self, depth_m: float | None):
         if depth_m is None or not float(depth_m) > 0.0:
             return None
+
         if self._last_odom is None:
             return None
+
         if (
             self.cost_calculator.center_point is None
             or len(self.cost_calculator.center_point.polygon.points) == 0
@@ -253,6 +273,7 @@ class CostFunctionCalculatorNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = CostFunctionCalculatorNode()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
