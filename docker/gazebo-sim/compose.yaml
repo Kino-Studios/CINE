@@ -1,0 +1,47 @@
+# Run from the CINE repository root:
+#   docker compose -f docker/gazebo-sim/compose.yaml build
+#   docker compose -f docker/gazebo-sim/compose.yaml up
+# Relative host paths resolve against this file's directory. For the Gazebo window, allow
+# the container's root user on the host X server first (xhost +local:root).
+name: cine-gazebo-sim
+
+services:
+  gazebo-sim:
+    image: cine-gazebo-sim:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NAV_SOURCE: ${NAV_SOURCE:-sim}
+      HEADLESS: ${HEADLESS:-false}
+      WIND: ${WIND:-calm}
+      MISSION: ${MISSION:-true}
+      CHECK: ${CHECK:-false}
+      DISPLAY: ${DISPLAY:-}
+      QT_X11_NO_MITSHM: '1'
+      # graphics, not only compute, so Gazebo's renderer gets the NVIDIA OpenGL driver.
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all
+    volumes:
+      - ../../:/workspace/src/CINE:ro
+      - ${CINE_SENSING_DIR:-../../../CINE-Sensing}:/workspace/src/CINE-Sensing:ro
+      - ${CINE_INTERFACES_DIR:-../../../CINE-Interfaces}:/workspace/src/CINE-Interfaces:ro
+      # colcon's build, install and log trees; kept beside src, not over it, so the
+      # read-only source mounts are never shadowed.
+      - cine-build:/workspace/colcon
+      - cine-weights:/weights
+      - ${CINE_BAGS_DIR:-~/cine-bags}:/bags
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    network_mode: host
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  cine-build:
+  cine-weights:

@@ -84,6 +84,8 @@ For the first two commands, `tools/start_simulation.sh [baseline|constrained]` i
 shorter wrapper. Recording runs and downloading the published ones are covered in
 [docs/recorded-data.md](docs/recorded-data.md), while the MLP weights and the depth model
 have their own page, [docs/mlp-and-depth.md](docs/mlp-and-depth.md).
+The Gazebo simulator, which simulates the drone stack in a container, has a separate page,
+[docs/gazebo-sim.md](docs/gazebo-sim.md).
 
 ## 4. Results
 
