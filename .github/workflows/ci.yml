@@ -25,8 +25,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: Kino-Studios/CINE-Interfaces
-          # Must match version in interfaces.repos, so CI checks the pinned contract.
-          ref: 9bd133ce7bed4b9d7ff50f1476eccd25ae8bb5d2
+          # No ref: CI checks against the newest contract on CINE-Interfaces main.
           path: .deps/CINE-Interfaces
       - run: pip install pytest numpy onnxruntime ./.deps/CINE-Interfaces/cine_interfaces ./cine_cli
       # Pure-Python tests: config loader, cost calculator, MLP weights lookup and

@@ -45,8 +45,8 @@ pip install -e ../CINE-Interfaces/cine_interfaces
 ```
 
 To rename or retype one of those topics, edit `contract.json` in CINE-Interfaces first,
-then change the code here and in CINE-Sensing, and move the commit pinned in
-`interfaces.repos` and `.github/workflows/ci.yml` forward.
+then change the code here and in CINE-Sensing. CI checks against CINE-Interfaces `main`, so
+push the contract change there only once both repositories match it.
 
 ## Style
 
