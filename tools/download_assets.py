@@ -6,6 +6,10 @@ Each asset lands at the path its reader expects inside this repository (or under
 with the recorded checksum is skipped; one present with a different checksum is refused
 rather than overwritten. The MLP correction weights are not distributed.
 
+The Source One meshes that may not be published come from the private
+`Kino-Studios/CINE-CAD` repository and need a git login that can read it. Without access
+they are skipped with a warning, and Gazebo loads the drone without those visuals.
+
 Usage:
     python3 tools/download_assets.py                                       # every asset
     python3 tools/download_assets.py --only baseline_sim_20251227_031503.csv  # one asset (repeatable)
@@ -13,7 +17,11 @@ Usage:
 
 import argparse
 import hashlib
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +29,8 @@ from pathlib import Path
 GITHUB_REPO = 'Kino-Studios/CINE'
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = REPOSITORY_ROOT / 'VERSION'
+PRIVATE_CAD_URL = 'https://github.com/Kino-Studios/CINE-CAD.git'
+PRIVATE_MESHES_DESTINATION = Path('cine_gazebo/models/cine_source_one/meshes')
 
 
 @dataclass(frozen=True)
@@ -188,6 +198,50 @@ def fetch_asset(asset, destination_root, tag, download=_download_with_urllib):
     print(f'done: {target_path}')
 
 
+def _clone_meshes_with_git(url, directory):
+    """Clone only the `meshes/` folder of `url` into `directory`; True on success."""
+    no_password_prompt = {**os.environ, 'GIT_TERMINAL_PROMPT': '0'}
+    clone_result = subprocess.run(
+        ['git', 'clone', '--depth', '1', '--filter=blob:none', '--sparse', url, str(directory)],
+        check=False,
+        env=no_password_prompt,
+    )
+    if clone_result.returncode != 0:
+        return False
+
+    checkout_result = subprocess.run(
+        ['git', '-C', str(directory), 'sparse-checkout', 'set', 'meshes'],
+        check=False,
+    )
+
+    return checkout_result.returncode == 0
+
+
+def fetch_private_meshes(destination_root, clone=_clone_meshes_with_git):
+    """Copy the private CINE-CAD meshes into the Source One model, replacing older copies.
+
+    A failed clone, usually a missing login or access, is a warning rather than an error,
+    because the simulator runs without these visuals.
+    """
+    print(f'cloning meshes from {PRIVATE_CAD_URL}', flush=True)
+    with tempfile.TemporaryDirectory() as clone_directory:
+        if not clone(PRIVATE_CAD_URL, clone_directory):
+            print(
+                f'warning: could not clone {PRIVATE_CAD_URL}; the motor, propeller, stack and '
+                'guard meshes are skipped. Ask for access, then run `gh auth login` and '
+                '`gh auth setup-git`.',
+                file=sys.stderr,
+            )
+
+            return
+
+        target_directory = Path(destination_root) / PRIVATE_MESHES_DESTINATION
+        target_directory.mkdir(parents=True, exist_ok=True)
+        for mesh_path in sorted((Path(clone_directory) / 'meshes').iterdir()):
+            shutil.copy2(mesh_path, target_directory / mesh_path.name)
+            print(f'done: {target_directory / mesh_path.name}')
+
+
 def main(argv):
     asset_names = [asset.name for asset in ASSETS]
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -217,6 +271,9 @@ def main(argv):
             print(f'error: {error}', file=sys.stderr)
 
             return 1
+
+    if not arguments.only:
+        fetch_private_meshes(arguments.dest)
 
     return 0
 

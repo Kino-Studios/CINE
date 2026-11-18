@@ -83,3 +83,51 @@ def test_release_tag_is_the_version_file_prefixed_with_v(tmp_path):
 def test_only_option_rejects_an_unknown_asset_name():
     with pytest.raises(SystemExit):
         download_assets.main(['--only', 'not-an-asset.bin'])
+
+
+def _clone_writing(file_names):
+    def clone(url, directory):
+        meshes_directory = Path(directory) / 'meshes'
+        meshes_directory.mkdir(parents=True)
+        for file_name in file_names:
+            (meshes_directory / file_name).write_text(file_name)
+
+        return True
+
+    return clone
+
+
+def _clone_that_fails(url, directory):
+    return False
+
+
+def test_private_meshes_are_copied_into_the_source_one_model(tmp_path):
+    download_assets.fetch_private_meshes(
+        tmp_path, _clone_writing(['restricted_motors.obj', 'restricted_motors.mtl'])
+    )
+
+    meshes_directory = tmp_path / 'cine_gazebo/models/cine_source_one/meshes'
+    assert sorted(path.name for path in meshes_directory.iterdir()) == [
+        'restricted_motors.mtl',
+        'restricted_motors.obj',
+    ]
+
+
+def test_private_meshes_come_from_the_cine_cad_repository(tmp_path):
+    requested_urls = []
+
+    def recording_clone(url, directory):
+        requested_urls.append(url)
+
+        return False
+
+    download_assets.fetch_private_meshes(tmp_path, recording_clone)
+
+    assert requested_urls == ['https://github.com/Kino-Studios/CINE-CAD.git']
+
+
+def test_failed_private_mesh_clone_warns_and_writes_nothing(tmp_path, capsys):
+    download_assets.fetch_private_meshes(tmp_path, _clone_that_fails)
+
+    assert 'warning' in capsys.readouterr().err
+    assert not (tmp_path / 'cine_gazebo').exists()

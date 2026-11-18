@@ -50,8 +50,10 @@
     (battery box, battery wire part, Pi adapter plate, camera mount) and generated pieces
     (standoffs, wiring, capacitor, XT60), the project owner's own work.
   - `carbon_twill.png`: generated, the project owner's own work.
-- Visual meshes named `restricted_*`, not distributed and ignored by git, because their
-  sources do not allow redistribution:
+- Visual meshes named `restricted_*`, ignored by git here because their sources do not
+  allow redistribution. They and their CAD sources live in the private
+  `Kino-Studios/CINE-CAD` repository; `python3 tools/download_assets.py` copies them in
+  for anyone with access:
   - `restricted_motors.obj`, `restricted_prop_ccw.obj`, `restricted_prop_cw.obj`,
     `restricted_stack.obj`: GrabCAD community models of a 2207 motor, a 5-inch tri-blade
     prop and the SpeedyBee F405 stack
