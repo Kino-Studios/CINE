@@ -1,6 +1,7 @@
 import os
 
 from ament_index_python.packages import get_package_share_directory
+from cine_bringup.mission_waypoints import load_mission_waypoints
 from cine_config.constants import (
     CinematicConstraints,
     CinematographyParams,
@@ -8,7 +9,12 @@ from cine_config.constants import (
     SimulationParams,
 )
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    GroupAction,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+)
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
@@ -79,7 +85,6 @@ def _if_all_true(*flags):
 
 
 def generate_launch_description():
-    waypoints = generate_cinematic_waypoints()
     constraints = CinematicConstraints()
 
     obj_num = LaunchConfiguration('obj_num', default=10)
@@ -100,11 +105,39 @@ def generate_launch_description():
     map_size_y_cmd = DeclareLaunchArgument('map_size_y', default_value=map_size_y)
     map_size_z_cmd = DeclareLaunchArgument('map_size_z', default_value=map_size_z)
     odom_topic_cmd = DeclareLaunchArgument('odom_topic', default_value=odom_topic)
+    odometry_topic = LaunchConfiguration('odometry_topic', default='/vio/odometry')
+    odometry_topic_cmd = DeclareLaunchArgument('odometry_topic', default_value='/vio/odometry')
+    use_sim_time = LaunchConfiguration('use_sim_time', default='false')
+    use_sim_time_cmd = DeclareLaunchArgument('use_sim_time', default_value='false')
+    waypoints_file = LaunchConfiguration('waypoints_file', default='')
+    waypoints_file_cmd = DeclareLaunchArgument('waypoints_file', default_value='')
     depth_topic_cmd = DeclareLaunchArgument('depth_topic', default_value=depth_topic)
     camera_pose_topic_cmd = DeclareLaunchArgument(
         'camera_pose_topic', default_value=camera_pose_topic
     )
     cloud_topic_cmd = DeclareLaunchArgument('cloud_topic', default_value=cloud_topic)
+
+    # The planner's depth camera. The defaults are the ego-planner simulator's, used when
+    # the depth image comes from the 640x480 simulator or the Pi camera's depth node.
+    planner_intrinsics = {
+        'fx': '387.229248046875',
+        'fy': '387.229248046875',
+        'cx': '321.04638671875',
+        'cy': '243.44969177246094',
+    }
+    planner_intrinsic_configurations = {
+        name: LaunchConfiguration(f'planner_{name}', default=default)
+        for name, default in planner_intrinsics.items()
+    }
+    planner_intrinsic_cmds = [
+        DeclareLaunchArgument(f'planner_{name}', default_value=default)
+        for name, default in planner_intrinsics.items()
+    ]
+
+    planner_virtual_ceil_height = LaunchConfiguration('planner_virtual_ceil_height', default='2.9')
+    planner_virtual_ceil_height_cmd = DeclareLaunchArgument(
+        'planner_virtual_ceil_height', default_value='2.9'
+    )
 
     use_mockamap = LaunchConfiguration('use_mockamap', default=False)
     use_mockamap_cmd = DeclareLaunchArgument('use_mockamap', default_value=use_mockamap)
@@ -142,6 +175,35 @@ def generate_launch_description():
     )
     not_use_simulation = PythonExpression(
         ['"false" if "', use_simulation, '".lower() == "true" else "true"']
+    )
+    # Simulation keeps the per-drone '/drone_<id>_<odom_topic>' name; otherwise odometry_topic is
+    # used as given. The planner's clock follows use_simulation when it is true.
+    drone_odometry_topic = PythonExpression(
+        [
+            "'/drone_' + str(",
+            drone_id,
+            ") + '_",
+            odom_topic,
+            "' if '",
+            use_simulation,
+            "'.lower() == 'true' else '",
+            odometry_topic,
+            "'",
+        ]
+    )
+    planner_use_sim_time = PythonExpression(
+        ["'true' if '", use_simulation, "'.lower() == 'true' else '", use_sim_time, "'"]
+    )
+    planner_odometry_topic = PythonExpression(
+        [
+            "'",
+            odom_topic,
+            "' if '",
+            use_simulation,
+            "'.lower() == 'true' else '",
+            odometry_topic,
+            "'",
+        ]
     )
 
     use_distinctive_trajs = LaunchConfiguration('use_distinctive_trajs', default='false')
@@ -300,6 +362,7 @@ def generate_launch_description():
             {'ObstacleShape/theta': 0.5},
             {'pub_rate': 1.0},
             {'min_distance': 0.8},
+            {'use_sim_time': use_sim_time},
         ],
         condition=IfCondition(
             PythonExpression(
@@ -314,49 +377,72 @@ def generate_launch_description():
         ),
     )
 
-    waypoint_args = {
-        'flight_type': str(2),
-        'point_num': str(len(waypoints)),
-    }
+    def planner_include(context):
+        waypoints_path = context.perform_substitution(waypoints_file)
+        waypoints = (
+            load_mission_waypoints(waypoints_path)
+            if waypoints_path
+            else generate_cinematic_waypoints()
+        )
+        waypoint_args = {
+            'flight_type': str(2),
+            'point_num': str(len(waypoints)),
+        }
 
-    for i, (x, y, z) in enumerate(waypoints):
-        waypoint_args[f'point{i}_x'] = str(x)
-        waypoint_args[f'point{i}_y'] = str(y)
-        waypoint_args[f'point{i}_z'] = str(z)
+        for i, (x, y, z) in enumerate(waypoints):
+            waypoint_args[f'point{i}_x'] = str(x)
+            waypoint_args[f'point{i}_y'] = str(y)
+            waypoint_args[f'point{i}_z'] = str(z)
 
-    advanced_param_include = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory('ego_planner'), 'launch', 'advanced_param.launch.py'
+        # scoped: the included file's arguments (odometry_topic, use_sim_time) must not
+        # overwrite this file's own configurations for the nodes added after it.
+
+        return [
+            GroupAction(
+                [
+                    IncludeLaunchDescription(
+                        PythonLaunchDescriptionSource(
+                            os.path.join(
+                                get_package_share_directory('ego_planner'),
+                                'launch',
+                                'advanced_param.launch.py',
+                            )
+                        ),
+                        launch_arguments={
+                            'drone_id': drone_id,
+                            'map_size_x_': map_size_x,
+                            'map_size_y_': map_size_y,
+                            'map_size_z_': map_size_z,
+                            'odometry_topic': planner_odometry_topic,
+                            'obj_num_set': obj_num,
+                            'camera_pose_topic': camera_pose_topic,
+                            'depth_topic': depth_topic,
+                            'cloud_topic': cloud_topic,
+                            'virtual_ceil_height': planner_virtual_ceil_height,
+                            'cx': planner_intrinsic_configurations['cx'],
+                            'cy': planner_intrinsic_configurations['cy'],
+                            'fx': planner_intrinsic_configurations['fx'],
+                            'fy': planner_intrinsic_configurations['fy'],
+                            'max_vel': default_max_vel,
+                            'max_acc': default_max_acc,
+                            'planning_horizon': str(7.5),
+                            'use_distinctive_trajs': use_distinctive_trajs,
+                            'realworld_experiment': PythonExpression(
+                                ["'false' if '", use_simulation, "' == 'true' else 'true'"]
+                            ),
+                            'use_sim_time': planner_use_sim_time,
+                            **waypoint_args,
+                        }.items(),
+                    )
+                ],
+                scoped=True,
             )
-        ),
-        launch_arguments={
-            'drone_id': drone_id,
-            'map_size_x_': map_size_x,
-            'map_size_y_': map_size_y,
-            'map_size_z_': map_size_z,
-            'odometry_topic': odom_topic,
-            'obj_num_set': obj_num,
-            'camera_pose_topic': camera_pose_topic,
-            'depth_topic': depth_topic,
-            'cloud_topic': cloud_topic,
-            'cx': str(321.04638671875),
-            'cy': str(243.44969177246094),
-            'fx': str(387.229248046875),
-            'fy': str(387.229248046875),
-            'max_vel': default_max_vel,
-            'max_acc': default_max_acc,
-            'planning_horizon': str(7.5),
-            'use_distinctive_trajs': use_distinctive_trajs,
-            'realworld_experiment': PythonExpression(
-                ["'false' if '", use_simulation, "' == 'true' else 'true'"]
-            ),
-            'use_sim_time': use_simulation,
-            **waypoint_args,
-        }.items(),
-    )
+        ]
+
+    advanced_param_include = OpaqueFunction(function=planner_include)
 
     traj_server_params = [
+        {'use_sim_time': use_sim_time},
         {'traj_server/time_forward': 1.0},
         {'traj_server/use_cinematic_bspline': use_cinematic_bspline},
         {'traj_server/default_speed_scale': default_speed_scale},
@@ -422,7 +508,7 @@ def generate_launch_description():
         name='mlp_correction_node',
         output='screen',
         condition=IfCondition(use_mlp_correction),
-        parameters=[{'mlp_weights_path': mlp_weights_path}],
+        parameters=[{'mlp_weights_path': mlp_weights_path}, {'use_sim_time': use_sim_time}],
     )
 
     cinematic_intent_node = Node(
@@ -432,12 +518,9 @@ def generate_launch_description():
         output='screen',
         condition=IfCondition(use_cinematic_bspline),
         parameters=[
+            {'use_sim_time': use_sim_time},
             {'waypoints_topic': '/move_base_simple/goal'},
-            {
-                'odom_topic': PythonExpression(
-                    ["'/drone_' + str(", drone_id, ") + '_", odom_topic, "'"]
-                )
-            },
+            {'odom_topic': drone_odometry_topic},
             {'depth_topic': depth_topic},
             {'center_topic': '/object_detection/center_point'},
             {'bbox_topic': '/object_detection/bounding_box'},
@@ -453,6 +536,7 @@ def generate_launch_description():
         output='screen',
         condition=_if_all_true(use_cinematic_bspline, start_cinematography_nodes),
         parameters=[
+            {'use_sim_time': use_sim_time},
             {
                 'bspline_in_topic': PythonExpression(
                     ["'/drone_' + str(", drone_id, ") + '_planning/bspline'"]
@@ -477,6 +561,7 @@ def generate_launch_description():
             ('depth/image_raw', depth_topic),
         ],
         parameters=[
+            {'use_sim_time': use_sim_time},
             {'cx': SIMULATED_DEPTH_CAMERA['camera_cx']},
             {'cy': SIMULATED_DEPTH_CAMERA['camera_cy']},
             {'fx': SIMULATED_DEPTH_CAMERA['camera_fx']},
@@ -493,11 +578,8 @@ def generate_launch_description():
         output='screen',
         condition=_if_all_true(use_simulation, start_cinematography_nodes),
         parameters=[
-            {
-                'odom_topic': PythonExpression(
-                    ["'/drone_' + str(", drone_id, ") + '_", odom_topic, "'"]
-                )
-            },
+            {'use_sim_time': use_sim_time},
+            {'odom_topic': drone_odometry_topic},
             {'target_xyz': SimulationParams.TARGET_XYZ},
             {'focus_depth_m': SimulationParams.FOCUS_DEPTH_M},
         ],
@@ -510,11 +592,8 @@ def generate_launch_description():
         output='screen',
         condition=_if_all_true(use_simulation, start_cinematography_nodes),
         parameters=[
-            {
-                'odom_topic': PythonExpression(
-                    ["'/drone_' + str(", drone_id, ") + '_", odom_topic, "'"]
-                )
-            },
+            {'use_sim_time': use_sim_time},
+            {'odom_topic': drone_odometry_topic},
         ],
     )
 
@@ -526,6 +605,7 @@ def generate_launch_description():
         output='screen',
         condition=_if_all_true(not_use_simulation, start_cinematography_nodes),
         parameters=[
+            {'use_sim_time': use_sim_time},
             # NOTE: /imu_propagate is used as the odometry source for hardware mode. Confirm this topic matches the flight controller configuration.
             {'odom_topic': '/imu_propagate'},
             {'depth_topic': depth_topic},
@@ -536,24 +616,29 @@ def generate_launch_description():
         ],
     )
 
-    simulator_include = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory('ego_planner'), 'launch', 'simulator.launch.py'
-            )
-        ),
+    simulator_include = GroupAction(
+        [
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(
+                        get_package_share_directory('ego_planner'), 'launch', 'simulator.launch.py'
+                    )
+                ),
+                launch_arguments={
+                    'use_dynamic': use_dynamic,
+                    'drone_id': drone_id,
+                    'map_size_x_': map_size_x,
+                    'map_size_y_': map_size_y,
+                    'map_size_z_': map_size_z,
+                    'init_x_': str(-15.0),
+                    'init_y_': str(0.0),
+                    'init_z_': str(0.1),
+                    'odometry_topic': odom_topic,
+                }.items(),
+            ),
+        ],
         condition=IfCondition(use_simulation),
-        launch_arguments={
-            'use_dynamic': use_dynamic,
-            'drone_id': drone_id,
-            'map_size_x_': map_size_x,
-            'map_size_y_': map_size_y,
-            'map_size_z_': map_size_z,
-            'init_x_': str(-15.0),
-            'init_y_': str(0.0),
-            'init_z_': str(0.1),
-            'odometry_topic': odom_topic,
-        }.items(),
+        scoped=True,
     )
 
     ld = LaunchDescription()
@@ -563,9 +648,15 @@ def generate_launch_description():
     ld.add_action(map_size_y_cmd)
     ld.add_action(map_size_z_cmd)
     ld.add_action(odom_topic_cmd)
+    ld.add_action(odometry_topic_cmd)
+    ld.add_action(use_sim_time_cmd)
+    ld.add_action(waypoints_file_cmd)
     ld.add_action(depth_topic_cmd)
     ld.add_action(camera_pose_topic_cmd)
     ld.add_action(cloud_topic_cmd)
+    ld.add_action(planner_virtual_ceil_height_cmd)
+    for planner_intrinsic_cmd in planner_intrinsic_cmds:
+        ld.add_action(planner_intrinsic_cmd)
     ld.add_action(obj_num_cmd)
     ld.add_action(drone_id_cmd)
     ld.add_action(use_dynamic_cmd)

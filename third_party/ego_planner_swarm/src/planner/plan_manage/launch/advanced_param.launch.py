@@ -1,8 +1,16 @@
 import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+
+def per_drone_topic(drone_id, topic):
+    # Relative names get the 'drone_<id>_' prefix; absolute names are used unchanged.
+    return PythonExpression([
+        "'", topic, "' if '", topic, "'.startswith('/') else 'drone_' + str(", drone_id,
+        ") + '_' + '", topic, "'",
+    ])
+
 
 def generate_launch_description():
     # LaunchConfigurations
@@ -19,6 +27,7 @@ def generate_launch_description():
     cy = LaunchConfiguration('cy', default=243.44969177246094)
     fx = LaunchConfiguration('fx', default=387.229248046875)
     fy = LaunchConfiguration('fy', default=387.229248046875)
+    virtual_ceil_height = LaunchConfiguration('virtual_ceil_height', default=2.9)
     
     max_vel = LaunchConfiguration('max_vel', default=1.55)
     max_acc = LaunchConfiguration('max_acc', default=3.7)
@@ -62,6 +71,7 @@ def generate_launch_description():
     cy_arg = DeclareLaunchArgument('cy', default_value=cy, description='Camera intrinsic cy')
     fx_arg = DeclareLaunchArgument('fx', default_value=fx, description='Camera intrinsic fx')
     fy_arg = DeclareLaunchArgument('fy', default_value=fy, description='Camera intrinsic fy')
+    virtual_ceil_height_arg = DeclareLaunchArgument('virtual_ceil_height', default_value=virtual_ceil_height, description='Height of the occupied ceiling layer in the grid map')
     max_vel_arg = DeclareLaunchArgument('max_vel', default_value=max_vel, description='Maximum velocity')
     max_acc_arg = DeclareLaunchArgument('max_acc', default_value=max_acc, description='Maximum acceleration')
     planning_horizon_arg = DeclareLaunchArgument('planning_horizon', default_value=planning_horizon, description='Planning horizon')
@@ -97,7 +107,7 @@ def generate_launch_description():
         name=['drone_', drone_id, '_ego_planner_node'],
         output='screen',
         remappings=[
-            ('odom_world', ['drone_', drone_id, '_', odometry_topic]),
+            ('odom_world', per_drone_topic(drone_id, odometry_topic)),
             ('planning/bspline', ['drone_', drone_id, '_planning/bspline']),
             ('planning/data_display', ['drone_', drone_id, '_planning/data_display']),
             ('planning/broadcast_bspline_from_planner', '/broadcast_bspline'),
@@ -109,10 +119,10 @@ def generate_launch_description():
             ('optimal_list', ['drone_', drone_id, '_plan_vis/optimal_list']),
             ('a_star_list', ['drone_', drone_id, '_plan_vis/a_star_list']),
             
-            ('grid_map/odom', ['drone_', drone_id, '_', odometry_topic]),
+            ('grid_map/odom', per_drone_topic(drone_id, odometry_topic)),
             ('grid_map/cloud', cloud_topic),
-            ('grid_map/pose', ['drone_', drone_id, '_', camera_pose_topic]),
-            ('grid_map/depth', ['drone_', drone_id, '_', depth_topic]),
+            ('grid_map/pose', per_drone_topic(drone_id, camera_pose_topic)),
+            ('grid_map/depth', per_drone_topic(drone_id, depth_topic)),
             ('grid_map/occupancy_inflate', ['drone_', drone_id, '_grid/grid_map/occupancy_inflate'])
         ],
         parameters=[
@@ -175,7 +185,7 @@ def generate_launch_description():
             {'grid_map/min_ray_length': 0.1},
             {'grid_map/max_ray_length': 4.5},
             
-            {'grid_map/virtual_ceil_height': 2.9},
+            {'grid_map/virtual_ceil_height': virtual_ceil_height},
             {'grid_map/visualization_truncate_height': 1.8},
             {'grid_map/show_occ_time': False},
             {'grid_map/pose_type': 1},
@@ -226,6 +236,7 @@ def generate_launch_description():
     ld.add_action(cy_arg)
     ld.add_action(fx_arg)
     ld.add_action(fy_arg)
+    ld.add_action(virtual_ceil_height_arg)
     ld.add_action(max_vel_arg)
     ld.add_action(max_acc_arg)
     ld.add_action(planning_horizon_arg)
@@ -253,7 +264,6 @@ def generate_launch_description():
     ld.add_action(drone_id_arg)
     ld.add_action(realworld_experiment_arg)
     ld.add_action(use_sim_time_arg)
-
 
     # Add Node
     ld.add_action(ego_planner_node)

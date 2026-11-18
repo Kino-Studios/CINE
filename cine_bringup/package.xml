@@ -11,6 +11,7 @@
   <url type="bugtracker">https://github.com/Kino-Studios/CINE/issues</url>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>cine_agent</exec_depend>
@@ -20,6 +21,7 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>map_generator</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
   <exec_depend>rviz2</exec_depend>
 
   <export>
