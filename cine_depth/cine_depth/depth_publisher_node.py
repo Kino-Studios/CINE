@@ -10,6 +10,7 @@ from sensor_msgs.msg import Image
 
 import cine_config
 from cine_depth.depth_scaling import metric_depth_metres, relative_depth_metres
+from cine_depth.output_size import output_size
 
 # Apache-2.0, like DA3-SMALL and DA3-BASE; the larger non-metric DA3 models are CC BY-NC 4.0.
 DEFAULT_MODEL_ID = 'depth-anything/DA3METRIC-LARGE'
@@ -46,17 +47,25 @@ class DepthPublisherNode(Node):
         self.declare_parameter('depth_encoding', '32FC1')
         self.declare_parameter('depth_scale', 1.0)
         self.declare_parameter('max_depth', 10.0)
+        self.declare_parameter('output_width', 0)
+        self.declare_parameter('output_height', 0)
+        self.declare_parameter('focal_length_px', 0.0)
 
         self.model_id = self.get_parameter('model_id').value
         self.process_resolution = int(self.get_parameter('process_resolution').value)
         self.depth_encoding = self.get_parameter('depth_encoding').value
         self.depth_scale = self.get_parameter('depth_scale').value
         self.max_depth = self.get_parameter('max_depth').value
+        self.output_width = int(self.get_parameter('output_width').value)
+        self.output_height = int(self.get_parameter('output_height').value)
         # Only DA3METRIC models output depth that converts to metres with the focal length.
         self.model_is_metric = 'METRIC' in self.model_id.upper()
 
         camera = cine_config.load('camera/camera-params')['camera_params']
         self.camera_focal_px = (camera['camera_fx'] + camera['camera_fy']) / 2.0
+        focal_length_px = float(self.get_parameter('focal_length_px').value)
+        if focal_length_px > 0.0:
+            self.camera_focal_px = focal_length_px
         self.calibration_image_width = camera['image_width']
 
         self.initialize_depth_model()
@@ -117,7 +126,9 @@ class DepthPublisherNode(Node):
             else:
                 depth_metres = relative_depth_metres(network_depth, self.max_depth)
             depth_metres = cv2.resize(
-                depth_metres * self.depth_scale, (width, height), interpolation=cv2.INTER_LINEAR
+                depth_metres * self.depth_scale,
+                output_size(width, height, self.output_width, self.output_height),
+                interpolation=cv2.INTER_LINEAR,
             )
 
             if self.depth_encoding == '32FC1':
