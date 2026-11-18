@@ -6,6 +6,8 @@
     "camera_cy": 324.0,
     "image_width": 1152,
     "image_height": 648,
-    "max_pixel_value": 255.0
+    "max_pixel_value": 255.0,
+    "body_to_camera_translation": [0.05, 0.0, 0.0],
+    "body_to_camera_quaternion": [-0.5, 0.5, -0.5, 0.5]
   }
 }
