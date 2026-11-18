@@ -1,0 +1,38 @@
+# ArduCopter SITL parameters for nav_source:=vins, loaded by gazebo_sim.launch.py after
+# ArduPilot's stock copter.parm and gazebo-iris.parm. It repeats everything in
+# sim_position.parm (the launch loads one position file, not both) and adds the external
+# vision source set the flight starter switches to once VINS agrees with the autopilot.
+
+# The drone's MAVROS loads no stream-rate config, so SITL sets the IMU rate the Pi sees:
+# RAW_IMU and SCALED_IMU at 50 Hz on the MAVROS link (SERIAL0, tcp:5760).
+SR0_RAW_SENS 50
+# Copter defaults every other SR0 stream to 0, and nothing here requests streams (no
+# MAVProxy), so without these MAVROS never gets LOCAL_POSITION_NED or ATTITUDE and
+# /mavros/local_position/odom stays silent.
+SR0_POSITION 10
+SR0_EXTRA1 10
+SR0_EXT_STAT 2
+
+# Source set 1 navigates on GPS alone: GPS horizontal position and velocity, barometer
+# height, GPS vertical velocity, compass yaw. The vehicle takes off on it.
+EK3_SRC1_POSXY 3
+EK3_SRC1_VELXY 3
+EK3_SRC1_POSZ 1
+EK3_SRC1_VELZ 3
+EK3_SRC1_YAW 1
+
+# Accept visual odometry over MAVLink (vio_publisher copies its /vio/pose output to
+# /mavros/vision_pose/pose, and MAVROS sends that as VISION_POSITION_ESTIMATE).
+VISO_TYPE 1
+
+# Source set 2 navigates on external vision: VINS horizontal position, barometer height,
+# compass yaw (the T265 recipe uses compass yaw too), and no velocity source, because the Pi
+# forwards a pose only and no velocity message is ever sent.
+EK3_SRC2_POSXY 6
+EK3_SRC2_VELXY 0
+EK3_SRC2_VELZ 0
+EK3_SRC2_POSZ 1
+EK3_SRC2_YAW 1
+
+# Select one set at a time instead of fusing the sets together.
+EK3_SRC_OPTIONS 0

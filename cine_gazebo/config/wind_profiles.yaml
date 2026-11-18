@@ -1,0 +1,15 @@
+# Wind for the Gazebo world, chosen with `wind:=<name>` on gazebo_sim.launch.py.
+# linear_velocity is the mean wind in the world frame (x east, y north, z up) in m/s, so
+# wind from the west blows towards +x. The stddevs are Gaussian noise Gazebo adds to the
+# horizontal speed (m/s), the horizontal direction (radians) and the vertical speed (m/s).
+calm:
+  linear_velocity: [0.0, 0.0, 0.0]
+  horizontal_magnitude_stddev: 0.0
+  horizontal_direction_stddev: 0.0
+  vertical_stddev: 0.0
+
+gusty:
+  linear_velocity: [4.0, 0.0, 0.0]
+  horizontal_magnitude_stddev: 1.5
+  horizontal_direction_stddev: 0.3
+  vertical_stddev: 0.5

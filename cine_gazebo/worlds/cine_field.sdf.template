@@ -1,0 +1,305 @@
+<?xml version="1.0" ?>
+<!--
+  Template for the CINE test field. Physics, systems, scene, location, sun, ground and the
+  drone's spawn pose come from ardupilot_gazebo's worlds/iris_runway.sdf (commit
+  f116b03552d05c8d0b0bed5ed67033a1183121d1); its colour-axes debugging model is left out so
+  the camera does not see it. gazebo_sim.launch.py fills {{wind}} from
+  config/wind_profiles.yaml through cine_gazebo.model_rendering; never load this file
+  directly.
+
+  World frame: x east, y north, z up. The drone spawns at the origin facing north, so the
+  walking subject and most obstacles start in its camera's view.
+-->
+<sdf version="1.9">
+  <world name="cine_field">
+    <physics name="1ms" type="ignore">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics">
+    </plugin>
+    <plugin
+      filename="gz-sim-sensors-system"
+      name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands">
+    </plugin>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+      name="gz::sim::systems::Imu">
+    </plugin>
+    <plugin filename="gz-sim-navsat-system"
+      name="gz::sim::systems::NavSat">
+    </plugin>
+
+    {{wind}}
+
+    <scene>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.8 0.8 0.8</background>
+      <sky></sky>
+    </scene>
+
+    <spherical_coordinates>
+      <latitude_deg>-35.363262</latitude_deg>
+      <longitude_deg>149.165237</longitude_deg>
+      <elevation>584</elevation>
+      <heading_deg>0</heading_deg>
+      <surface_model>EARTH_WGS84</surface_model>
+    </spherical_coordinates>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.8 0.8 0.8 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <include>
+      <uri>model://runway</uri>
+      <pose degrees="true">-29 545 0 0 0 363</pose>
+    </include>
+
+    <!-- Obstacles 10.8 m to 23 m from the spawn point, textured with the runway model's
+         grass so the camera finds features on them. -->
+    <model name="hedge_east">
+      <static>true</static>
+      <pose>9 6 1.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>1.5 6 3</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1.5 6 3</size>
+            </box>
+          </geometry>
+          <material>
+            <diffuse>0.7 0.9 0.6 1</diffuse>
+            <pbr>
+              <metal>
+                <albedo_map>model://runway/materials/textures/Grass004_2K_Color.jpg</albedo_map>
+                <normal_map>model://runway/materials/textures/Grass004_2K_NormalGL.jpg</normal_map>
+                <roughness>0.8</roughness>
+                <metalness>0</metalness>
+              </metal>
+            </pbr>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="hedge_north">
+      <static>true</static>
+      <pose>-3 18 2 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>8 1.5 4</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>8 1.5 4</size>
+            </box>
+          </geometry>
+          <material>
+            <diffuse>0.6 0.8 0.5 1</diffuse>
+            <pbr>
+              <metal>
+                <albedo_map>model://runway/materials/textures/Grass004_2K_Color.jpg</albedo_map>
+                <normal_map>model://runway/materials/textures/Grass004_2K_NormalGL.jpg</normal_map>
+                <roughness>0.8</roughness>
+                <metalness>0</metalness>
+              </metal>
+            </pbr>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="pillar_north_west">
+      <static>true</static>
+      <pose>-8 9 3 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.8</radius>
+              <length>6</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.8</radius>
+              <length>6</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <diffuse>0.8 0.6 0.4 1</diffuse>
+            <pbr>
+              <metal>
+                <albedo_map>model://runway/materials/textures/Grass004_2K_Color.jpg</albedo_map>
+                <roughness>0.9</roughness>
+                <metalness>0</metalness>
+              </metal>
+            </pbr>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="pillar_north_east">
+      <static>true</static>
+      <pose>6 14 3 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>1.0</radius>
+              <length>6</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>1.0</radius>
+              <length>6</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <diffuse>0.9 0.7 0.5 1</diffuse>
+            <pbr>
+              <metal>
+                <albedo_map>model://runway/materials/textures/Grass004_2K_Color.jpg</albedo_map>
+                <roughness>0.9</roughness>
+                <metalness>0</metalness>
+              </metal>
+            </pbr>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="pillar_far_north">
+      <static>true</static>
+      <pose>1 23 3 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.8</radius>
+              <length>6</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.8</radius>
+              <length>6</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <diffuse>0.7 0.7 0.9 1</diffuse>
+            <pbr>
+              <metal>
+                <albedo_map>model://runway/materials/textures/Grass004_2K_Color.jpg</albedo_map>
+                <roughness>0.9</roughness>
+                <metalness>0</metalness>
+              </metal>
+            </pbr>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- The subject: a person walking a 6 m by 2 m loop 9.5 m to 11.4 m north of the spawn
+         point at 1.2 m/s, turning on the spot at each corner. Gazebo computes a scripted
+         actor's pose only while rendering, so no Gazebo topic carries it. -->
+    <actor name="subject">
+      <skin>
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/1/files/meshes/walk.dae</filename>
+        <scale>1.0</scale>
+      </skin>
+      <animation name="walk">
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/1/files/meshes/walk.dae</filename>
+        <interpolate_x>true</interpolate_x>
+      </animation>
+      <script>
+        <loop>true</loop>
+        <delay_start>0</delay_start>
+        <auto_start>true</auto_start>
+        <trajectory id="0" type="walk">
+          <waypoint>
+            <time>0</time>
+            <pose>-3 9 1.0 0 0 0</pose>
+          </waypoint>
+          <waypoint>
+            <time>5</time>
+            <pose>3 9 1.0 0 0 0</pose>
+          </waypoint>
+          <waypoint>
+            <time>6</time>
+            <pose>3 9 1.0 0 0 1.5708</pose>
+          </waypoint>
+          <waypoint>
+            <time>7.7</time>
+            <pose>3 11 1.0 0 0 1.5708</pose>
+          </waypoint>
+          <waypoint>
+            <time>8.7</time>
+            <pose>3 11 1.0 0 0 3.1416</pose>
+          </waypoint>
+          <waypoint>
+            <time>13.7</time>
+            <pose>-3 11 1.0 0 0 3.1416</pose>
+          </waypoint>
+          <waypoint>
+            <time>14.7</time>
+            <pose>-3 11 1.0 0 0 4.7124</pose>
+          </waypoint>
+          <waypoint>
+            <time>16.4</time>
+            <pose>-3 9 1.0 0 0 4.7124</pose>
+          </waypoint>
+          <waypoint>
+            <time>17.4</time>
+            <pose>-3 9 1.0 0 0 6.2832</pose>
+          </waypoint>
+        </trajectory>
+      </script>
+    </actor>
+
+    <include>
+      <uri>model://cine_iris</uri>
+      <name>cine_iris</name>
+      <pose degrees="true">0 0 0.195 0 0 90</pose>
+    </include>
+
+  </world>
+</sdf>

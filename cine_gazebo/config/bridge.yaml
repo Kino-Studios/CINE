@@ -1,0 +1,26 @@
+# Gazebo -> ROS topics for gazebo_sim.launch.py's ros_gz_bridge. The camera image goes
+# through ros_gz_image's image_bridge instead, which publishes over image_transport.
+# Gazebo topic names come from model.sdf.template (camera, pose publisher) and gz-sim's
+# global clock; check them against `gz topic -l` on a running world.
+#
+# /gazebo/subject_pose has no entry: Gazebo computes a scripted actor's pose only while
+# rendering, never in the simulation state, so no Gazebo topic carries the walking
+# subject's pose. The subject_pose_publisher node replays the actor's script instead.
+
+- ros_topic_name: /clock
+  gz_topic_name: /clock
+  ros_type_name: rosgraph_msgs/msg/Clock
+  gz_type_name: gz.msgs.Clock
+  direction: GZ_TO_ROS
+
+- ros_topic_name: /camera/camera_info
+  gz_topic_name: /camera/camera_info
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  gz_type_name: gz.msgs.CameraInfo
+  direction: GZ_TO_ROS
+
+- ros_topic_name: /gazebo/drone_pose
+  gz_topic_name: /model/cine_iris/pose
+  ros_type_name: geometry_msgs/msg/PoseStamped
+  gz_type_name: gz.msgs.Pose
+  direction: GZ_TO_ROS

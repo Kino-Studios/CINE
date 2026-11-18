@@ -1,0 +1,22 @@
+# ArduCopter SITL parameters for nav_source:=sim, loaded by gazebo_sim.launch.py after
+# ArduPilot's stock copter.parm and gazebo-iris.parm (Tools/autotest/default_params at
+# Copter-4.7.2, fb773567). Neither stock file touches ARMING_CHECK, so every pre-arm
+# check stays at its default here too.
+
+# The drone's MAVROS loads no stream-rate config, so SITL sets the IMU rate the Pi sees:
+# RAW_IMU and SCALED_IMU at 50 Hz on the MAVROS link (SERIAL0, tcp:5760).
+SR0_RAW_SENS 50
+# Copter defaults every other SR0 stream to 0, and nothing here requests streams (no
+# MAVProxy), so without these MAVROS never gets LOCAL_POSITION_NED or ATTITUDE and
+# /mavros/local_position/odom stays silent.
+SR0_POSITION 10
+SR0_EXTRA1 10
+SR0_EXT_STAT 2
+
+# Source set 1 navigates on GPS alone: GPS horizontal position and velocity, barometer
+# height, GPS vertical velocity, compass yaw.
+EK3_SRC1_POSXY 3
+EK3_SRC1_VELXY 3
+EK3_SRC1_POSZ 1
+EK3_SRC1_VELZ 3
+EK3_SRC1_YAW 1

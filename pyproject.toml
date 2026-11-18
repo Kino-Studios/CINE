@@ -1,5 +1,5 @@
 # Only pytest settings live here; each ROS package keeps its own package.xml and setup.py.
 [tool.pytest.ini_options]
-testpaths = ['cine_agent/test', 'cine_config/test', 'cine_depth/test', 'cine_mlp_correction/test', 'cine_cli/test', 'cine_bringup/test', 'tools']
-pythonpath = ['cine_agent', 'cine_config', 'cine_depth', 'cine_mlp_correction', 'cine_cli', 'cine_bringup']
+testpaths = ['cine_agent/test', 'cine_config/test', 'cine_depth/test', 'cine_mlp_correction/test', 'cine_cli/test', 'cine_bringup/test', 'cine_gazebo/test', 'tools']
+pythonpath = ['cine_agent', 'cine_config', 'cine_depth', 'cine_mlp_correction', 'cine_cli', 'cine_bringup', 'cine_gazebo']
 addopts = '-p no:cacheprovider'

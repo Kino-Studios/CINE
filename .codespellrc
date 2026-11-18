@@ -1,0 +1,4 @@
+[codespell]
+# "SITL" is ArduPilot's software-in-the-loop build; ".parm" is its parameter file extension;
+# "empy" is the Python templating package ArduPilot's build installs.
+ignore-words-list = sitl,parm,empy

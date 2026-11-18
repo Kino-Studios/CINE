@@ -1,0 +1,18 @@
+# Setpoints sitl_flight_starter flies with nav_source:=vins to excite VINS before handing
+# ArduPilot over to it. Each point is [x, y, z, yaw]: metres in MAVROS's local frame
+# (x east, y north, z up, origin at the EKF origin, which is the takeoff point), yaw in
+# radians from east, counter-clockwise. Points must be distinct: the starter tells which
+# one it is flying to by its value. Unused with nav_source:=sim.
+#
+# The pattern spans 3 m east, 3 m north and 2 m in height, and swings yaw by +-60 degrees
+# (1.047 rad), so VINS sees translation on every axis and rotation. It stays inside a 4 m
+# box centred on the takeoff point and between 1.5 m and 3.5 m up. The nearest obstacle in
+# worlds/cine_field.sdf.template is the east hedge, whose face is 8.25 m east of the takeoff
+# point, so the closest approach to it is 6.75 m. The default in flight_starter_logic.py
+# must match this list.
+excitation_pattern:
+  - [1.5, 1.5, 3.5, 1.047]
+  - [-1.5, 1.5, 1.5, -1.047]
+  - [-1.5, -1.5, 3.5, 1.047]
+  - [1.5, -1.5, 1.5, -1.047]
+  - [0.0, 0.0, 2.5, 0.0]

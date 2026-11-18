@@ -1,13 +1,35 @@
 # Third-party assets in the Gazebo world and drone model
 
-## Source One drone model (`models/cine_source_one/model.sdf.template`)
+## Walking person (`subject` actor in `worlds/cine_field.sdf.template`)
 
-- The ArduPilot plugin block, the rotor joint and `LiftDrag` layout and the pose and joint
-  state publishers follow `models/iris_with_ardupilot/model.sdf` of ArduPilot's
-  `ardupilot_gazebo`, commit `f116b03552d05c8d0b0bed5ed67033a1183121d1`
+- Asset: Gazebo Fuel model `Mingfei/actor`, version 1 (uploaded 2019-08-21), skin and
+  animation `meshes/walk.dae`.
+- Fetched by Gazebo at run time from
+  `https://fuel.gazebosim.org/1.0/Mingfei/models/actor/1/files/meshes/walk.dae`; the
+  version number in the URL pins it.
+- `walk.dae` SHA-256 on 2026-11-14:
+  `49af0df3a319d1cb8ca2cebf02dbd00f625e5d5bec820bc5e109925b18b65c6e` (2,277,322 bytes).
+- Author: Mingfei, on Gazebo Fuel (https://app.gazebosim.org/Mingfei/fuel/models/actor).
+- License: Creative Commons Attribution 4.0 International
+  (http://creativecommons.org/licenses/by/4.0/). Used unmodified.
+
+## Drone model (`models/cine_iris/model.sdf.template`)
+
+- Derived from `models/iris_with_ardupilot/model.sdf` of ArduPilot's `ardupilot_gazebo`,
+  commit `f116b03552d05c8d0b0bed5ed67033a1183121d1`
   (https://github.com/ArduPilot/ardupilot_gazebo), licensed LGPL-3.0. Its model.config
   credits Fadri Furrer, Michael Burri, Mina Kamel, Janosch Nikolic and Markus Achtelik,
   maintained by John Hsu.
+- Changes: renamed to `cine_iris`; commented-out debugging markers dropped; added a fixed
+  camera link with the Pi camera's lens, wind on every link, and a pose publisher.
+- `iris_with_standoffs` and its meshes are not copied; they are included from the same
+  `ardupilot_gazebo` checkout at run time.
+
+## Source One drone model (`models/cine_source_one/model.sdf.template`)
+
+- The ArduPilot plugin block, the rotor joint and `LiftDrag` layout and the pose and joint
+  state publishers follow the same `iris_with_ardupilot` file (commit
+  `f116b03552d05c8d0b0bed5ed67033a1183121d1`, LGPL-3.0, credits as above).
 - Changes: the Iris meshes are replaced by the owner's meshes (below); mass, inertia, motor
   positions, blade count and lift numbers are the TBS Source One build's; the ArduPilot
   plugin's multiplier is 3666.
@@ -40,3 +62,8 @@
     (https://www.thingiverse.com/thing:6956818), licensed CC BY-NC-SA.
   - Without these files Gazebo loads the model with those visuals missing; physics is
     unaffected.
+
+## Ground (`model://runway` in the world)
+
+- Included unmodified from the same `ardupilot_gazebo` checkout (LGPL-3.0), as
+  `worlds/iris_runway.sdf` there does.

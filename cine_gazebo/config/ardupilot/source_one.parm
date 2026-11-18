@@ -1,0 +1,52 @@
+# ArduCopter SITL parameters for airframe:=source_one, loaded by gazebo_sim.launch.py last,
+# after ArduPilot's stock copter.parm and gazebo-iris.parm and the nav_source position
+# file. Last, so the airframe's values win over the stock Iris defaults; the position files
+# set none of these, so the order against them changes nothing today.
+
+# Quad-X, as gazebo-iris.parm sets for the Iris; repeated so this file stands alone.
+FRAME_CLASS 1
+FRAME_TYPE 1
+
+# Thrust curve and hover point of the real vehicle. EXPO 0.65 and HOVER 0.22 are the
+# project's choices; Mission Planner's formula would give 0.49 for a 5-inch prop and the
+# ArduPilot tuning guide 0.55, so 0.65 is higher than either. HOVER is a starting guess
+# until a flight's CTUN.ThH says otherwise.
+MOT_THST_EXPO 0.65
+MOT_THST_HOVER 0.22
+
+# Starting values from ArduPilot's initial-parameters guidance for a 5-inch prop
+# (Mission Planner, Setup > Mandatory Hardware > Initial Parameter Setup, source
+# ConfigInitialParams.cs calc_values; the wiki page "Setting up for tuning"). With prop_size
+# = 5 (inches):
+#   INS_GYRO_FILTER   = max(20, round(289.22 * prop_size^-0.838))            = 75
+#   ATC_RAT_*_FLTD    = max(10, INS_GYRO_FILTER / 2)           (roll, pitch)  = 37.5
+#   ATC_RAT_*_FLTT    = max(10, INS_GYRO_FILTER / 2)           (roll, pitch, yaw) = 37.5
+#   ATC_RAT_*_FLTE    = 0 for roll and pitch, 2 for yaw; yaw FLTD = 0
+#   ATC_ACCEL_Y_MAX   = max(8000, round(-900 * prop_size + 36000, -2))        = 31500
+#   ATC_ACCEL_P_MAX   = ATC_ACCEL_R_MAX
+#                     = max(10000, round(-2.613267 * prop_size^3 + 343.39216 * prop_size^2
+#                                        - 15083.7121 * prop_size + 235771, -2)) = 168600
+#   ATC_THR_MIX_MAN   = 0.1
+#   INS_ACCEL_FILTER  = 10
+# Mission Planner computes no roll/pitch/yaw P, I or D gains: ArduPilot's defaults stay.
+INS_GYRO_FILTER 75
+INS_ACCEL_FILTER 10
+ATC_RAT_RLL_FLTD 37.5
+ATC_RAT_RLL_FLTE 0
+ATC_RAT_RLL_FLTT 37.5
+ATC_RAT_PIT_FLTD 37.5
+ATC_RAT_PIT_FLTE 0
+ATC_RAT_PIT_FLTT 37.5
+ATC_RAT_YAW_FLTD 0
+ATC_RAT_YAW_FLTE 2
+ATC_RAT_YAW_FLTT 37.5
+ATC_ACCEL_P_MAX 168600
+ATC_ACCEL_R_MAX 168600
+ATC_ACCEL_Y_MAX 31500
+ATC_THR_MIX_MAN 0.1
+
+# MOT_SPIN_MAX 0.95 is the tuning guide's value. MOT_SPIN_ARM and MOT_SPIN_MIN are left at
+# ArduPilot's defaults (0.1 and 0.15): the guide sets them from a motor test on the real
+# ESCs, and the simulated motor spins in proportion to the command from zero, so no
+# measurement here would be meaningful.
+MOT_SPIN_MAX 0.95

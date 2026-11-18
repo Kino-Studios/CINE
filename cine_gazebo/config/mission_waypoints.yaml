@@ -1,0 +1,8 @@
+# Mission for gazebo_sim.launch.py, as [x, y, z] metres in the world frame (x east, y north,
+# z up) with the drone spawning at the origin. It climbs, passes the walking subject
+# (cine_field.sdf.template, near x -3..3, y 9..11) on the west side between the pillar at
+# (-8, 9) and the subject's path, then ends north of the subject short of hedge_north.
+- [0.0, 3.0, 2.5]
+- [-5.1, 6.0, 3.0]
+- [-5.1, 13.0, 3.0]
+- [0.0, 14.0, 3.0]
