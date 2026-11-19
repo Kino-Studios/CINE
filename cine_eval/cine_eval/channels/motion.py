@@ -1,6 +1,7 @@
 """Motion channel: speed, acceleration, jerk and speed-independent smoothness while filming."""
 
 import numpy as np
+from scipy.integrate import trapezoid
 
 from cine_eval.channels.result import OK, ChannelResult, unchecked
 from cine_eval.record import DRONE_TRUE, FRAMING_ACTIVE, FlightRecord
@@ -22,7 +23,7 @@ def log_dimensionless_jerk(jerk: np.ndarray, clock_hz: float, path_length_m: flo
 
     duration_s = (len(jerk) - 1) / clock_hz
     squared_jerk = np.sum(jerk**2, axis=1)
-    jerk_energy = np.trapz(squared_jerk, dx=1.0 / clock_hz)
+    jerk_energy = trapezoid(squared_jerk, dx=1.0 / clock_hz)
 
     return -float(np.log(duration_s**5 / path_length_m**2 * jerk_energy))
 

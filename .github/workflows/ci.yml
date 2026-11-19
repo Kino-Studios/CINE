@@ -27,7 +27,7 @@ jobs:
           repository: Kino-Studios/CINE-Interfaces
           # No ref: CI checks against the newest contract on CINE-Interfaces main.
           path: .deps/CINE-Interfaces
-      - run: pip install pytest numpy onnxruntime ./.deps/CINE-Interfaces/cine_interfaces ./cine_cli
+      - run: pip install pytest numpy scipy pyyaml onnxruntime ./.deps/CINE-Interfaces/cine_interfaces ./cine_cli
       # Pure-Python tests: config loader, cost calculator, MLP weights lookup and
       # passthrough, and the tools. No ROS needed.
       - run: pytest
