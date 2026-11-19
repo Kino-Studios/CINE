@@ -64,6 +64,26 @@ The launch file `cine_gazebo/launch/gazebo_sim.launch.py` has two more arguments
 command does not pass: `world` (default `cine_field`) and `airframe` (default `iris`; see
 "Which drone is simulated").
 
+## Checking the topic exchange: `cine contract exchange`
+
+With the simulator (or the drone) running, this compares the live ROS 2 graph with the
+CINE-Interfaces topic contract and counts the messages on every contract topic:
+
+```bash
+cine contract exchange                      # simulator topics, 5 s window
+cine contract exchange --mode hardware      # Pi topics, with the drone on the network
+cine contract exchange --seconds 10 --json
+```
+
+It exits with code 1 when a node the contract names for that mode is missing from the
+graph, or when a topic the contract gives a publisher carries no messages during the
+window. A silent topic whose stream the contract marks as an accepted mismatch is reported
+as info instead. Exit code 3 means ROS 2 is not sourced or `cine_interfaces` is not
+installed. Rates are wall-clock messages per second, counted by
+`tools/measure_topic_rates.py` in one process subscribed to every topic at once. With
+`--no-mission` the planner, depth and cinematic nodes never start, so their endpoints are
+reported missing.
+
 ## The two `nav_source` modes
 
 - `sim`: ArduPilot takes its position from Gazebo's simulated GPS for the whole flight.

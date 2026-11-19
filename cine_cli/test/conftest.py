@@ -15,6 +15,7 @@ class RecordingRunner:
     captures: dict[tuple[str, ...], CapturedOutput] = field(default_factory=dict)
     commands: list[tuple[list[str], Path]] = field(default_factory=list)
     stdout_redirections: list[bool] = field(default_factory=list)
+    captured_commands: list[list[str]] = field(default_factory=list)
 
     def run(self, command: list[str], cwd: Path, stdout_to_stderr: bool = False) -> int:
         self.commands.append((command, cwd))
@@ -23,6 +24,8 @@ class RecordingRunner:
         return self.exit_code
 
     def capture(self, command: list[str], cwd: Path, timeout_seconds: float) -> CapturedOutput:
+        self.captured_commands.append(command)
+
         for prefix, output in self.captures.items():
             if tuple(command[: len(prefix)]) == prefix:
                 return output
