@@ -1,0 +1,12 @@
+{
+  "provisional": true,
+  "thresholds": {
+    "min_clearance_m": 0.3,
+    "min_subject_clearance_m": 0.5,
+    "min_focus_held_share": 0.5,
+    "speed_cap_margin": 1.1,
+    "max_setpoint_jump_m": 1.0,
+    "max_data_age_s": 0.2,
+    "min_real_time_factor": 0.9
+  }
+}

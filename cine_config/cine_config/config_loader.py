@@ -13,6 +13,8 @@ CONFIG_FILES = {
     'params': 'user_params/params',
     'waypoints': 'waypoint_generation/waypoint-params',
     'sensing': 'sensing/sensory-params',
+    'eval_scoring': 'eval/scoring',
+    'eval_gate': 'eval/gate',
 }
 
 

@@ -14,6 +14,7 @@ venv/
 *.egg-info/
 datasets/
 data/
+eval/runs/
 release-assets/
 .DS_Store
 

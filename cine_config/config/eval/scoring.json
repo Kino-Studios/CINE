@@ -1,0 +1,19 @@
+{
+  "resampling": { "clock_hz": 50, "max_pose_gap_s": 0.2 },
+  "focus": { "tolerance_m": 0.1 },
+  "motion": {
+    "savgol_window_s": 0.3,
+    "savgol_polyorder": 3,
+    "sparc_cutoff_hz": 10.0,
+    "sparc_amplitude_threshold": 0.05,
+    "sparc_padding_level": 4
+  },
+  "clearance": {
+    "airframe_radius_m": 0.25,
+    "airframe_half_height_m": 0.1,
+    "subject_radius_m": 0.3,
+    "subject_height_m": 1.8,
+    "airborne_height_m": 0.5
+  },
+  "estimate": { "detection_stale_s": 0.5 }
+}

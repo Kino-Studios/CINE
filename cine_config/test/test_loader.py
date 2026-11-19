@@ -33,3 +33,9 @@ def test_load_finds_installed_share_when_override_unset(tmp_path, monkeypatch):
     monkeypatch.delenv('CINE_CONFIG_ROOT', raising=False)
     monkeypatch.chdir(tmp_path)
     assert cine_config.load('topics/topic-params')['topics']['qos_depth'] == 10
+
+
+def test_loader_exposes_eval_scoring():
+    from cine_config.config_loader import ConfigLoader
+
+    assert ConfigLoader().get('eval_scoring', 'resampling', 'clock_hz') == 50

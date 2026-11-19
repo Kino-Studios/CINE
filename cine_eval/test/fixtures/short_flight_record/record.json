@@ -1,0 +1,27 @@
+{
+  "streams": {
+    "drone_true": {
+      "frame_id": "cine_field",
+      "stamp_source": "header",
+      "fields": ["position", "orientation"]
+    },
+    "subject_true": {
+      "frame_id": "cine_field",
+      "stamp_source": "header",
+      "fields": ["position", "orientation"]
+    },
+    "drone_estimate": {
+      "frame_id": "map",
+      "stamp_source": "receive",
+      "fields": ["position", "orientation", "velocity"]
+    }
+  },
+  "metadata": {
+    "bag_name": "short_flight",
+    "bag_sha1": "f56320ca661648be155bc4bffac9b47cb8e2b429",
+    "extractor_version": "1",
+    "reindexed": false,
+    "skipped_topics": ["/imu_bridge/data_raw", "/mavros/imu/data_raw"],
+    "foreign_clock_topics": ["/mavros/local_position/odom"]
+  }
+}

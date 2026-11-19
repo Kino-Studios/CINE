@@ -1,0 +1,58 @@
+# Rows of the results table. `cine eval standings` scores any run whose score is out of date, then
+# writes eval/outputs/results.csv, eval/outputs/manifest.json and the generated part of
+# docs/results.md.
+#
+# [[row]]
+# arm = "with CINE"
+# condition = "scenario name"
+# runs = ["run-directory-name", ...]   # directories under eval/runs/
+# comparable = true                    # forced false for dirty, run.json-less or legacy runs
+# note = ""
+
+[[row]]
+arm = "without CINE"
+condition = "legacy kinematic sim, 2026-01"
+runs = [
+    "legacy-2026-01/distance_baseline_20260106_182937",
+    "legacy-2026-01/distance_baseline_20260106_194043",
+    "legacy-2026-01/distance_baseline_20260106_194136",
+    "legacy-2026-01/distance_baseline_20260106_194217",
+    "legacy-2026-01/distance_baseline_20260106_194306",
+    "legacy-2026-01/distance_baseline_20260106_194401",
+    "legacy-2026-01/distance_baseline_20260106_194448",
+    "legacy-2026-01/distance_baseline_20260106_194951",
+    "legacy-2026-01/distance_baseline_20260106_195121",
+    "legacy-2026-01/distance_baseline_20260106_195406",
+    "legacy-2026-01/distance_baseline_20260106_195446",
+    "legacy-2026-01/distance_baseline_20260106_195544",
+    "legacy-2026-01/distance_baseline_20260106_195628",
+    "legacy-2026-01/distance_baseline_20260106_200704",
+    "legacy-2026-01/distance_baseline_20260106_200756",
+    "legacy-2026-01/distance_baseline_20260110_110310",
+    "legacy-2026-01/distance_baseline_20260110_110404",
+]
+comparable = false
+note = "legacy CSV logs re-scored with the focus rule; no bag, no run.json"
+
+[[row]]
+arm = "with CINE"
+condition = "legacy kinematic sim, 2026-01"
+runs = [
+    "legacy-2026-01/distance_constrained_20260106_223606",
+    "legacy-2026-01/distance_constrained_20260106_223723",
+    "legacy-2026-01/distance_constrained_20260106_223829",
+    "legacy-2026-01/distance_constrained_20260106_223926",
+    "legacy-2026-01/distance_constrained_20260106_224030",
+    "legacy-2026-01/distance_constrained_20260106_224240",
+    "legacy-2026-01/distance_constrained_20260106_224348",
+    "legacy-2026-01/distance_constrained_20260106_224640",
+    "legacy-2026-01/distance_constrained_20260106_224801",
+    "legacy-2026-01/distance_constrained_20260106_224904",
+    "legacy-2026-01/distance_constrained_20260106_225010",
+    "legacy-2026-01/distance_constrained_20260106_225104",
+    "legacy-2026-01/distance_constrained_20260106_225203",
+    "legacy-2026-01/distance_constrained_20260106_225256",
+    "legacy-2026-01/distance_constrained_20260106_225351",
+]
+comparable = false
+note = "legacy CSV logs re-scored with the focus rule; no bag, no run.json"

@@ -1,0 +1,51 @@
+{
+  "clearance": {
+    "reason": "nearest ground at 0.40 m; world cine_gazebo/worlds/cine_field.sdf.template; skipped runway (include), cine_iris (include)",
+    "status": "ok",
+    "summary": {
+      "collision_free": 1.0,
+      "contact_frames": 0.0,
+      "min_clearance_m": 0.40338288986314397,
+      "min_ground_clearance_m": 0.40338288986314397,
+      "min_static_clearance_m": 8.526701042481077,
+      "min_subject_clearance_m": 10.454190630948275,
+      "subject_covered_share": 0.9933554817275747
+    }
+  },
+  "estimate": {
+    "reason": "missing streams: subject_estimate",
+    "status": "unchecked",
+    "summary": {}
+  },
+  "focus": {
+    "reason": "missing streams: framing_active",
+    "status": "unchecked",
+    "summary": {}
+  },
+  "following": {
+    "reason": "missing streams: setpoints",
+    "status": "unchecked",
+    "summary": {}
+  },
+  "freshness": {
+    "reason": "unchecked, stamped on receipt: drone_estimate",
+    "status": "ok",
+    "summary": {
+      "drone_true.max_age_s": 0.0030000000000001137,
+      "drone_true.median_age_s": 0.0,
+      "max_age_s": 0.0030000000000001137,
+      "subject_true.max_age_s": 0.0020000000000024443,
+      "subject_true.median_age_s": 0.0
+    }
+  },
+  "mission": {
+    "reason": "no waypoints: run.json absent or lists none",
+    "status": "unchecked",
+    "summary": {}
+  },
+  "motion": {
+    "reason": "missing streams: framing_active",
+    "status": "unchecked",
+    "summary": {}
+  }
+}

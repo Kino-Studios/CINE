@@ -148,6 +148,44 @@ It does not record `/camera/image_raw`: 1152x648 colour at 30 Hz is about 67 MB/
 whether the subject stayed in frame, run without `--headless` and watch, or use the
 recorded detections. The depth image and planner camera pose are not recorded either.
 
+## Scoring a run
+
+Three steps turn a recorded bag into a verdict. Each runs `python -m cine_eval` inside the
+`cine-gazebo-sim:dev` image; `cine eval` builds that `docker run` for you (repository
+read-only, `eval/` and `docs/` writable, the bags directory read-only), and `--dry-run`
+prints the command instead. A relative path is read from your current directory, and every
+path must lie under the repository (the bags directory for `extract`), or the command exits 2.
+
+```
+cine eval extract ~/cine-bags/<bag>    # writes eval/runs/<bag>/record.json and record.npz
+cine eval score eval/runs/<bag>        # writes score.json and metrics.npz beside the record
+cine eval gate eval/runs/<bag>         # prints PASS or REVIEW; exit 1 means REVIEW
+```
+
+Every command takes `--json`: one JSON object on stdout. Exit 3 means Docker or the image is
+missing, 2 means a bad argument (a bag outside the bags directory, for instance), 4 means a
+bag, record or score could not be read.
+
+Comparing two arms and rebuilding the results table:
+
+```
+cine eval compare --arm base=eval/runs/a1,eval/runs/a2 --arm cine=eval/runs/b1,eval/runs/b2 \
+    --repeatability base=eval/runs/r1,eval/runs/r2 --name first
+cine eval standings
+```
+
+`--repeatability NAME=DIR[,DIR...]` names repeat flights of one compared arm, and may be given
+once per arm; a NAME that no `--arm` uses exits 2. The comparison is written to
+`eval/runs/compare/<name>.json` and `.md`. It is labelled preregistered only when
+`eval/analysis_plan.toml` is committed and unchanged: the host passes the SHA-1 of the plan at
+`HEAD` into the image as `CINE_EVAL_PLAN_COMMITTED_DIGEST`, because the image has no git.
+Running `python -m cine_eval compare` by hand without that variable gives "exploratory".
+
+Current bags do not record `framing_active` or `target_world`, so the `focus`, `motion` and
+`estimate` channels stay unchecked and the gate lists their rules as unchecked. A PASS on such
+a bag only means that the rules that did run (collision, clearance, data age) found nothing;
+read the `unchecked:` lines. The gate says REVIEW whenever the collision check did not run.
+
 ## Mission limits
 
 - The planner mission accepts at most 5 waypoints (`MAX_WAYPOINTS` in

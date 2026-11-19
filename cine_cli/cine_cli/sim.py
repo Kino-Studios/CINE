@@ -6,10 +6,10 @@ import typer
 
 from cine_cli.common import (
     DryRunFlag,
-    ExitCode,
     JsonFlag,
     execute,
     get_environment,
+    require_docker_image,
     require_root,
     require_ros2,
 )
@@ -17,7 +17,6 @@ from cine_cli.common import (
 GAZEBO_IMAGE = 'cine-gazebo-sim:dev'
 GAZEBO_COMPOSE_FILE = 'docker/gazebo-sim/compose.yaml'
 GAZEBO_BUILD_COMMAND = f'docker compose -f {GAZEBO_COMPOSE_FILE} build'
-IMAGE_INSPECT_TIMEOUT_SECONDS = 30
 
 app = typer.Typer(no_args_is_help=True, help='Run the CINE simulation.')
 
@@ -111,23 +110,7 @@ def gazebo(
     environment = get_environment(context)
     root = require_root(environment)
 
-    if environment.which('docker') is None:
-        typer.echo('docker not found: install Docker Engine and the compose plugin', err=True)
-
-        raise typer.Exit(ExitCode.ENVIRONMENT)
-
-    image = environment.runner.capture(
-        ['docker', 'image', 'inspect', GAZEBO_IMAGE],
-        root,
-        IMAGE_INSPECT_TIMEOUT_SECONDS,
-    )
-    if image.returncode != 0:
-        typer.echo(
-            f'image {GAZEBO_IMAGE} not found: build it with `{GAZEBO_BUILD_COMMAND}`',
-            err=True,
-        )
-
-        raise typer.Exit(ExitCode.ENVIRONMENT)
+    require_docker_image(environment, root, GAZEBO_IMAGE, GAZEBO_BUILD_COMMAND)
 
     if environment.which('nvidia-smi') is None:
         typer.echo('warning: nvidia-smi not found; Gazebo will render without a GPU', err=True)

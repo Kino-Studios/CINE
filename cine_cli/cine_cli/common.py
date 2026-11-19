@@ -13,6 +13,7 @@ import typer
 
 INTERRUPTED_EXIT_CODE = 130
 TIMEOUT_EXIT_CODE = 124
+IMAGE_INSPECT_TIMEOUT_SECONDS = 30
 ROS2_MISSING_MESSAGE = (
     'ros2 not found: source /opt/ros/jazzy/setup.bash and <workspace>/install/setup.bash first'
 )
@@ -125,6 +126,24 @@ def require_root(environment: Environment) -> Path:
 def require_ros2(environment: Environment) -> None:
     if environment.which('ros2') is None:
         raise _fail_environment(ROS2_MISSING_MESSAGE)
+
+
+def require_docker_image(
+    environment: Environment,
+    root: Path,
+    image: str,
+    build_hint: str,
+) -> None:
+    if environment.which('docker') is None:
+        raise _fail_environment('docker not found: install Docker Engine and the compose plugin')
+
+    inspected = environment.runner.capture(
+        ['docker', 'image', 'inspect', image],
+        root,
+        IMAGE_INSPECT_TIMEOUT_SECONDS,
+    )
+    if inspected.returncode != 0:
+        raise _fail_environment(f'image {image} not found: build it with `{build_hint}`')
 
 
 def execute(environment: Environment, command: list[str], dry_run: bool, as_json: bool) -> None:

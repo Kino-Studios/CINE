@@ -1,0 +1,36 @@
+alpha = 0.05
+test = "wilcoxon_exact"
+min_filming_s = 5.0
+
+# PROVISIONAL: every worst_value below is a placeholder. Choosing them is the owner's call, and
+# they must be settled (and this file committed) before the first scored comparison.
+
+[primary]
+metric = "focus.held_share"
+higher_is_better = true
+worst_value = 0.0
+
+[[secondary]]
+metric = "motion.log_dimensionless_jerk"
+higher_is_better = true
+worst_value = -50.0
+
+[[secondary]]
+metric = "motion.sparc"
+higher_is_better = true
+worst_value = -20.0
+
+[[secondary]]
+metric = "motion.rms_jerk_mps3"
+higher_is_better = false
+worst_value = 1000.0
+
+[[secondary]]
+metric = "focus.worst_deviation_m"
+higher_is_better = false
+worst_value = 100.0
+
+[[secondary]]
+metric = "clearance.min_clearance_m"
+higher_is_better = true
+worst_value = -1.0
