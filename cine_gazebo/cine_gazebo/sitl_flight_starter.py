@@ -1,8 +1,8 @@
 """Takes the simulated drone from link-up to the mission trigger, through MAVROS.
 
 Runs the flight starter state machine (`flight_starter_logic.FlightStarter`) at 10 Hz of
-sim time. Each step builds an observation from /mavros/state, /mavros/local_position/odom
-and /vio/odometry and carries out the action the machine returns: MAVROS services for
+sim time. Each step builds an observation from /mavros/state, /mavros/sys_status,
+/mavros/local_position/odom and /vio/odometry and carries out the action the machine returns: MAVROS services for
 mode, arming, takeoff and the EKF source set, setpoints through the Pi's setpoint relay,
 and a pose on /traj_start_trigger to start the mission. Exits 0 when the machine reaches
 DONE, 1 when it ends in FAILED, once the vehicle is disarmed or a bounded wait has passed.
@@ -16,7 +16,7 @@ from pathlib import Path
 import rclpy
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
-from mavros_msgs.msg import State
+from mavros_msgs.msg import State, SysStatus
 from mavros_msgs.srv import CommandBool, CommandLong, CommandTOL, SetMode
 from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
@@ -41,6 +41,7 @@ from cine_gazebo.sitl_observation import (
     CommandGate,
     LinkState,
     OdometrySample,
+    SensorStatus,
     build_observation,
     land_request,
     load_excitation_pattern,
@@ -98,6 +99,7 @@ class SitlFlightStarter(Node):
 
         self.exit_code = None
         self._state = None
+        self._sensor_status = None
         self._autopilot_odometry = None
         self._autopilot_received_s = None
         self._vio_odometry = None
@@ -115,6 +117,7 @@ class SitlFlightStarter(Node):
         self._gate = CommandGate()
 
         self.create_subscription(State, '/mavros/state', self._on_state, 10)
+        self.create_subscription(SysStatus, '/mavros/sys_status', self._on_sys_status, 10)
         self.create_subscription(
             Odometry,
             '/mavros/local_position/odom',
@@ -163,6 +166,12 @@ class SitlFlightStarter(Node):
     def _on_state(self, message):
         self._state = message
 
+    def _on_sys_status(self, message):
+        self._sensor_status = SensorStatus(
+            sensors_enabled=message.sensors_enabled,
+            sensors_health=message.sensors_health,
+        )
+
     def _on_autopilot_odometry(self, message):
         self._autopilot_odometry = message
         self._autopilot_received_s = self._now_s()
@@ -197,6 +206,7 @@ class SitlFlightStarter(Node):
             excitation_pattern=self._excitation_pattern,
             target_index=self._target_index,
             hold_setpoint=self._hold_setpoint,
+            sensor_status=self._sensor_status,
         )
 
     def _on_step(self):

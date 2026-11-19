@@ -4,14 +4,22 @@
 # vision source set the flight starter switches to once VINS agrees with the autopilot.
 
 # The drone's MAVROS loads no stream-rate config, so SITL sets the IMU rate the Pi sees:
-# RAW_IMU and SCALED_IMU at 50 Hz on the MAVROS link (SERIAL0, tcp:5760).
-SR0_RAW_SENS 50
-# Copter defaults every other SR0 stream to 0, and nothing here requests streams (no
+# RAW_IMU and SCALED_IMU at 50 Hz on the MAVROS link (SERIAL0, tcp:5760). ArduPilot 4.7
+# names SERIAL0's stream rates MAV1_*; it ignores the older SR0_* names in a defaults file,
+# which left every stream at 0 and MAVROS with nothing but the heartbeat.
+MAV1_RAW_SENS 50
+# Copter defaults every other stream to 0, and nothing here requests streams (no
 # MAVProxy), so without these MAVROS never gets LOCAL_POSITION_NED or ATTITUDE and
 # /mavros/local_position/odom stays silent.
-SR0_POSITION 10
-SR0_EXTRA1 10
-SR0_EXT_STAT 2
+MAV1_POSITION 10
+MAV1_EXTRA1 10
+MAV1_EXT_STAT 2
+
+# Nothing in the simulation flies a radio, but SITL still feeds a default RC input. The
+# first settled read of the flight-mode channel set a mode from stock copter.parm's FLTMODE
+# table and replaced the flight starter's GUIDED request with STABILIZE, so the drone armed
+# in STABILIZE and refused takeoff. With the channel disabled only MAVLink sets the mode.
+FLTMODE_CH 0
 
 # Source set 1 navigates on GPS alone: GPS horizontal position and velocity, barometer
 # height, GPS vertical velocity, compass yaw. The vehicle takes off on it.

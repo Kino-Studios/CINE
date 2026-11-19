@@ -7,6 +7,7 @@ from cine_gazebo.sitl_observation import (
     CommandGate,
     LinkState,
     OdometrySample,
+    SensorStatus,
     autopilot_velocity_in_local,
     build_observation,
     land_request,
@@ -15,6 +16,8 @@ from cine_gazebo.sitl_observation import (
 )
 
 SHIPPED_PATTERN_FILE = Path(__file__).resolve().parents[1] / 'config' / 'excitation_pattern.yaml'
+# MAV_SYS_STATUS_PREARM_CHECK in MAVLink's SYS_STATUS sensor bitmasks.
+PREARM_CHECK_BIT = 0x10000000
 FACING_NORTH = (0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4))
 FACING_EAST = (0.0, 0.0, 0.0, 1.0)
 PATTERN = ((1.5, 0.0, 2.5, 0.0), (1.5, 1.5, 2.5, 1.57))
@@ -123,6 +126,7 @@ def test_error_is_measured_against_the_setpoint_whose_index_is_reported():
         excitation_pattern=PATTERN,
         target_index=1,
         hold_setpoint=None,
+        sensor_status=None,
     )
 
     assert (observation.target_index, observation.position_error_m) == (1, 0.0)
@@ -138,6 +142,7 @@ def test_observation_before_any_message_carries_the_boot_source_set():
         excitation_pattern=PATTERN,
         target_index=None,
         hold_setpoint=None,
+        sensor_status=None,
     )
 
     assert observation.ekf_source_set == 1
@@ -154,7 +159,52 @@ def test_observation_refuses_an_unknown_source_set():
             excitation_pattern=PATTERN,
             target_index=None,
             hold_setpoint=None,
+            sensor_status=None,
         )
+
+
+def _observation_with_sensor_status(sensor_status):
+    return build_observation(
+        now_s=0.0,
+        link=None,
+        autopilot=None,
+        vio=None,
+        ekf_source_set=1,
+        excitation_pattern=PATTERN,
+        target_index=None,
+        hold_setpoint=None,
+        sensor_status=sensor_status,
+    )
+
+
+def test_prearm_checks_have_not_passed_before_the_first_status_message():
+    observation = _observation_with_sensor_status(None)
+
+    assert observation.prearm_checks_passed is False
+
+
+def test_prearm_checks_pass_when_the_autopilot_reports_the_prearm_bit_healthy():
+    status = SensorStatus(sensors_enabled=PREARM_CHECK_BIT, sensors_health=PREARM_CHECK_BIT)
+
+    observation = _observation_with_sensor_status(status)
+
+    assert observation.prearm_checks_passed is True
+
+
+def test_prearm_checks_have_not_passed_while_the_enabled_prearm_bit_is_unhealthy():
+    status = SensorStatus(sensors_enabled=PREARM_CHECK_BIT, sensors_health=0)
+
+    observation = _observation_with_sensor_status(status)
+
+    assert observation.prearm_checks_passed is False
+
+
+def test_prearm_checks_count_as_passed_when_the_autopilot_has_them_disabled():
+    status = SensorStatus(sensors_enabled=0, sensors_health=0)
+
+    observation = _observation_with_sensor_status(status)
+
+    assert observation.prearm_checks_passed is True
 
 
 def test_landing_on_gps_asks_for_land_mode_immediately():

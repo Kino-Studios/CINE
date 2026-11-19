@@ -46,6 +46,7 @@ class StarterState(enum.Enum):
     WAITING_FOR_LINK = 'waiting_for_link'
     WAITING_FOR_POSITION = 'waiting_for_position'
     SETTING_GUIDED = 'setting_guided'
+    WAITING_FOR_PREARM = 'waiting_for_prearm'
     ARMING = 'arming'
     TAKING_OFF = 'taking_off'
     EXCITING = 'exciting'
@@ -65,6 +66,8 @@ class Observation:
     mode: str
     armed: bool
     has_local_position: bool
+    # The autopilot's own pre-arm checks pass in the current mode (SYS_STATUS's pre-arm bit).
+    prearm_checks_passed: bool
     altitude_m: float
     autopilot_velocity: tuple[float, float, float]
     vio_velocity: tuple[float, float, float] | None
@@ -160,6 +163,7 @@ class FlightStarter:
             StarterState.WAITING_FOR_LINK: self._wait_for_link,
             StarterState.WAITING_FOR_POSITION: self._wait_for_position,
             StarterState.SETTING_GUIDED: self._set_guided,
+            StarterState.WAITING_FOR_PREARM: self._wait_for_prearm,
             StarterState.ARMING: self._arm,
             StarterState.TAKING_OFF: self._take_off,
             StarterState.EXCITING: self._excite,
@@ -237,9 +241,9 @@ class FlightStarter:
 
     def _set_guided(self, observation):
         if observation.mode == GUIDED_MODE:
-            self._enter(StarterState.ARMING, observation)
+            self._enter(StarterState.WAITING_FOR_PREARM, observation)
 
-            return self._arm(observation)
+            return self._wait_for_prearm(observation)
 
         if self._command_unconfirmed_too_long(observation):
             return self._fail(
@@ -248,6 +252,30 @@ class FlightStarter:
             )
 
         return Action('set_mode', mode=GUIDED_MODE, message='requesting GUIDED mode')
+
+    # A disarmed ArduPilot grants GUIDED at once, but refuses to arm until its EKF uses GPS
+    # and its sensors have agreed for 10 s, which takes tens of seconds after boot. Arming
+    # waits for the autopilot to say its checks pass, so the arm refusal window only measures
+    # a real refusal. The checks run against the current mode, so a pass only counts while
+    # the autopilot is still in GUIDED.
+    def _wait_for_prearm(self, observation):
+        if observation.mode != GUIDED_MODE:
+            self._enter(StarterState.SETTING_GUIDED, observation)
+
+            return self._set_guided(observation)
+
+        if observation.prearm_checks_passed:
+            self._enter(StarterState.ARMING, observation)
+
+            return self._arm(observation)
+
+        if self._waited_too_long(observation):
+            return self._fail(
+                observation,
+                f'autopilot pre-arm checks did not pass within {self._config.link_timeout_s:g} s',
+            )
+
+        return Action('none', message='waiting for autopilot pre-arm checks')
 
     def _arm(self, observation):
         if observation.armed:

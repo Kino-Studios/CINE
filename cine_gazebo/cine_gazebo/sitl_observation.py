@@ -22,6 +22,8 @@ COMMAND_RETRY_INTERVAL_S = 1.0
 # A call MAVROS never answers stops blocking retries after this long.
 COMMAND_RESPONSE_TIMEOUT_S = 5.0
 LOCAL_POSITION_MAX_AGE_S = 1.0
+# MAV_SYS_STATUS_PREARM_CHECK in MAVLink's SYS_STATUS sensor bitmasks.
+PREARM_CHECK_BIT = 0x10000000
 # A land action waits this long for the switch to the GPS source set, then lands anyway:
 # landing on the active source beats hovering on it until the landing times out.
 LAND_SWITCH_TIMEOUT_S = 5.0
@@ -34,6 +36,14 @@ class LinkState:
     connected: bool
     mode: str
     armed: bool
+
+
+@dataclass(frozen=True)
+class SensorStatus:
+    """The sensor bitmasks /mavros/sys_status reports (MAVLink SYS_STATUS)."""
+
+    sensors_enabled: int
+    sensors_health: int
 
 
 @dataclass(frozen=True)
@@ -142,10 +152,11 @@ def build_observation(
     excitation_pattern,
     target_index,
     hold_setpoint,
+    sensor_status,
 ):
     """Build the state machine's Observation from the latest plain values.
 
-    `link`, `autopilot` and `vio` are None until their first message. `target_index` is
+    `link`, `autopilot`, `vio` and `sensor_status` are None until their first message. `target_index` is
     the index of the last excitation setpoint sent, and the error is measured against that
     same point.
     """
@@ -164,6 +175,7 @@ def build_observation(
         armed=link is not None and link.armed,
         has_local_position=has_odometry
         and now_s - autopilot.received_s <= LOCAL_POSITION_MAX_AGE_S,
+        prearm_checks_passed=prearm_checks_passed(sensor_status),
         altitude_m=position[2],
         autopilot_velocity=(
             autopilot_velocity_in_local(autopilot) if has_odometry else (0.0, 0.0, 0.0)
@@ -178,6 +190,22 @@ def build_observation(
         ekf_source_set=ekf_source_set,
         target_index=target_index,
     )
+
+
+def prearm_checks_passed(sensor_status):
+    """Whether the autopilot reports its pre-arm checks passing.
+
+    ArduPilot leaves the pre-arm bit out of the enabled mask when ARMING_CHECK disables
+    every check; then nothing blocks arming.
+    """
+
+    if sensor_status is None:
+        return False
+
+    if not sensor_status.sensors_enabled & PREARM_CHECK_BIT:
+        return True
+
+    return bool(sensor_status.sensors_health & PREARM_CHECK_BIT)
 
 
 def land_request(active_source_set, now_s, switch_requested_s):

@@ -14,6 +14,7 @@ def _observation(**overrides):
         'mode': 'STABILIZE',
         'armed': False,
         'has_local_position': True,
+        'prearm_checks_passed': True,
         'altitude_m': 0.0,
         'autopilot_velocity': (0.0, 0.0, 0.0),
         'vio_velocity': None,
@@ -93,6 +94,60 @@ def test_waits_for_ekf_position_before_guided():
 
     assert action.kind == 'none'
     assert starter.state is StarterState.WAITING_FOR_POSITION
+
+
+def test_waits_in_guided_without_arming_until_prearm_checks_pass():
+    starter = FlightStarter(_sim_config())
+    starter.step(_observation(time_s=0.0))
+
+    action = starter.step(_observation(time_s=1.0, mode='GUIDED', prearm_checks_passed=False))
+
+    assert action.kind == 'none'
+    assert starter.state is StarterState.WAITING_FOR_PREARM
+
+
+def test_arms_once_prearm_checks_pass():
+    starter = FlightStarter(_sim_config())
+    starter.step(_observation(time_s=0.0))
+    starter.step(_observation(time_s=1.0, mode='GUIDED', prearm_checks_passed=False))
+
+    action = starter.step(_observation(time_s=40.0, mode='GUIDED'))
+
+    assert action.kind == 'arm'
+
+
+def test_gives_up_when_prearm_checks_never_pass():
+    starter = FlightStarter(_sim_config())
+    starter.step(_observation(time_s=0.0))
+    starter.step(_observation(time_s=1.0, mode='GUIDED', prearm_checks_passed=False))
+
+    action = starter.step(_observation(time_s=122.0, mode='GUIDED', prearm_checks_passed=False))
+
+    assert starter.state is StarterState.FAILED
+    assert 'pre-arm checks' in action.message
+
+
+def test_requests_guided_again_instead_of_arming_when_mode_leaves_guided():
+    starter = FlightStarter(_sim_config())
+    starter.step(_observation(time_s=0.0))
+    starter.step(_observation(time_s=1.0, mode='GUIDED', prearm_checks_passed=False))
+
+    action = starter.step(_observation(time_s=2.0, mode='STABILIZE'))
+
+    assert action.kind == 'set_mode'
+    assert action.mode == 'GUIDED'
+    assert starter.state is StarterState.SETTING_GUIDED
+
+
+def test_arm_refusal_window_starts_when_prearm_checks_pass():
+    starter = FlightStarter(_sim_config())
+    starter.step(_observation(time_s=0.0))
+    starter.step(_observation(time_s=1.0, mode='GUIDED', prearm_checks_passed=False))
+    starter.step(_observation(time_s=50.0, mode='GUIDED'))
+
+    action = starter.step(_observation(time_s=55.0, mode='GUIDED'))
+
+    assert action.kind == 'arm'
 
 
 def test_gives_up_when_link_never_arrives():
