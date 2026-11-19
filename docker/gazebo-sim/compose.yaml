@@ -11,6 +11,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # On the default bridge network, multi-gigabyte pip downloads (torch and its CUDA
+      # wheels) stalled at ~0.2 MB/s under WSL and pip timed out; the host network ran
+      # the same download at the host's full speed.
+      network: host
     environment:
       NAV_SOURCE: ${NAV_SOURCE:-sim}
       HEADLESS: ${HEADLESS:-false}

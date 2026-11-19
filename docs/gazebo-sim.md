@@ -29,8 +29,9 @@ docker compose -f docker/gazebo-sim/compose.yaml build
 Every source in the image is pinned to an exact version, so a rebuild gives the same image:
 the base image digest, the dated Ubuntu and ROS package snapshots, the ArduPilot
 (`Copter-4.7.2`) and `ardupilot_gazebo` commits, and the Python packages. The pins are the
-`ARG` lines and `pip install` list in `docker/gazebo-sim/Dockerfile`; the exact ROS package
-versions the snapshot held are recorded in `docker/gazebo-sim/apt-versions.txt`. The
+`ARG` lines and `pip install` list in `docker/gazebo-sim/Dockerfile`. The build records
+every installed Ubuntu and ROS package version inside the image, at `/apt-versions.txt`;
+read it with `docker run --rm --entrypoint cat cine-gazebo-sim:dev /apt-versions.txt`. The
 Depth Anything 3 and YOLO weights are fetched by hash into a cache volume at container
 start (`docker/gazebo-sim/fetch_weights.py`), not baked into the image.
 
