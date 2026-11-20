@@ -30,6 +30,7 @@ def recorded_topics(drone_id: int) -> list[str]:
         '/mavros/setpoint_accel/accel',
         '/mavros/setpoint_attitude/attitude',
         '/mavros/setpoint_attitude/cmd_vel',
+        '/cinematography/anchor_focus_distance',
         '/object_detection/center_point',
         '/object_detection/bounding_box',
         '/object_detection/dimensions',

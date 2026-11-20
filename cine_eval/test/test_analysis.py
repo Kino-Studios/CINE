@@ -44,6 +44,7 @@ def _write_run(
 ):
     """A scored run directory with a minimal ``record.json``; seed None means no ``run.json``.
 
+    ``completed`` None leaves arrival out of the mission summary, as when it was not measured;
     ``filming_s`` None leaves filming time out of the focus and motion summaries;
     ``run_metadata`` replaces the default run metadata for ``seed``; ``clearance`` replaces
     the clearance channel result.
@@ -80,7 +81,15 @@ def _write_run(
             name='mission',
             status=OK,
             reason='',
-            summary={'completed': completed, 'aborted': aborted, 'duration_s': 30.0},
+            summary={
+                key: value
+                for key, value in (
+                    ('completed', completed),
+                    ('aborted', aborted),
+                    ('duration_s', 30.0),
+                )
+                if value is not None
+            },
         ),
         'clearance': clearance,
         'focus': focus,
@@ -294,6 +303,18 @@ def test_aborted_run_counts_as_failed(tmp_path):
 
     worst = _view(comparison.primary, 'focus.held_share', 'failures as worst value')
     assert worst.hodges_lehmann == -0.5
+
+
+def test_aborted_run_with_unmeasured_arrival_counts_as_failed_mission(tmp_path):
+    baseline = _write_arm(tmp_path, 'baseline', [0.5])
+    cine = [_write_run(tmp_path, 'cine_1', 1, held_share=0.9, completed=None, aborted=1.0)]
+
+    comparison = compare({'baseline': baseline, 'cine': cine}, PLAN, None, PLAN.digest)
+
+    worst = _view(comparison.primary, 'focus.held_share', 'failures as worst value')
+    assert worst.arms[1].run_values['cine_1'] == 0.0
+    cine_mission = comparison.mission_success['cine']
+    assert (cine_mission.successes, cine_mission.trials) == (0, 1)
 
 
 def test_collided_run_counts_as_failed_and_lowers_collision_free_rate(tmp_path):

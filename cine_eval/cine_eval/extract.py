@@ -23,6 +23,7 @@ from cine_eval.record import (
     DETECTIONS,
     DRONE_ESTIMATE,
     DRONE_TRUE,
+    FOCUS_TARGET,
     FRAMING_ACTIVE,
     SETPOINTS,
     SUBJECT_ESTIMATE,
@@ -45,6 +46,7 @@ TOPIC_STREAMS: dict[str, str] = {
     '/object_detection/center_point': DETECTIONS,
     '/mavros/setpoint_position/local': SETPOINTS,
     '/cinematography/framing_active': FRAMING_ACTIVE,
+    '/cinematography/anchor_focus_distance': FOCUS_TARGET,
 }
 # Used only when the stream's primary topic above yields no samples.
 FALLBACK_TOPIC_STREAMS: dict[str, str] = {

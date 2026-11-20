@@ -9,13 +9,16 @@ import pytest
 rosbag2_py = pytest.importorskip('rosbag2_py', reason='extraction runs inside cine-gazebo-sim:dev')
 
 import cine_eval.extract as extract_module  # noqa: E402
+from cine_eval.channels.focus import ANCHOR_DISTANCE_FIELD  # noqa: E402
 from cine_eval.extract import BagError, _to_stream, _TopicSamples, extract  # noqa: E402
 from cine_eval.record import (  # noqa: E402
     DRONE_ESTIMATE,
     DRONE_TRUE,
+    FOCUS_TARGET,
     FRAMING_ACTIVE,
     SUBJECT_TRUE,
 )
+from std_msgs.msg import Float32  # noqa: E402
 
 FIXTURE_BAG = Path(__file__).parent / 'fixtures' / 'short_flight'
 RealSequentialReader = rosbag2_py.SequentialReader
@@ -188,3 +191,11 @@ def test_reindex_warnings_keep_only_warning_and_error_lines():
         '[WARN] [2] chunk 3 truncated',
         '[ERROR] [3] bad',
     ]
+
+
+def test_anchor_focus_distance_becomes_the_field_the_focus_channel_reads():
+    assert extract_module.TOPIC_STREAMS['/cinematography/anchor_focus_distance'] == FOCUS_TARGET
+
+    fields = extract_module.CONVERTERS['std_msgs/msg/Float32'](Float32(data=3.0))
+
+    assert fields[ANCHOR_DISTANCE_FIELD] == pytest.approx(3.0)

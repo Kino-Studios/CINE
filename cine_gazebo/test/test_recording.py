@@ -59,6 +59,10 @@ def test_recording_includes_every_setpoint_stage():
     } <= set(topics)
 
 
+def test_recording_includes_the_anchor_focus_distance():
+    assert '/cinematography/anchor_focus_distance' in recorded_topics(0)
+
+
 def test_recording_names_the_planner_command_after_the_drone_id():
     assert 'drone_3_planning/pos_cmd' in recorded_topics(3)
 

@@ -10,6 +10,8 @@ from cine_eval.timeline import filming_mask, fixed_clock, sample, sample_hold
 NAME = 'focus'
 BOUNDARY_SLACK_M = 1e-9
 REQUIRED_STREAMS = (DRONE_TRUE, SUBJECT_TRUE, FRAMING_ACTIVE)
+# The field extraction gives every std_msgs/Float32 sample, the anchor distance included.
+ANCHOR_DISTANCE_FIELD = 'value'
 
 
 def score_focus(record: FlightRecord, settings: ScoringSettings) -> ChannelResult:
@@ -64,12 +66,24 @@ def score_focus(record: FlightRecord, settings: ScoringSettings) -> ChannelResul
 
 
 def _target_series(record: FlightRecord, clock: np.ndarray) -> tuple[np.ndarray | None, str]:
-    if record.has(FOCUS_TARGET):
-        target_m = sample_hold(record.streams[FOCUS_TARGET], 'distance_m', clock)
+    """The target at each instant: the anchor distance, else the run.json config value.
 
-        return target_m, 'target from anchor stream'
+    CINE aims for the config value until it publishes an anchor, so run.json also covers the
+    time before the first anchor message.
+    """
 
     run_target = record.metadata.get('run', {}).get('focus_target_m')
+
+    if record.has(FOCUS_TARGET):
+        target_m = sample_hold(record.streams[FOCUS_TARGET], ANCHOR_DISTANCE_FIELD, clock)
+        before_first = np.isnan(target_m)
+        if run_target is None or not before_first.any():
+            return target_m, 'target from anchor stream'
+
+        target_m[before_first] = float(run_target)
+
+        return target_m, 'target from anchor stream, and from run.json before its first message'
+
     if run_target is not None:
         return np.full(len(clock), float(run_target)), 'target from run.json'
 

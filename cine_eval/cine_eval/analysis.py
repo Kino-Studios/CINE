@@ -416,6 +416,9 @@ def failure_reasons(score: RunScore) -> tuple[str, ...]:
 
 
 def _mission_success(summary: dict[str, float]) -> bool | None:
+    if summary.get('aborted') == 1.0:
+        return False
+
     if 'completed' not in summary or 'aborted' not in summary:
         return None
 

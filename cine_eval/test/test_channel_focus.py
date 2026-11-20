@@ -72,13 +72,25 @@ def test_only_filming_time_counts():
 
 
 def test_target_comes_from_anchor_stream_before_run_metadata():
-    anchor = _stream(FOCUS_TARGET, [0.0], distance_m=np.array([3.0]))
+    anchor = _stream(FOCUS_TARGET, [0.0], value=np.array([3.0]))
     record = _record(_drone_at(np.full_like(TIME, 3.0)), _subject(), _cue(100.0), anchor)
 
     result = score_focus(record, load_scoring_settings())
 
     assert result.summary['held_share'] == 1.0
     assert result.reason == 'target from anchor stream'
+
+
+def test_run_metadata_target_covers_filming_before_the_first_anchor():
+    distance = np.where(TIME < 5.0, 1.5, 3.0)
+    anchor = _stream(FOCUS_TARGET, [5.0], value=np.array([3.0]))
+    record = _record(_drone_at(distance), _subject(), _cue(100.0), anchor)
+
+    result = score_focus(record, load_scoring_settings())
+
+    assert result.summary['held_share'] == 1.0
+    assert result.summary['filming_s'] == pytest.approx(10.0, abs=0.02)
+    assert result.reason == 'target from anchor stream, and from run.json before its first message'
 
 
 def test_target_from_run_metadata_is_named_in_reason():

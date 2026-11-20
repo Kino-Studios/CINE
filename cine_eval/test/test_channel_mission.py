@@ -50,6 +50,18 @@ def test_aborted_outcome_is_reported():
     assert result.summary['aborted'] == 1.0
 
 
+def test_aborted_outcome_is_reported_when_arrival_cannot_be_measured():
+    record = _record(
+        {'waypoints': [[0, 0, 1], [20, 0, 1]], 'waypoints_frame': 'world', 'outcome': 'aborted'},
+    )
+
+    result = score_mission(record, SETTINGS)
+
+    assert result.status == 'ok'
+    assert result.summary['aborted'] == 1.0
+    assert 'completed' not in result.summary
+
+
 def test_mission_without_waypoints_is_unchecked():
     result = score_mission(_record(), SETTINGS)
 
