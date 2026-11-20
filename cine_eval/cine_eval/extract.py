@@ -42,11 +42,11 @@ TOPIC_STREAMS: dict[str, str] = {
     '/gazebo/drone_pose': DRONE_TRUE,
     '/gazebo/subject_pose': SUBJECT_TRUE,
     '/mavros/local_position/odom': DRONE_ESTIMATE,
-    '/cinematography/target_world': SUBJECT_ESTIMATE,
+    '/cinematography/subject_position': SUBJECT_ESTIMATE,
     '/object_detection/center_point': DETECTIONS,
     '/mavros/setpoint_position/local': SETPOINTS,
     '/cinematography/framing_active': FRAMING_ACTIVE,
-    '/cinematography/anchor_focus_distance': FOCUS_TARGET,
+    '/cinematography/focus_target_distance': FOCUS_TARGET,
 }
 # Used only when the stream's primary topic above yields no samples.
 FALLBACK_TOPIC_STREAMS: dict[str, str] = {

@@ -194,7 +194,7 @@ def test_reindex_warnings_keep_only_warning_and_error_lines():
 
 
 def test_anchor_focus_distance_becomes_the_field_the_focus_channel_reads():
-    assert extract_module.TOPIC_STREAMS['/cinematography/anchor_focus_distance'] == FOCUS_TARGET
+    assert extract_module.TOPIC_STREAMS['/cinematography/focus_target_distance'] == FOCUS_TARGET
 
     fields = extract_module.CONVERTERS['std_msgs/msg/Float32'](Float32(data=3.0))
 

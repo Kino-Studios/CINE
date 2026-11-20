@@ -1294,13 +1294,13 @@ int main(int argc, char **argv)
       10);
 
   auto target_sub = node->create_subscription<geometry_msgs::msg::PointStamped>(
-      "/cinematography/target_world",
+      "/cinematography/subject_position",
       10,
       targetWorldCallback);
   (void)target_sub;
 
   auto target_dist_sub = node->create_subscription<std_msgs::msg::Float32>(
-      "/cinematography/target_distance_m",
+      "/cinematography/target_distance",
       10,
       targetDistanceCallback);
   (void)target_dist_sub;
@@ -1318,7 +1318,7 @@ int main(int argc, char **argv)
   (void)light_vector_sub;
 
   auto cinematic_costs_sub = node->create_subscription<cine_msgs::msg::CinematographyCosts>(
-      "/cinematography/cinematography_costs",
+      "/cinematography/costs",
       10,
       cinematographyCostsCallback);
   (void)cinematic_costs_sub;

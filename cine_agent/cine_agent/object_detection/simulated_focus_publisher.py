@@ -32,15 +32,15 @@ class SimulatedFocusPublisher(Node):
         self._target_world: tuple[float, float, float] | None = None
         self._odom_sub = self.create_subscription(Odometry, self.odom_topic, self._odom_cb, 10)
 
-        self._focus_depth_pub = self.create_publisher(Float32, '/cinematography/focus_depth_m', 10)
+        self._focus_depth_pub = self.create_publisher(Float32, '/cinematography/focus_depth', 10)
         self._target_world_pub = self.create_publisher(
             PointStamped,
-            '/cinematography/target_world',
+            '/cinematography/subject_position',
             10,
         )
         self._costs_pub = self.create_publisher(
             CinematographyCosts,
-            '/cinematography/cinematography_costs',
+            '/cinematography/costs',
             10,
         )
 

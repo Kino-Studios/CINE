@@ -67,14 +67,14 @@ class CinematicBsplineFilter(Node):
 
         self.cost_sub = self.create_subscription(
             CinematographyCosts,
-            '/cinematography/cinematography_costs',
+            '/cinematography/costs',
             self.cost_callback,
             10,
         )
 
         self.detections_sub = self.create_subscription(
             Float32MultiArray,
-            'object_detections',
+            'cinematography/simulated_detections',
             self.detections_callback,
             10,
         )
@@ -90,7 +90,7 @@ class CinematicBsplineFilter(Node):
 
         self.target_sub = self.create_subscription(
             PointStamped,
-            '/cinematography/target_world',
+            '/cinematography/subject_position',
             self.target_world_callback,
             10,
         )

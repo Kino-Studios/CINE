@@ -80,7 +80,10 @@ class CinematicWaypointGenerator(
         )
         self.odom_topic = str(self.declare_parameter('odom_topic', self.params.ODOM_TOPIC).value)
         self.detections_topic = str(
-            self.declare_parameter('detections_topic', '/object_detections').value,
+            self.declare_parameter(
+                'detections_topic',
+                '/cinematography/simulated_detections',
+            ).value,
         )
         self.light_vector_topic = str(
             self.declare_parameter('light_vector_topic', self.params.LIGHT_VECTOR_TOPIC).value,
@@ -157,7 +160,7 @@ class CinematicWaypointGenerator(
         self.anchor_distance_topic = str(
             self.declare_parameter(
                 'anchor_focus_distance_topic',
-                '/cinematography/anchor_focus_distance',
+                '/cinematography/focus_target_distance',
             ).value,
         )
         self.anchor_distance_pub = self.create_publisher(Float32, self.anchor_distance_topic, 10)
@@ -174,19 +177,19 @@ class CinematicWaypointGenerator(
 
         self.focus_depth_sub = self.create_subscription(
             Float32,
-            '/cinematography/focus_depth_m',
+            '/cinematography/focus_depth',
             self.focus_depth_callback,
             10,
         )
         self.target_world_sub = self.create_subscription(
             PointStamped,
-            '/cinematography/target_world',
+            '/cinematography/subject_position',
             self.target_world_callback,
             10,
         )
         self.target_world_pub = self.create_publisher(
             PointStamped,
-            '/cinematography/target_world',
+            '/cinematography/subject_position',
             10,
         )
         self.target_world_timer = self.create_timer(0.1, self._publish_target_world)
@@ -451,7 +454,7 @@ class CinematicWaypointGenerator(
 
         self.simulated_detection_pub = self.create_publisher(
             Float32MultiArray,
-            '/object_detections',
+            '/cinematography/simulated_detections',
             10,
         )
 
@@ -468,10 +471,14 @@ class CinematicWaypointGenerator(
         self.anchor_end_pub = self.create_publisher(PointStamped, self.anchor_end_topic, 10)
         self.anchor_marker_pub = self.create_publisher(
             MarkerArray,
-            '/cinematography/anchor_markers',
+            '/cinematography/markers/anchors',
             10,
         )
-        self.target_marker_pub = self.create_publisher(Marker, '/cinematography/target_marker', 10)
+        self.target_marker_pub = self.create_publisher(
+            Marker,
+            '/cinematography/markers/subject',
+            10,
+        )
         self.framing_active_pub = self.create_publisher(Bool, '/cinematography/framing_active', 10)
         self.baseline_framing_pub = self.create_publisher(
             Bool,
@@ -480,14 +487,14 @@ class CinematicWaypointGenerator(
         )
         self.sent_waypoints_viz_pub = self.create_publisher(
             MarkerArray,
-            '/cinematography/sent_waypoints_viz',
+            '/cinematography/markers/sent_waypoints',
             10,
         )
         self.sent_waypoints_history = []
         self.debug_arc = True
         self.debug_arc_log_period_s = 0.5
         self.debug_arc_marker_scale = 0.04
-        self.arc_marker_pub = self.create_publisher(Marker, '/cinematography/arc_marker', 10)
+        self.arc_marker_pub = self.create_publisher(Marker, '/cinematography/markers/arc', 10)
         self.last_arc_log_time = None
         self.enable_debug_viz = True
         self.viz_static_path = True
@@ -497,12 +504,12 @@ class CinematicWaypointGenerator(
         self.viz_arc_only = True
         self.transition_viz_pub = self.create_publisher(
             MarkerArray,
-            '/cinematography/transition_viz',
+            '/cinematography/markers/transition',
             10,
         )
         self.debug_markers_pub = self.create_publisher(
             MarkerArray,
-            '/cinematography/debug_markers',
+            '/cinematography/markers/debug',
             10,
         )
         self.debug_viz_timer = self.create_timer(0.2, self._publish_debug_visualization)

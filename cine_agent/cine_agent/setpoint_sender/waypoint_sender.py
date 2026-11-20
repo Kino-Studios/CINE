@@ -57,7 +57,7 @@ class WaypointPublisher:
 class WaypointSenderNode(Node):
     def __init__(self):
         super().__init__('waypoint_sender')
-        self.declare_parameter('input_topic', '/cinematographic/goal')
+        self.declare_parameter('input_topic', '/cinematography/goal')
         self.declare_parameter('output_topic', '/move_base_simple/goal')
 
         input_topic = str(self.get_parameter('input_topic').value)

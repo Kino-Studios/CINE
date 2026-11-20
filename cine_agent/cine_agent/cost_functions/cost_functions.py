@@ -4,17 +4,17 @@
 It subscribes to depth, detection, odometry, and light-vector topics; calls
 ``CostCalculator.calculate_cost()`` at a configurable rate; and publishes the
 results as ``cine_msgs/CinematographyCosts`` on
-``/cinematography/cinematography_costs``.
+``/cinematography/costs``.
 
 Additional publishers
 ---------------------
-/cinematography/focus_depth_m       (std_msgs/Float32)
+/cinematography/focus_depth (std_msgs/Float32)
     Median depth of the subject bounding-box ROI, metres.
-/cinematography/focus_center_depth_m (std_msgs/Float32)
+/cinematography/focus_center_depth (std_msgs/Float32)
     Depth at the detected subject centre pixel, metres.
-/cinematography/focus_roi_depth_median_m (std_msgs/Float32)
+/cinematography/focus_roi_depth_median (std_msgs/Float32)
     Median depth over the ROI window around the centre point, metres.
-/cinematography/target_world        (geometry_msgs/PointStamped)
+/cinematography/subject_position (geometry_msgs/PointStamped)
     Estimated world-frame position of the subject, back-projected from the
     centre pixel and current odometry; frame_id matches the ``frame_id``
     parameter (default ``"map"``).
@@ -63,7 +63,7 @@ class CostFunctionCalculatorNode(Node):
         self.declare_parameter('dimensions_topic', self.params.DIMENSIONS_TOPIC)
         self.declare_parameter('odom_topic', self.params.ODOM_TOPIC)
         self.declare_parameter('light_vector_topic', self.params.LIGHT_VECTOR_TOPIC)
-        self.declare_parameter('publish_topic', '/cinematography/cinematography_costs')
+        self.declare_parameter('publish_topic', '/cinematography/costs')
         self.declare_parameter('publish_rate_hz', 10.0)
 
         depth_topic = str(self.get_parameter('depth_topic').value)
@@ -102,20 +102,20 @@ class CostFunctionCalculatorNode(Node):
             self._light_sub = None
 
         self._pub = self.create_publisher(CinematographyCosts, publish_topic, 10)
-        self._focus_depth_pub = self.create_publisher(Float32, '/cinematography/focus_depth_m', 10)
+        self._focus_depth_pub = self.create_publisher(Float32, '/cinematography/focus_depth', 10)
         self._focus_center_depth_pub = self.create_publisher(
             Float32,
-            '/cinematography/focus_center_depth_m',
+            '/cinematography/focus_center_depth',
             10,
         )
         self._focus_roi_depth_pub = self.create_publisher(
             Float32,
-            '/cinematography/focus_roi_depth_median_m',
+            '/cinematography/focus_roi_depth_median',
             10,
         )
         self._target_world_pub = self.create_publisher(
             PointStamped,
-            '/cinematography/target_world',
+            '/cinematography/subject_position',
             10,
         )
         self._timer = self.create_timer(1.0 / max(1.0, publish_rate_hz), self._tick)

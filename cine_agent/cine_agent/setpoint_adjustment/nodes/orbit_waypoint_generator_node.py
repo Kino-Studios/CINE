@@ -36,13 +36,13 @@ class OrbitWaypointGenerator(Node):
         self.pose_sub = self.create_subscription(PoseStamped, '/vio/pose', self.pose_callback, 10)
         self.target_world_sub = self.create_subscription(
             PointStamped,
-            '/cinematography/target_world',
+            '/cinematography/subject_position',
             self.target_world_callback,
             10,
         )
         self.focus_depth_sub = self.create_subscription(
             Float32,
-            '/cinematography/focus_depth_m',
+            '/cinematography/focus_depth',
             self.focus_depth_callback,
             10,
         )

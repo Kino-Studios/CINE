@@ -75,11 +75,15 @@ class TrapezoidalSetpointFilter:
         self.odom_sub = node.create_subscription(Odometry, '/odometry', self.odom_callback, 20)
         self.cmd_sub = node.create_subscription(
             PoseStamped,
-            '/cinematographic/pos_cmd_geo',
+            '/cinematography/position_command',
             self.position_cmd_callback,
             10,
         )
-        self.cmd_pub = node.create_publisher(PoseStamped, '/cinematographic/trap_pos_cmd_geo', 10)
+        self.cmd_pub = node.create_publisher(
+            PoseStamped,
+            '/cinematography/trapezoidal_position_command',
+            10,
+        )
 
         self.publish_rate = 50.0
         self.timer = node.create_timer(1.0 / self.publish_rate, self.timer_callback)

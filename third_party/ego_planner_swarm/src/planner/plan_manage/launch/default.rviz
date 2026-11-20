@@ -3805,7 +3805,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /cinematography/target_world
+        Value: /cinematography/subject_position
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
@@ -3817,7 +3817,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /cinematography/anchor_markers
+        Value: /cinematography/markers/anchors
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
@@ -3841,7 +3841,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /cinematography/debug_markers
+        Value: /cinematography/markers/debug
       Value: true
     - Class: rviz_default_plugins/Marker
       Enabled: false
@@ -3881,7 +3881,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /cinematography/transition_viz
+        Value: /cinematography/markers/transition
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true

@@ -47,7 +47,11 @@ class SimulatedObjectDetector(Node):
             10,
         )
 
-        self.detection_pub = self.create_publisher(Float32MultiArray, 'object_detections', 10)
+        self.detection_pub = self.create_publisher(
+            Float32MultiArray,
+            'cinematography/simulated_detections',
+            10,
+        )
 
         self.center_pub = self.create_publisher(
             PolygonStamped,

@@ -158,7 +158,7 @@ class TrajectoryDataLogger(Node):
 
         self.target_world_sub = self.create_subscription(
             PointStamped,
-            '/cinematography/target_world',
+            '/cinematography/subject_position',
             self.target_world_callback,
             10,
         )
@@ -187,7 +187,7 @@ class TrajectoryDataLogger(Node):
         self.anchor_distance_topic = str(
             self.declare_parameter(
                 'anchor_focus_distance_topic',
-                '/cinematography/anchor_focus_distance',
+                '/cinematography/focus_target_distance',
             ).value,
         )
         self.anchor_distance_sub = self.create_subscription(

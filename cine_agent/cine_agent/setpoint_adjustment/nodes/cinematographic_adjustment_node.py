@@ -48,7 +48,7 @@ class CinematographicPlannerNode(Node):
 
         self.cost_pub = self.create_publisher(
             CinematographyCosts,
-            '/cinematography/cinematography_costs',
+            '/cinematography/costs',
             10,
         )
         self.waypoint_pub_node = WaypointPublisher(self, self.config.params.WAYPOINTS_TOPIC)
