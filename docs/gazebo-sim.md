@@ -9,6 +9,10 @@ by Gazebo. It runs in one Docker container on a Linux PC. Nothing here has been 
 author's Mac, because Docker there has no GPU passthrough; statements about what a run
 does come from reading the code unless marked otherwise.
 
+The IMU rate is one constant, `ImuConstants.IMU_RATE_HZ` in CINE-Sensing's
+`cine_sensing_config/config/imu.json` (200 Hz); the `imu_rate_requester` node asks MAVROS
+for that RAW_IMU stream rate the same way on the drone and in the simulator.
+
 ## What it does not model
 
 - The Wi-Fi link between the Pi and the ground PC. Everything shares one container.
@@ -84,12 +88,30 @@ installed. Rates are wall-clock messages per second, counted by
 `--no-mission` the planner, depth and cinematic nodes never start, so their endpoints are
 reported missing.
 
+## Where the planner's depth comes from
+
+The `depth_source` launch argument picks the planner's depth image on `/depth/image_raw`:
+
+- `gazebo` (default): a depth camera in the drone model, on the RGB camera's link with the
+  same horizontal field of view, renders exact depth in metres at 640x360 and 10 Hz, and
+  the `depth_image_bridge` node carries it to ROS. Flights then test the planner and the
+  filming, not the depth network, and the depth weights are not needed.
+- `network`: `depth_publisher_node` runs the depth network on the simulated RGB image, as
+  the drone does. On CPU it updates the map about every 1.7 simulated seconds.
+
+`cine sim gazebo` always uses the default; choose `network` with
+`ros2 launch cine_gazebo gazebo_sim.launch.py depth_source:=network`. The choice is written
+to `run.json`. The live contract credits `/depth/image_raw` to `depth_publisher_node`, so
+with `gazebo` the contract check reports that publisher as missing.
+
 ## The two `nav_source` modes
 
 - `sim`: ArduPilot takes its position from Gazebo's simulated GPS for the whole flight.
   VINS (the visual-inertial position estimator) still runs, and its estimate is recorded
-  beside Gazebo's true pose. The planner reads the autopilot's own estimate,
-  `/mavros/local_position/odom`.
+  beside Gazebo's true pose. The planner reads `/cinematography/drone_odometry`, which the
+  `odometry_relay` node (`cine_gazebo/cine_gazebo/odometry_relay.py`) republishes from the
+  autopilot's own estimate, `/mavros/local_position/odom`, with the velocity turned into
+  the world frame.
 - `vins`: the drone takes off on simulated GPS, flies a fixed excitation pattern, and then
   ArduPilot is switched to take its position from VINS. The planner reads `/vio/odometry`.
 
@@ -140,9 +162,15 @@ gain was set by guess. Label its results as coming from an estimated model.
 Every run, smoke flight included, records a ROS 2 bag to `/bags/<date>_<nav_source>_<world>_<wind>`
 inside the container, which is `~/cine-bags` on the host (`CINE_BAGS_DIR` overrides it).
 The list is in `cine_gazebo/cine_gazebo/recording.py`: Gazebo's true drone and subject
-poses, `/vio/odometry`, `/mavros/local_position/odom`, every setpoint stage from the
-planner's `pos_cmd` to the `/mavros/setpoint_*` topics, the YOLO detections
-(`/object_detection/*`), and the IMU.
+poses (`/gazebo/drone_pose`, `/gazebo/subject_pose`), `/vio/odometry`,
+`/mavros/local_position/odom`, the relayed `/cinematography/drone_odometry` and
+`/imu_propagate`, every setpoint stage from the planner's `pos_cmd` to the
+`/mavros/setpoint_*` topics, `/cinematography/focus_target_distance`, the YOLO detections
+(`/object_detection/center_point`, `bounding_box` and `dimensions`), the filming cue
+`/cinematography/framing_active`, `/cinematography/subject_position`, and the IMU
+(`/mavros/imu/data_raw`, `/imu_bridge/data_raw`).
+
+Beside the bag, the launch writes `run.json` (see "run.json" below).
 
 It does not record `/camera/image_raw`: 1152x648 colour at 30 Hz is about 67 MB/s. To judge
 whether the subject stayed in frame, run without `--headless` and watch, or use the
@@ -181,10 +209,30 @@ once per arm; a NAME that no `--arm` uses exits 2. The comparison is written to
 `HEAD` into the image as `CINE_EVAL_PLAN_COMMITTED_DIGEST`, because the image has no git.
 Running `python -m cine_eval compare` by hand without that variable gives "exploratory".
 
-Current bags do not record `framing_active` or `target_world`, so the `focus`, `motion` and
-`estimate` channels stay unchecked and the gate lists their rules as unchecked. A PASS on such
-a bag only means that the rules that did run (collision, clearance, data age) found nothing;
-read the `unchecked:` lines. The gate says REVIEW whenever the collision check did not run.
+Current bags record `framing_active`, so the `focus` and `motion` channels are scored. They do
+not record `target_world`, so the `estimate` channel stays unchecked and the gate lists its
+rules as unchecked. A PASS on a bag with unchecked rules only means that the rules that did
+run found nothing; read the `unchecked:` lines.
+The gate says REVIEW whenever the collision check did not run.
+
+## run.json
+
+`cine_gazebo/launch/gazebo_sim.launch.py` writes `run.json` into the bag directory as soon as
+`ros2 bag record` creates it (`cine_gazebo/cine_gazebo/run_metadata.py`), when the mission is
+on. The scorer reads it to know what the run was. Besides the fields the scorer needs (the mission
+`waypoints`, `focus_target_m`, `scenario`, `world_file`, `wind`, `seed`), it records:
+
+- No filming schedule: the cinematic waypoint generator (`cine_agent`) publishes the filming cue
+  `/cinematography/framing_active` itself, from its own waypoint anchors, and its goals steer the
+  planner (the mission launches it with `flight_type` 1). `run.json` records no filming trigger.
+- `launch_arguments`: the launch arguments of the run, including `scenario` and `seed`.
+- `config_sha1`: a digest of the constants directory (`$CINE_CONFIG_ROOT`, else the installed `cine_config` share).
+- `git`: the CINE commit and a dirty flag (uncommitted changes), under `git.CINE`.
+
+The simulator image has no git, so the host passes the commit and the flag in as the
+environment variables `CINE_GIT_COMMIT` and `CINE_GIT_DIRTY` (`0` or `1`). The cloud runner
+sets them. When they are missing, for example in a local `docker compose` run, `commit` and
+`dirty` are written as null, meaning unknown, not clean.
 
 ## Mission limits
 
@@ -211,6 +259,25 @@ by hand, with no results recorded:
    on any missing or mismatched stream.
 
 This procedure is unverified: it has not been run.
+
+## Windows clock running ahead of real time
+
+On the development laptop, the Windows clock was found 5 hours fast on 2026-11-20:
+`w32tm /stripchart /computer:time.windows.com` reported an offset of -18000 s, and
+`w32tm /query /status` showed `Source: Local CMOS Clock` with no successful sync. WSL copies
+the Windows time at boot, then Ubuntu's `systemd-timesyncd` pulls it back to the correct
+time from `ntp.ubuntu.com`, and Hyper-V's time sync (`hv_utils`) can push the wrong host
+time in again later. The simulator's clock therefore jumps 5 hours and back, which breaks
+ROS 2 timers, wall-clock timeouts such as the MAVROS heartbeat, and bag timestamps. One
+flight on 2026-11-19 showed such a jump; restarting WSL does not fix it.
+
+The fix is on Windows and needs administrator rights: in Settings, under Time & language
+and then Date & time, turn on "Set time automatically" and press "Sync now". If the clock
+is wrong again after a reboot, the motherboard clock is being kept in UTC (common when the
+machine also boots Linux); either set it to local time in the firmware setup, or set the
+registry value `HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation\RealTimeIsUniversal`
+to `1` (DWORD). To check, compare `date -u` inside WSL with `curl -sI https://www.google.com`
+and its `Date` header; they should agree to within a second.
 
 ## Unverified
 

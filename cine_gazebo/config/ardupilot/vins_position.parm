@@ -3,12 +3,11 @@
 # sim_position.parm (the launch loads one position file, not both) and adds the external
 # vision source set the flight starter switches to once VINS agrees with the autopilot.
 
-# The drone's MAVROS loads no stream-rate config, so SITL sets the IMU rate the Pi sees:
-# RAW_IMU and SCALED_IMU at 50 Hz on the MAVROS link (SERIAL0, tcp:5760). ArduPilot 4.7
-# names SERIAL0's stream rates MAV1_*; it ignores the older SR0_* names in a defaults file,
-# which left every stream at 0 and MAVROS with nothing but the heartbeat.
-MAV1_RAW_SENS 50
-# Copter defaults every other stream to 0, and nothing here requests streams (no
+# The IMU rate is not set here: the imu_rate_requester node asks for RAW_IMU at the rate in
+# cine_sensing_config, as on the drone. ArduPilot 4.7 names SERIAL0's stream rates MAV1_*
+# and ignores the older SR0_* names in a defaults file, which left every stream at 0 and
+# MAVROS with nothing but the heartbeat.
+# Copter defaults every stream to 0, and nothing here requests the streams below (no
 # MAVProxy), so without these MAVROS never gets LOCAL_POSITION_NED or ATTITUDE and
 # /mavros/local_position/odom stays silent.
 MAV1_POSITION 10

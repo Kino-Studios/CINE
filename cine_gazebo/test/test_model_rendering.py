@@ -6,6 +6,7 @@ import pytest
 import yaml
 from cine_gazebo.model_rendering import (
     CameraSpec,
+    DepthCameraSpec,
     ImuNoise,
     MassBlock,
     WindProfile,
@@ -83,6 +84,17 @@ def _spec(values):
 
 def _rendered_model(imu=None):
     return ET.fromstring(render_model(MODEL_TEMPLATE.read_text(), _spec(FULL_FOV), imu))
+
+
+PLANNER_DEPTH_CAMERA = DepthCameraSpec(width=640, height=360, rate_hz=10.0)
+
+
+def _rendered_depth_sensor():
+    model = ET.fromstring(
+        render_model(MODEL_TEMPLATE.read_text(), _spec(FULL_FOV), None, PLANNER_DEPTH_CAMERA),
+    )
+
+    return model.find("model/link[@name='camera_link']/sensor[@type='depth_camera']")
 
 
 def _rendered_world(wind):
@@ -260,6 +272,49 @@ def test_rendered_model_carries_the_camera_lens():
     camera = _rendered_model().find("model/link[@name='camera_link']/sensor/camera")
 
     assert float(camera.find('distortion/k2').text) == pytest.approx(-0.0328310705)
+
+
+def test_rendered_model_without_depth_camera_has_no_depth_sensor():
+    assert _rendered_model().findall(".//sensor[@type='depth_camera']") == []
+
+
+def test_rendered_depth_camera_rides_the_rgb_camera_link_on_depth_image_raw():
+    assert _rendered_depth_sensor().find('topic').text == 'depth/image_raw'
+
+
+def test_rendered_depth_camera_sees_the_rgb_horizontal_fov():
+    # The planner is told the RGB intrinsics scaled to 640x360, which holds only if both
+    # cameras share a field of view.
+    fov = _rendered_depth_sensor().find('camera/horizontal_fov').text
+
+    assert float(fov) == pytest.approx(1.7165910783, abs=1e-9)
+
+
+def test_rendered_depth_camera_writes_float_metres_at_the_planner_buffer_size():
+    image = _rendered_depth_sensor().find('camera/image')
+
+    assert (image.find('width').text, image.find('height').text, image.find('format').text) == (
+        '640',
+        '360',
+        'R_FLOAT32',
+    )
+
+
+def test_rendered_depth_camera_updates_at_its_spec_rate():
+    assert float(_rendered_depth_sensor().find('update_rate').text) == 10.0
+
+
+def test_rendered_depth_camera_sees_nearer_and_farther_than_the_planner_filters():
+    # The planner drops depth under 0.2 m and clears rays past 5 m.
+    clip = _rendered_depth_sensor().find('camera/clip')
+
+    assert (float(clip.find('near').text), float(clip.find('far').text)) == (0.1, 20.0)
+
+
+def test_rendered_depth_camera_publishes_its_own_camera_info():
+    topic = _rendered_depth_sensor().find('camera/camera_info_topic').text
+
+    assert topic == 'depth/camera_info'
 
 
 def test_rendered_model_enables_wind_on_included_base_link():

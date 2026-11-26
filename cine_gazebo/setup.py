@@ -33,6 +33,7 @@ setup(
         'console_scripts': [
             'subject_pose_publisher = cine_gazebo.subject_pose_publisher:main',
             'sitl_flight_starter = cine_gazebo.sitl_flight_starter:main',
+            'odometry_relay = cine_gazebo.odometry_relay:main',
         ],
     },
     zip_safe=True,

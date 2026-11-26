@@ -1,8 +1,6 @@
-"""Renders the Gazebo drone model and world from the simulated camera's calibration.
+"""Renders the Gazebo drone model and world from the simulated camera's calibration; ROS-free.
 
-The model template carries `{{camera}}` and `{{imu_noise}}` and the world template carries
-`{{wind}}`; the launch file fills them in and writes the results where Gazebo looks for
-models and worlds. Kept free of ROS imports so CI can test it without a ROS install.
+The launch file fills the model's `{{camera}}` and `{{imu_noise}}` and the world's `{{wind}}`.
 """
 
 import math
@@ -13,14 +11,19 @@ import yaml
 
 CAMERA_TOPIC = 'camera/image_raw'
 CAMERA_INFO_TOPIC = 'camera/camera_info'
+DEPTH_TOPIC = 'depth/image_raw'
+DEPTH_CAMERA_INFO_TOPIC = 'depth/camera_info'
+# The planner drops depth nearer than 0.2 m and treats depth past 5 m as free space, so this
+# range covers everything it reads.
+DEPTH_CLIP_NEAR_M = 0.1
+DEPTH_CLIP_FAR_M = 20.0
 # Gazebo normalises pixel values to [0, 1], so this is about two grey levels out of 255.
 DEFAULT_CAMERA_NOISE_STDDEV = 0.007
 # Gazebo models IMU bias as a first-order Gauss-Markov process. With a correlation time far
 # longer than any flight, that process is a slow random walk like the one VINS assumes with
 # acc_w and gyr_w. The 1000 s is an assumption, not a measured value.
 IMU_BIAS_CORRELATION_TIME_S = 1000.0
-# WindEffects' time constants for following the seed velocity; Gazebo's own wind example
-# uses these.
+# WindEffects' time constants for following the seed velocity, from Gazebo's wind example.
 WIND_MAGNITUDE_RISE_TIME_S = 10.0
 WIND_DIRECTION_RISE_TIME_S = 30.0
 
@@ -42,6 +45,15 @@ class CameraSpec:
 
 
 @dataclass(frozen=True)
+class DepthCameraSpec:
+    """A depth camera sharing the RGB camera's link and horizontal field of view."""
+
+    width: int
+    height: int
+    rate_hz: float
+
+
+@dataclass(frozen=True)
 class ImuNoise:
     accel_stddev: float
     gyro_stddev: float
@@ -51,10 +63,7 @@ class ImuNoise:
 
 @dataclass(frozen=True)
 class WindProfile:
-    """Mean wind in the world frame (x east, y north, m/s) and the spread around it.
-
-    `horizontal_direction_stddev` is in radians.
-    """
+    """Mean wind in the world frame (x east, y north, m/s) and its spread (direction in radians)."""
 
     linear_velocity: tuple[float, float, float]
     horizontal_magnitude_stddev: float
@@ -179,6 +188,27 @@ def _render_camera_sensor(spec: CameraSpec) -> str:
 </sensor>"""
 
 
+def _render_depth_camera_sensor(camera: CameraSpec, depth_camera: DepthCameraSpec) -> str:
+    return f"""<sensor name="depth_camera" type="depth_camera">
+  <always_on>1</always_on>
+  <update_rate>{depth_camera.rate_hz!r}</update_rate>
+  <topic>{DEPTH_TOPIC}</topic>
+  <camera name="depth_camera">
+    <camera_info_topic>{DEPTH_CAMERA_INFO_TOPIC}</camera_info_topic>
+    <horizontal_fov>{horizontal_fov(camera)!r}</horizontal_fov>
+    <image>
+      <width>{depth_camera.width}</width>
+      <height>{depth_camera.height}</height>
+      <format>R_FLOAT32</format>
+    </image>
+    <clip>
+      <near>{DEPTH_CLIP_NEAR_M!r}</near>
+      <far>{DEPTH_CLIP_FAR_M!r}</far>
+    </clip>
+  </camera>
+</sensor>"""
+
+
 def imu_noise_from_vins(vins_config: dict) -> ImuNoise:
     """Take the IMU noise VINS assumes (`acc_n`, `gyr_n`, `acc_w`, `gyr_w`)."""
 
@@ -230,19 +260,30 @@ def _render_imu_noise(imu: ImuNoise) -> str:
 </sensor>"""
 
 
-def render_model(template: str, camera: CameraSpec, imu: ImuNoise | None) -> str:
+def render_model(
+    template: str,
+    camera: CameraSpec,
+    imu: ImuNoise | None,
+    depth_camera: DepthCameraSpec | None = None,
+) -> str:
     """Fill a model template's placeholders.
 
+    `{{camera}}` takes the RGB camera, followed by the depth camera when one is given.
     `{{imu_noise}}` is a whole `<sensor>` override for a model that includes the Iris;
     `{{imu_axes_noise}}` is the noise elements alone, for a model that declares its own
     `<imu>` (the Source One).
     """
 
+    camera_sensors = _render_camera_sensor(camera)
+
+    if depth_camera is not None:
+        camera_sensors += '\n' + _render_depth_camera_sensor(camera, depth_camera)
+
     imu_noise = '' if imu is None else _render_imu_noise(imu)
     imu_axes_noise = '' if imu is None else _render_imu_axes_noise(imu)
 
     return (
-        template.replace('{{camera}}', _render_camera_sensor(camera))
+        template.replace('{{camera}}', camera_sensors)
         .replace('{{imu_noise}}', imu_noise)
         .replace('{{imu_axes_noise}}', imu_axes_noise)
     )

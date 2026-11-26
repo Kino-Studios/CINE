@@ -63,6 +63,18 @@ def test_recording_includes_the_anchor_focus_distance():
     assert '/cinematography/focus_target_distance' in recorded_topics(0)
 
 
+def test_recording_includes_the_topics_cine_eval_scores_focus_and_motion_from():
+    topics = recorded_topics(0)
+
+    assert {'/cinematography/framing_active', '/cinematography/subject_position'} <= set(topics)
+
+
+def test_recording_includes_the_relayed_odometry_and_the_vins_imu_rate_odometry():
+    topics = recorded_topics(0)
+
+    assert {'/cinematography/drone_odometry', '/imu_propagate'} <= set(topics)
+
+
 def test_recording_names_the_planner_command_after_the_drone_id():
     assert 'drone_3_planning/pos_cmd' in recorded_topics(3)
 

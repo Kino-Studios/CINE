@@ -19,6 +19,7 @@ from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_cinematic_waypoints():
@@ -75,6 +76,42 @@ def _camera_parameters(use_simulation):
     ]
 
 
+def _detection_camera_arguments():
+    hardware_camera = CinematographyParams()
+    hardware_values = {
+        'detection_camera_fx': hardware_camera.CAMERA_FX,
+        'detection_camera_fy': hardware_camera.CAMERA_FY,
+        'detection_camera_cx': hardware_camera.CAMERA_CX,
+        'detection_camera_cy': hardware_camera.CAMERA_CY,
+        'detection_image_width': hardware_camera.IMAGE_WIDTH,
+        'detection_image_height': hardware_camera.IMAGE_HEIGHT,
+    }
+
+    return [
+        DeclareLaunchArgument(name, default_value=str(value))
+        for name, value in hardware_values.items()
+    ]
+
+
+def _detection_parameters():
+    return [
+        {
+            parameter_name: ParameterValue(
+                LaunchConfiguration(argument_name),
+                value_type=value_type,
+            ),
+        }
+        for parameter_name, argument_name, value_type in (
+            ('camera_fx', 'detection_camera_fx', float),
+            ('camera_fy', 'detection_camera_fy', float),
+            ('camera_cx', 'detection_camera_cx', float),
+            ('camera_cy', 'detection_camera_cy', float),
+            ('detection_image_width', 'detection_image_width', int),
+            ('detection_image_height', 'detection_image_height', int),
+        )
+    ]
+
+
 def _if_all_true(*flags):
     expression = ['"true" if all(flag.lower() == "true" for flag in [']
 
@@ -109,10 +146,21 @@ def generate_launch_description():
     odom_topic_cmd = DeclareLaunchArgument('odom_topic', default_value=odom_topic)
     odometry_topic = LaunchConfiguration('odometry_topic', default='/vio/odometry')
     odometry_topic_cmd = DeclareLaunchArgument('odometry_topic', default_value='/vio/odometry')
+    # Hardware keeps VINS's IMU-rate odometry; the Gazebo mission passes its own topic.
+    cost_calculator_odometry_topic = LaunchConfiguration(
+        'cost_calculator_odometry_topic',
+        default='/imu_propagate',
+    )
+    cost_calculator_odometry_topic_cmd = DeclareLaunchArgument(
+        'cost_calculator_odometry_topic',
+        default_value='/imu_propagate',
+    )
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     use_sim_time_cmd = DeclareLaunchArgument('use_sim_time', default_value='false')
     waypoints_file = LaunchConfiguration('waypoints_file', default='')
     waypoints_file_cmd = DeclareLaunchArgument('waypoints_file', default_value='')
+    flight_type = LaunchConfiguration('flight_type', default='2')
+    flight_type_cmd = DeclareLaunchArgument('flight_type', default_value='2')
     depth_topic_cmd = DeclareLaunchArgument('depth_topic', default_value=depth_topic)
     camera_pose_topic_cmd = DeclareLaunchArgument(
         'camera_pose_topic',
@@ -143,6 +191,12 @@ def generate_launch_description():
         default_value='2.9',
     )
 
+    planner_odom_depth_timeout = LaunchConfiguration('planner_odom_depth_timeout', default='1.0')
+    planner_odom_depth_timeout_cmd = DeclareLaunchArgument(
+        'planner_odom_depth_timeout',
+        default_value='1.0',
+    )
+
     use_mockamap = LaunchConfiguration('use_mockamap', default=False)
     use_mockamap_cmd = DeclareLaunchArgument('use_mockamap', default_value=use_mockamap)
 
@@ -151,6 +205,11 @@ def generate_launch_description():
 
     use_cinematic_bspline = LaunchConfiguration('use_cinematic_bspline', default=True)
     use_cinematic_bspline_cmd = DeclareLaunchArgument('use_cinematic_bspline', default_value='true')
+    start_cinematic_intent_node = LaunchConfiguration('start_cinematic_intent_node', default='true')
+    start_cinematic_intent_node_cmd = DeclareLaunchArgument(
+        'start_cinematic_intent_node',
+        default_value='true',
+    )
 
     use_mlp_correction = LaunchConfiguration(
         'use_mlp_correction',
@@ -431,7 +490,7 @@ def generate_launch_description():
             else generate_cinematic_waypoints()
         )
         waypoint_args = {
-            'flight_type': str(2),
+            'flight_type': context.perform_substitution(flight_type),
             'point_num': str(len(waypoints)),
         }
 
@@ -465,6 +524,7 @@ def generate_launch_description():
                             'depth_topic': depth_topic,
                             'cloud_topic': cloud_topic,
                             'virtual_ceil_height': planner_virtual_ceil_height,
+                            'odom_depth_timeout': planner_odom_depth_timeout,
                             'cx': planner_intrinsic_configurations['cx'],
                             'cy': planner_intrinsic_configurations['cy'],
                             'fx': planner_intrinsic_configurations['fx'],
@@ -562,7 +622,7 @@ def generate_launch_description():
         executable='cinematographic_adjustment_node',
         name='cinematic_intent_node',
         output='screen',
-        condition=IfCondition(use_cinematic_bspline),
+        condition=_if_all_true(use_cinematic_bspline, start_cinematic_intent_node),
         parameters=[
             {'use_sim_time': use_sim_time},
             {'waypoints_topic': '/move_base_simple/goal'},
@@ -572,6 +632,7 @@ def generate_launch_description():
             {'bbox_topic': '/object_detection/bounding_box'},
             {'dimensions_topic': '/object_detection/dimensions'},
             *_camera_parameters(use_simulation),
+            *_detection_parameters(),
         ],
     )
 
@@ -659,7 +720,11 @@ def generate_launch_description():
             {'bbox_topic': '/object_detection/bounding_box'},
             {'dimensions_topic': '/object_detection/dimensions'},
             {'light_vector_topic': '/cinematography/light_vector'},
+            *_detection_parameters(),
         ],
+        # A remap rather than odom_topic itself, which stays the literal the CINE-Interfaces
+        # contract check reads; on hardware the default makes it a no-op.
+        remappings=[('/imu_propagate', cost_calculator_odometry_topic)],
     )
 
     simulator_include = GroupAction(
@@ -697,12 +762,19 @@ def generate_launch_description():
     ld.add_action(map_size_z_cmd)
     ld.add_action(odom_topic_cmd)
     ld.add_action(odometry_topic_cmd)
+    ld.add_action(cost_calculator_odometry_topic_cmd)
+
+    for detection_camera_argument in _detection_camera_arguments():
+        ld.add_action(detection_camera_argument)
+
     ld.add_action(use_sim_time_cmd)
     ld.add_action(waypoints_file_cmd)
+    ld.add_action(flight_type_cmd)
     ld.add_action(depth_topic_cmd)
     ld.add_action(camera_pose_topic_cmd)
     ld.add_action(cloud_topic_cmd)
     ld.add_action(planner_virtual_ceil_height_cmd)
+    ld.add_action(planner_odom_depth_timeout_cmd)
 
     for planner_intrinsic_cmd in planner_intrinsic_cmds:
         ld.add_action(planner_intrinsic_cmd)
@@ -712,6 +784,7 @@ def generate_launch_description():
     ld.add_action(use_dynamic_cmd)
     ld.add_action(use_mockamap_cmd)
     ld.add_action(use_cinematic_bspline_cmd)
+    ld.add_action(start_cinematic_intent_node_cmd)
     ld.add_action(use_mlp_correction_cmd)
     ld.add_action(mlp_weights_path_cmd)
     ld.add_action(use_simulation_cmd)
