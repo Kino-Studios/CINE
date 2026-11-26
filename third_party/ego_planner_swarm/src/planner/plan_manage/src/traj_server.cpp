@@ -146,7 +146,7 @@ double shortestAngleDiff(double from, double to)
 
 static bool has_target_ = false;
 static Eigen::Vector3d target_world_(Eigen::Vector3d::Zero());
-static rclcpp::Time target_stamp_;
+static rclcpp::Time target_stamp_(0L, RCL_ROS_TIME);
 
 quadrotor_msgs::msg::PositionCommand cmd;
 double pos_gain[3] = {0, 0, 0};
@@ -162,7 +162,7 @@ static const rclcpp::Logger traj_logger = rclcpp::get_logger("traj_server");
 bool receive_traj_ = false;
 std::vector<UniformBspline> traj_;
 double traj_duration_;
-rclcpp::Time start_time_;
+rclcpp::Time start_time_(0L, RCL_ROS_TIME);
 int traj_id_;
 
 // yaw control
@@ -171,6 +171,9 @@ double last_yaw_dot_ = 0.0;
 double time_forward_ = kTrajDefaults.time_forward;
 
 static rclcpp::Time time_last_(0L, RCL_ROS_TIME);
+// The node's own clock. A standalone rclcpp::Clock is never attached to /clock, so it reads
+// wall time and disagrees with the planner's stamps whenever the simulator is not real time.
+static rclcpp::Clock::SharedPtr node_clock;
 double scaled_time_ = 0.0;
 double last_s_dot_ = 1.0;
 
@@ -231,7 +234,7 @@ void framingActiveCallback(const std_msgs::msg::Bool::SharedPtr msg)
 {
   if (!msg)
     return;
-  auto now = rclcpp::Clock(RCL_ROS_TIME).now();
+  auto now = node_clock->now();
   bool prev_active = framing_active_;
   framing_active_ = msg->data;
   last_framing_toggle_time_ = now;
@@ -311,7 +314,7 @@ void handleBsplineMsg(traj_utils::msg::Bspline::SharedPtr msg)
     if (control_point_marker_pub)
     {
       visualization_msgs::msg::MarkerArray array;
-      auto now = rclcpp::Clock(RCL_ROS_TIME).now();
+      auto now = node_clock->now();
       int64_t now_ns = now.nanoseconds();
 
       auto add_marker = [&](visualization_msgs::msg::Marker &marker) {
@@ -456,7 +459,7 @@ void handleBsplineMsg(traj_utils::msg::Bspline::SharedPtr msg)
   receive_traj_ = true;
   scaled_time_ = 0.0;
   last_s_dot_ = 1.0;
-  time_last_ = rclcpp::Clock(RCL_ROS_TIME).now();
+  time_last_ = node_clock->now();
   last_vel_.setZero();
   last_acc_.setZero();
 }
@@ -750,8 +753,7 @@ void cmdCallback()
     return;
 
   // 统一时间源
-  rclcpp::Clock clock(RCL_ROS_TIME);  
-  rclcpp::Time time_now = clock.now();
+  rclcpp::Time time_now = node_clock->now();
   double t_cur = (time_now - start_time_).seconds();
 
   Eigen::Vector3d pos(Eigen::Vector3d::Zero()), vel(Eigen::Vector3d::Zero()), acc(Eigen::Vector3d::Zero()), pos_f;
@@ -1165,6 +1167,7 @@ int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
   auto node = rclcpp::Node::make_shared("traj_server");
+  node_clock = node->get_clock();
 
   node->declare_parameter("traj_server/use_cinematic_bspline", use_cinematic_);
   node->declare_parameter("traj_server/default_speed_scale", default_speed_scale_);
@@ -1323,7 +1326,7 @@ int main(int argc, char **argv)
       cinematographyCostsCallback);
   (void)cinematic_costs_sub;
 
-  auto cmd_timer = node->create_wall_timer(
+  auto cmd_timer = node->create_timer(
       std::chrono::milliseconds(10),
       cmdCallback);
 

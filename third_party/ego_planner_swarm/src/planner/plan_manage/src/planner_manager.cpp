@@ -12,6 +12,8 @@ namespace ego_planner
 
   void EGOPlannerManager::initPlanModules(rclcpp::Node::SharedPtr &node, PlanningVisualization::Ptr vis)
   {
+    node_clock_ = node->get_clock();
+
     node->declare_parameter("manager/max_vel", -1.0);
     node->declare_parameter("manager/max_acc", -1.0);
     node->declare_parameter("manager/max_jerk", -1.0);
@@ -150,7 +152,7 @@ namespace ego_planner
       {
 
         double t;
-        double t_cur = (rclcpp::Clock().now() - local_data_.start_time_).seconds();
+        double t_cur = (node_clock_->now() - local_data_.start_time_).seconds();
 
         vector<double> pseudo_arc_length;
         vector<Eigen::Vector3d> segment_point;
@@ -301,7 +303,7 @@ namespace ego_planner
       {
         fallback.lengthenTime(ratio);
       }
-      updateTrajInfo(fallback, rclcpp::Clock().now());
+      updateTrajInfo(fallback, node_clock_->now());
       RCLCPP_WARN(rclcpp::get_logger("ego_planner"),
                   "Optimizer failed; using fallback B-spline to keep moving.");
       return true;
@@ -350,7 +352,7 @@ namespace ego_planner
     t_refine = rclcpp::Clock().now() - t_start;
 
     // save planned results
-    updateTrajInfo(pos, rclcpp::Clock().now());
+    updateTrajInfo(pos, node_clock_->now());
 
     static double sum_time = 0;
     static int count_success = 0;
@@ -375,15 +377,16 @@ namespace ego_planner
       control_points.col(i) = stop_pos;
     }
 
-    updateTrajInfo(UniformBspline(control_points, 3, 1.0), rclcpp::Clock().now());
+    updateTrajInfo(UniformBspline(control_points, 3, 1.0), node_clock_->now());
 
     return true;
   }
 
   bool EGOPlannerManager::checkCollision(int drone_id)
   {
-    // if (local_data_.start_time_.toSec() < 1e9) // It means my first planning has not started
-    if (local_data_.start_time_.seconds() < 1e9)
+    // A zero stamp means my first planning has not started. The old test, an epoch-sized
+    // stamp, never holds on simulator time, which starts near zero.
+    if (local_data_.start_time_.nanoseconds() == 0)
       return false;
 
     // double my_traj_start_time = local_data_.start_time_.toSec();
@@ -473,7 +476,7 @@ namespace ego_planner
     else
       return false;
 
-    auto time_now = rclcpp::Clock().now();
+    auto time_now = node_clock_->now();
 
     global_data_.setGlobalTraj(gl_traj, time_now);
 
@@ -540,7 +543,7 @@ namespace ego_planner
     else
       return false;
 
-    auto time_now = rclcpp::Clock().now();
+    auto time_now = node_clock_->now();
 
     global_data_.setGlobalTraj(gl_traj, time_now);
 

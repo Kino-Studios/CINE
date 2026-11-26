@@ -70,6 +70,14 @@ add_executable(obj_generator
 )
 ament_target_dependencies(obj_generator std_msgs visualization_msgs geometry_msgs nav_msgs rclcpp Eigen3 PCL cv_bridge message_filters pcl_conversions)
 
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(sensor_msgs REQUIRED)
+  ament_add_gtest(test_depth_timeout_flag test/test_depth_timeout_flag.cpp TIMEOUT 60)
+  target_link_libraries(test_depth_timeout_flag plan_env)
+  ament_target_dependencies(test_depth_timeout_flag rclcpp geometry_msgs sensor_msgs)
+endif()
+
 install(TARGETS plan_env
         DESTINATION lib
 )

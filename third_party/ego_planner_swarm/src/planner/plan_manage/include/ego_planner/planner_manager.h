@@ -62,6 +62,9 @@ namespace ego_planner
 
     BsplineOptimizer::Ptr bspline_optimizer_;
 
+    // The node's clock, so trajectory stamps follow /clock when use_sim_time is true.
+    rclcpp::Clock::SharedPtr node_clock_;
+
     int continous_failures_count_{0};
 
     void updateTrajInfo(const UniformBspline &position_traj, const rclcpp::Time time_now);

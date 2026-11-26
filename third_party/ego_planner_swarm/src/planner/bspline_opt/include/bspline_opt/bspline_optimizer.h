@@ -127,6 +127,8 @@ namespace ego_planner
     inline double getSwarmClearance(void) { return swarm_clearance_; }
 
   private:
+    // The node's clock, so the times compared against other trajectories follow /clock.
+    rclcpp::Clock::SharedPtr node_clock_;
     GridMap::Ptr grid_map_;
     fast_planner::ObjPredictor::Ptr moving_objs_;
     SwarmTrajData *swarm_trajs_{NULL}; // Can not use shared_ptr and no need to free

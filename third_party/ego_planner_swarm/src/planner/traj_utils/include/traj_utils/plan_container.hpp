@@ -21,7 +21,7 @@ namespace ego_planner
     vector<UniformBspline> local_traj_;
 
     double global_duration_;
-    rclcpp::Time global_start_time_;
+    rclcpp::Time global_start_time_{0L, RCL_ROS_TIME};
     double local_start_time_, local_end_time_;
     double time_increase_;
     double last_time_inc_;
@@ -210,7 +210,7 @@ namespace ego_planner
 
     int traj_id_;
     double duration_;
-    rclcpp::Time start_time_;
+    rclcpp::Time start_time_{0L, RCL_ROS_TIME};
     Eigen::Vector3d start_pos_;
     UniformBspline position_traj_, velocity_traj_, acceleration_traj_;
   };
@@ -221,7 +221,7 @@ namespace ego_planner
 
     int drone_id;
     double duration_;
-    rclcpp::Time start_time_;
+    rclcpp::Time start_time_{0L, RCL_ROS_TIME};
     Eigen::Vector3d start_pos_;
     UniformBspline position_traj_;
   };
