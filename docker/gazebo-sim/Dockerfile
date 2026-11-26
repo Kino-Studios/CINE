@@ -196,13 +196,16 @@ ENV ROS_DISTRO=jazzy \
     HF_HOME=/weights/huggingface
 
 # --system-site-packages lets the venv see apt's numpy 1.26.4, which cv_bridge is built
-# against; pinning numpy==1.26.4 here stops any package below pulling numpy 2. Depth
+# against; pinning numpy==1.26.4 here stops any package below pulling numpy 2. scipy is
+# pinned to the newest release that still accepts that numpy; cine_eval's motion channel
+# imports it, and the scoring step runs in this venv. Depth
 # Anything 3 goes in with --no-deps because its declared dependencies add xformers, open3d,
 # COLMAP bindings and a web server that cine_depth never imports.
 RUN set -eux; \
     python3 -m venv --system-site-packages /opt/cine-venv; \
     /opt/cine-venv/bin/pip install --no-cache-dir \
         numpy==1.26.4 \
+        scipy==1.16.3 \
         torch==2.15.0 \
         torchvision==0.29.2 \
         huggingface_hub==2.4.0 \

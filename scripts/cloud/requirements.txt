@@ -1,0 +1,2 @@
+# Only the machine that launches runs needs these; the container brings its own stack.
+modal==1.5.5
