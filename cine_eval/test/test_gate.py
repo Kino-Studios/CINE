@@ -186,6 +186,56 @@ def test_speed_above_the_filming_cap_fails():
     assert verdict.failures[0].startswith('speed_cap_while_filming: peak speed 50.00 m/s')
 
 
+def test_focus_whose_filming_never_started_fails_focus_held():
+    focus = _ok(
+        'focus',
+        {
+            'held_share': 0.0,
+            'worst_deviation_m': None,
+            'filming_s': 0.0,
+            'target_m': None,
+            'filming_started': False,
+        },
+    )
+
+    verdict = _judge(_score(focus=focus))
+
+    assert verdict.failures == ('focus_held: filming never started (start waypoint not reached)',)
+    assert verdict.label == 'REVIEW'
+
+
+def test_motion_whose_filming_never_started_leaves_the_speed_cap_unchecked():
+    motion = _ok(
+        'motion',
+        {'peak_speed_mps': None, 'filming_s': 0.0, 'filming_started': False},
+    )
+
+    verdict = _judge(_score(motion=motion))
+
+    assert 'speed_cap_while_filming' in verdict.unchecked
+    assert verdict.failures == ()
+
+
+def test_filmed_focus_and_motion_are_judged_on_their_values():
+    focus = _ok('focus', {'held_share': 0.9, 'filming_started': True})
+    motion = _ok('motion', {'peak_speed_mps': 0.3, 'filming_started': True})
+
+    verdict = _judge(_score(focus=focus, motion=motion))
+
+    assert verdict.label == 'PASS'
+    assert verdict.unchecked == ()
+
+
+def test_focus_and_motion_without_a_cue_stream_are_unchecked():
+    focus = unchecked('focus', 'missing streams: framing_active')
+    motion = unchecked('motion', 'missing streams: framing_active')
+
+    verdict = _judge(_score(focus=focus, motion=motion))
+
+    assert verdict.unchecked == ('speed_cap_while_filming', 'focus_held')
+    assert verdict.failures == ()
+
+
 def test_rule_with_absent_summary_key_is_unchecked_not_failed():
     verdict = _judge(_score(mission=_ok('mission', {'duration_s': 30.0})))
 

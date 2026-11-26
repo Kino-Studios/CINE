@@ -4,11 +4,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from cine_eval.analysis import compare, condition_key, load_plan
+from cine_eval.analysis import compare, condition_key, load_plan, run_value
 from cine_eval.channels.clearance import score_clearance
-from cine_eval.channels.result import OK, ChannelResult, unchecked
+from cine_eval.channels.focus import score_focus
+from cine_eval.channels.motion import score_motion
+from cine_eval.channels.result import FILMING_NEVER_STARTED, OK, ChannelResult, unchecked
 from cine_eval.gate import judge
-from cine_eval.record import DRONE_TRUE, FlightRecord, Stream
+from cine_eval.record import DRONE_TRUE, FRAMING_ACTIVE, SUBJECT_TRUE, FlightRecord, Stream
 from cine_eval.scene import Box
 from cine_eval.score import RunScore, read_score, write_score
 from cine_eval.settings import load_gate_thresholds, load_scoring_settings
@@ -41,17 +43,24 @@ def _write_run(
     filming_s=30.0,
     run_metadata=None,
     clearance=None,
+    filming_started=None,
 ):
     """A scored run directory with a minimal ``record.json``; seed None means no ``run.json``.
 
     ``completed`` None leaves arrival out of the mission summary, as when it was not measured;
     ``filming_s`` None leaves filming time out of the focus and motion summaries;
     ``run_metadata`` replaces the default run metadata for ``seed``; ``clearance`` replaces
-    the clearance channel result.
+    the clearance channel result. ``filming_started`` None leaves the flag out, as a score
+    from before the flag existed; False writes focus and motion as the channels score a
+    missed shot.
     """
 
     directory = root / name
     filming = {} if filming_s is None else {'filming_s': filming_s}
+
+    if filming_started is not None:
+        filming['filming_started'] = filming_started
+
     clearance = clearance or (
         ChannelResult(
             name='clearance',
@@ -76,6 +85,34 @@ def _write_run(
         if focus_checked
         else unchecked('focus', 'no filming time')
     )
+    motion_summary = {
+        'log_dimensionless_jerk': -10.0 + secondary_shift,
+        'sparc': -3.0 + secondary_shift,
+        'rms_jerk_mps3': 2.0 + secondary_shift,
+        **filming,
+    }
+
+    if filming_started is False:
+        focus = ChannelResult(
+            name='focus',
+            status=OK,
+            reason=FILMING_NEVER_STARTED,
+            summary={
+                'held_share': 0.0,
+                'worst_deviation_m': None,
+                'filming_s': 0.0,
+                'target_m': None,
+                'filming_started': False,
+            },
+        )
+        motion_summary = {
+            'log_dimensionless_jerk': None,
+            'sparc': None,
+            'rms_jerk_mps3': None,
+            'filming_s': 0.0,
+            'filming_started': False,
+        }
+
     channels = {
         'mission': ChannelResult(
             name='mission',
@@ -96,13 +133,8 @@ def _write_run(
         'motion': ChannelResult(
             name='motion',
             status=OK,
-            reason='',
-            summary={
-                'log_dimensionless_jerk': -10.0 + secondary_shift,
-                'sparc': -3.0 + secondary_shift,
-                'rms_jerk_mps3': 2.0 + secondary_shift,
-                **filming,
-            },
+            reason=FILMING_NEVER_STARTED if filming_started is False else '',
+            summary=motion_summary,
         ),
     }
     write_score(RunScore(run_name=name, channels=channels, settings={}, provenance={}), directory)
@@ -507,6 +539,166 @@ def test_run_without_filming_time_is_excluded_as_unchecked(tmp_path):
     assert worst.excluded_runs == ('cine_1',)
 
 
+def test_run_whose_filming_never_started_takes_the_worst_focus_value(tmp_path):
+    baseline = _write_arm(tmp_path, 'baseline', [0.5, 0.5, 0.5])
+    cine = [
+        _write_run(tmp_path, 'cine_1', 1, filming_started=False),
+        _write_run(tmp_path, 'cine_2', 2),
+        _write_run(tmp_path, 'cine_3', 3),
+    ]
+
+    comparison = compare({'baseline': baseline, 'cine': cine}, PLAN, None, PLAN.digest)
+
+    held = _view(comparison.primary, 'focus.held_share', 'failures as worst value')
+    deviation = _view(comparison.secondary, 'focus.worst_deviation_m', 'failures as worst value')
+    assert held.pairs == 3
+    assert deviation.arms[1].run_values['cine_1'] == 100.0
+
+
+def test_run_whose_filming_never_started_takes_the_worst_motion_value(tmp_path):
+    baseline = _write_arm(tmp_path, 'baseline', [0.5, 0.5, 0.5])
+    cine = [
+        _write_run(tmp_path, 'cine_1', 1, filming_started=False),
+        _write_run(tmp_path, 'cine_2', 2),
+        _write_run(tmp_path, 'cine_3', 3),
+    ]
+
+    comparison = compare({'baseline': baseline, 'cine': cine}, PLAN, None, PLAN.digest)
+
+    sparc = _view(comparison.secondary, 'motion.sparc', 'failures as worst value')
+    assert sparc.arms[1].run_values['cine_1'] == -20.0
+
+
+def test_run_whose_filming_never_started_is_removed_by_name_without_a_worst_value(tmp_path):
+    baseline = _write_arm(tmp_path, 'baseline', [0.5, 0.5, 0.5])
+    cine = [
+        _write_run(tmp_path, 'cine_1', 1, filming_started=False),
+        _write_run(tmp_path, 'cine_2', 2),
+        _write_run(tmp_path, 'cine_3', 3),
+    ]
+
+    comparison = compare({'baseline': baseline, 'cine': cine}, PLAN, None, PLAN.digest)
+
+    removed = _view(comparison.primary, 'focus.held_share', 'failed pairs removed')
+    assert removed.pairs == 2
+    assert removed.never_started_runs == ('cine_1',)
+    assert removed.short_filming_runs == ()
+
+
+def test_failed_run_whose_filming_never_started_is_counted_once_as_failed(tmp_path):
+    baseline = _write_arm(tmp_path, 'baseline', [0.5, 0.5, 0.5])
+    cine = [
+        _write_run(tmp_path, 'cine_1', 1, completed=0.0, filming_started=False),
+        _write_run(tmp_path, 'cine_2', 2),
+        _write_run(tmp_path, 'cine_3', 3),
+    ]
+
+    comparison = compare({'baseline': baseline, 'cine': cine}, PLAN, None, PLAN.digest)
+
+    worst = _view(comparison.secondary, 'focus.worst_deviation_m', 'failures as worst value')
+    removed = _view(comparison.secondary, 'focus.worst_deviation_m', 'failed pairs removed')
+    assert worst.arms[1].run_values == {'cine_1': 100.0, 'cine_2': 0.5, 'cine_3': 0.5}
+    assert removed.removed_failed_runs == ('cine_1',)
+    assert removed.never_started_runs == ()
+
+
+def test_filmed_run_flagged_as_started_keeps_its_own_value(tmp_path):
+    baseline = _write_arm(tmp_path, 'baseline', [0.5])
+    cine = [_write_run(tmp_path, 'cine_1', 1, held_share=0.9, filming_started=True)]
+
+    comparison = compare({'baseline': baseline, 'cine': cine}, PLAN, None, PLAN.digest)
+
+    worst = _view(comparison.primary, 'focus.held_share', 'failures as worst value')
+    assert worst.arms[1].run_values['cine_1'] == 0.9
+
+
+def test_markdown_names_each_arms_runs_whose_filming_never_started_beside_its_failed_runs(
+    tmp_path,
+):
+    baseline = _write_arm(tmp_path, 'baseline', [0.5, 0.5])
+    cine = [
+        _write_run(tmp_path, 'cine_1', 1, filming_started=False),
+        _write_run(tmp_path, 'cine_2', 2),
+    ]
+
+    markdown = compare({'baseline': baseline, 'cine': cine}, PLAN, None, PLAN.digest).to_markdown()
+
+    assert (
+        "- Runs whose filming never started in cine (take the worst value of those channels' "
+        'metrics): 1: cine_1 (focus, motion)'
+    ) in markdown
+
+
+def test_failed_run_whose_filming_never_started_is_named_only_as_failed(tmp_path):
+    baseline = _write_arm(tmp_path, 'baseline', [0.5, 0.5])
+    cine = [
+        _write_run(tmp_path, 'cine_1', 1, completed=0.0, filming_started=False),
+        _write_run(tmp_path, 'cine_2', 2),
+    ]
+
+    markdown = compare({'baseline': baseline, 'cine': cine}, PLAN, None, PLAN.digest).to_markdown()
+
+    assert (
+        "- Runs whose filming never started in cine (take the worst value of those channels' "
+        'metrics): 0: none'
+    ) in markdown
+
+
+def _scored_missed_shot(directory):
+    """A missed shot scored by the real channels, written to score.json and read back."""
+
+    time = np.arange(0.0, 10.0, 0.02)
+    drone = np.tile([1.5, 0.0, 1.0], (len(time), 1))
+    subject = np.tile([0.0, 0.0, 1.0], (len(time), 1))
+    cue_never_on = np.zeros(len(time), dtype=bool)
+    streams = {
+        DRONE_TRUE: Stream(DRONE_TRUE, 'map', time, time.copy(), {'position': drone}),
+        SUBJECT_TRUE: Stream(SUBJECT_TRUE, 'map', time, time.copy(), {'position': subject}),
+        FRAMING_ACTIVE: Stream(FRAMING_ACTIVE, 'map', time, time.copy(), {'active': cue_never_on}),
+    }
+    record = FlightRecord(streams=streams, metadata={'run': {'focus_target_m': 1.5}})
+    settings = load_scoring_settings()
+    channels = {'focus': score_focus(record, settings), 'motion': score_motion(record, settings)}
+    score = RunScore(
+        run_name='missed',
+        channels=channels,
+        settings=settings.as_dict(),
+        provenance={},
+    )
+    write_score(score, directory)
+
+    return read_score(directory)
+
+
+def test_missed_shot_from_the_channels_takes_the_worst_value_after_a_score_json_round_trip(
+    tmp_path,
+):
+    stored = _scored_missed_shot(tmp_path)
+
+    assert run_value(stored, 'focus.worst_deviation_m', PLAN.min_filming_s, 100.0) == 100.0
+    assert run_value(stored, 'motion.sparc', PLAN.min_filming_s, -20.0) == -20.0
+
+
+def test_missed_shot_from_the_channels_fails_focus_held_after_a_score_json_round_trip(tmp_path):
+    stored = _scored_missed_shot(tmp_path)
+
+    verdict = judge(stored, {'real_time_factor': 1.0}, load_gate_thresholds())
+
+    assert 'focus_held: filming never started (start waypoint not reached)' in verdict.failures
+
+
+def test_markdown_lists_runs_whose_filming_never_started(tmp_path):
+    baseline = _write_arm(tmp_path, 'baseline', [0.5, 0.5])
+    cine = [
+        _write_run(tmp_path, 'cine_1', 1, filming_started=False),
+        _write_run(tmp_path, 'cine_2', 2),
+    ]
+
+    markdown = compare({'baseline': baseline, 'cine': cine}, PLAN, None, PLAN.digest).to_markdown()
+
+    assert 'filming never started, removed: 1 (cine_1)' in markdown
+
+
 def test_five_pairs_report_insufficient_pairs_without_p_value(tmp_path):
     baseline = _write_arm(tmp_path, 'baseline', [0.1, 0.1, 0.1, 0.1, 0.1])
     cine = _write_arm(tmp_path, 'cine', [0.2, 0.3, 0.4, 0.5, 0.6])
@@ -733,8 +925,20 @@ def test_markdown_says_what_the_noise_floor_leaves_out(tmp_path):
     markdown = compare({'baseline': baseline, 'cine': cine}, PLAN, None, PLAN.digest).to_markdown()
 
     assert (
-        'The noise floor leaves out failed runs, runs filmed under min_filming_s and runs '
-        'missing the metric'
+        'The noise floor leaves out failed runs, runs whose filming never started, runs filmed '
+        'under min_filming_s and runs missing the metric'
+    ) in markdown
+
+
+def test_markdown_says_a_run_whose_filming_never_started_takes_the_worst_value(tmp_path):
+    baseline = _write_arm(tmp_path, 'baseline', [0.5])
+    cine = _write_arm(tmp_path, 'cine', [0.6])
+
+    markdown = compare({'baseline': baseline, 'cine': cine}, PLAN, None, PLAN.digest).to_markdown()
+
+    assert (
+        'a run whose filming never started takes the worst value too, and is listed by name '
+        'where a metric has none'
     ) in markdown
 
 

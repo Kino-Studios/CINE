@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from cine_eval.channels.result import OK, ChannelResult
+from cine_eval.channels.result import FILMING_NEVER_STARTED, OK, ChannelResult
 from cine_eval.record import DRONE_TRUE, FlightRecord, RecordError, Stream, save
 from cine_eval.score import RunScore, write_score
 from cine_eval.settings import load_scoring_settings
@@ -43,8 +43,13 @@ def _write_run(
     settings: dict | None = None,
     scorer_commit: str = 'scorer9',
     scorer_dirty: str = '0',
+    missed_shot: bool = False,
 ) -> None:
-    """A scored run; ``settings`` None stores the current scoring settings."""
+    """A scored run; ``settings`` None stores the current scoring settings.
+
+    ``missed_shot`` writes focus and motion as the channels score a run whose filming never
+    started.
+    """
 
     directory = runs_root / name
     metadata: dict = {'bag_sha1': bag_sha1}
@@ -89,6 +94,27 @@ def _write_run(
         'record_sha1': 'r' * 40,
         'bag_sha1': bag_sha1,
     }
+
+    if missed_shot:
+        channels['focus'] = ChannelResult(
+            name='focus',
+            status=OK,
+            reason=FILMING_NEVER_STARTED,
+            summary={
+                'held_share': 0.0,
+                'worst_deviation_m': None,
+                'filming_s': 0.0,
+                'target_m': None,
+                'filming_started': False,
+            },
+        )
+        channels['motion'] = ChannelResult(
+            name='motion',
+            status=OK,
+            reason=FILMING_NEVER_STARTED,
+            summary={'peak_speed_mps': None, 'filming_s': 0.0, 'filming_started': False},
+        )
+
     stored_settings = settings if settings is not None else load_scoring_settings().as_dict()
     score = RunScore(
         run_name=name,
@@ -329,6 +355,53 @@ def test_run_filmed_under_the_plan_minimum_is_left_out_of_focus_and_motion(tmp_p
 
     held = [row for row in _csv_rows(built['outputs']) if row['metric'] == 'focus.held_share']
     assert [(row['n'], row['median']) for row in held] == [('2', '0.6')]
+
+
+def test_run_whose_filming_never_started_takes_the_plan_worst_value_in_the_row_median(tmp_path):
+    _write_run(tmp_path / 'runs', 'a1', CLEAN_RUN, held_share=0.5)
+    _write_run(tmp_path / 'runs', 'a2', CLEAN_RUN, held_share=0.7)
+    _write_run(tmp_path / 'runs', 'a3', CLEAN_RUN, missed_shot=True)
+
+    built = _build(tmp_path, THREE_RUN_ROW)
+
+    deviation = [
+        row for row in _csv_rows(built['outputs']) if row['metric'] == 'focus.worst_deviation_m'
+    ]
+    assert [(row['n'], row['max']) for row in deviation] == [('3', '100')]
+
+
+def test_rules_text_says_a_run_whose_filming_never_started_takes_the_worst_value(tmp_path):
+    _write_run(tmp_path / 'runs', 'a1', CLEAN_RUN)
+
+    document = _build(tmp_path, ONE_RUN_ROW)['doc'].read_text()
+
+    assert (
+        'A failed run (mission not completed, aborted, or collided), and a run whose filming '
+        "never started, take the plan's worst value in: Time within focus tolerance, "
+        'Largest focus deviation.'
+    ) in document
+
+
+def test_rules_text_applies_the_filming_minimum_only_to_runs_that_keep_their_value(tmp_path):
+    _write_run(tmp_path / 'runs', 'a1', CLEAN_RUN)
+
+    document = _build(tmp_path, ONE_RUN_ROW)['doc'].read_text()
+
+    assert (
+        'Any other run is left out of a focus or motion value when that channel filmed for '
+        'less than 5 s (`eval/analysis_plan.toml`).'
+    ) in document
+
+
+def test_rules_text_says_peak_speed_leaves_out_runs_whose_filming_never_started(tmp_path):
+    _write_run(tmp_path / 'runs', 'a1', CLEAN_RUN)
+
+    document = _build(tmp_path, ONE_RUN_ROW)['doc'].read_text()
+
+    assert (
+        'Not in the plan, so failed runs and runs whose filming never started are left out: '
+        'Peak speed while filming.'
+    ) in document
 
 
 def test_results_csv_counts_the_failed_runs_of_each_row(tmp_path):

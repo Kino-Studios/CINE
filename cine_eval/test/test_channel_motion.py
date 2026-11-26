@@ -64,14 +64,59 @@ def test_minimum_jerk_profile_is_smoother_than_a_jerky_one():
     assert jerky['sparc'] < clean['sparc']
 
 
-def test_motion_with_cue_never_on_is_unchecked_no_filming_time():
+def test_motion_with_cue_never_on_is_a_missed_shot():
     time = np.arange(0.0, 5.0 + 1e-9, 1.0 / CLOCK_HZ)
 
     result = score_motion(_record(time, 1.0 * time, cue_on=False), load_scoring_settings())
 
-    assert result.status == 'unchecked'
-    assert result.reason == 'no filming time'
-    assert result.summary == {}
+    assert result.status == 'ok'
+    assert result.summary['filming_started'] is False
+    assert result.summary['filming_s'] == 0.0
+
+
+def test_missed_shot_has_no_motion_measurements():
+    time = np.arange(0.0, 5.0 + 1e-9, 1.0 / CLOCK_HZ)
+
+    result = score_motion(_record(time, 1.0 * time, cue_on=False), load_scoring_settings())
+
+    assert result.summary['peak_speed_mps'] is None
+    assert result.summary['rms_jerk_mps3'] is None
+    assert result.summary['log_dimensionless_jerk'] is None
+    assert result.summary['sparc'] is None
+
+
+def test_cue_on_only_after_the_drone_stream_ends_is_a_missed_shot():
+    drone_time = np.arange(0.0, 5.0 + 1e-9, 1.0 / CLOCK_HZ)
+    cue_time = np.arange(0.0, 10.0 + 1e-9, 1.0 / CLOCK_HZ)
+    position = np.stack([drone_time, np.zeros_like(drone_time), np.ones_like(drone_time)], axis=1)
+    record = FlightRecord(
+        streams={
+            DRONE_TRUE: _stream(DRONE_TRUE, drone_time, position=position),
+            FRAMING_ACTIVE: _stream(FRAMING_ACTIVE, cue_time, active=cue_time >= 6.0),
+        },
+    )
+
+    result = score_motion(record, load_scoring_settings())
+
+    assert result.status == 'ok'
+    assert result.summary['filming_started'] is False
+
+
+def test_cue_stream_present_but_empty_is_a_missed_shot():
+    time = np.arange(0.0, 5.0 + 1e-9, 1.0 / CLOCK_HZ)
+    record = _record(time, 1.0 * time)
+    record.streams[FRAMING_ACTIVE] = _stream(FRAMING_ACTIVE, [], active=np.array([], dtype=bool))
+
+    result = score_motion(record, load_scoring_settings())
+
+    assert result.status == 'ok'
+    assert result.summary['filming_started'] is False
+
+
+def test_filmed_run_says_filming_started():
+    result = score_motion(_minimum_jerk_record(4.0), load_scoring_settings())
+
+    assert result.summary['filming_started'] is True
 
 
 def test_motion_without_cue_is_unchecked_naming_the_stream():

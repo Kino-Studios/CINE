@@ -6,6 +6,8 @@ import numpy as np
 
 OK = 'ok'
 UNCHECKED = 'unchecked'
+# A missed shot is scored, not unchecked: the cue stream was recorded but never turned on.
+FILMING_NEVER_STARTED = 'filming never started'
 
 
 @dataclass(frozen=True)
@@ -13,7 +15,7 @@ class ChannelResult:
     name: str
     status: str
     reason: str
-    summary: dict[str, float] = field(default_factory=dict)
+    summary: dict[str, float | bool | None] = field(default_factory=dict)
     series: dict[str, np.ndarray] = field(default_factory=dict)
     clock_hz: float = 0.0
 

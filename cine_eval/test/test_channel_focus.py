@@ -123,14 +123,74 @@ def test_focus_without_cue_is_unchecked():
     assert 'framing_active' in result.reason
 
 
-def test_focus_with_cue_never_on_is_unchecked_no_filming_time():
+def test_focus_with_cue_never_on_is_a_missed_shot_held_for_no_time():
     record = _record(_drone_at(np.full_like(TIME, 1.5)), _subject(), _cue(-1.0))
+
+    result = score_focus(record, load_scoring_settings())
+
+    assert result.status == 'ok'
+    assert result.summary['held_share'] == 0.0
+    assert result.summary['filming_s'] == 0.0
+    assert result.summary['filming_started'] is False
+
+
+def test_missed_shot_reports_no_deviation_and_no_target():
+    record = _record(_drone_at(np.full_like(TIME, 1.5)), _subject(), _cue(-1.0))
+
+    result = score_focus(record, load_scoring_settings())
+
+    assert result.summary['worst_deviation_m'] is None
+    assert result.summary['target_m'] is None
+
+
+def test_cue_on_only_after_the_drone_stream_ends_is_a_missed_shot():
+    drone_time = TIME[TIME <= 5.0]
+    drone = _stream(
+        DRONE_TRUE,
+        drone_time,
+        position=np.tile([1.5, 0.0, 1.0], (len(drone_time), 1)),
+    )
+    cue = _stream(FRAMING_ACTIVE, TIME, active=TIME >= 6.0)
+    record = _record(drone, _subject(), cue)
+
+    result = score_focus(record, load_scoring_settings())
+
+    assert result.status == 'ok'
+    assert result.summary['filming_started'] is False
+
+
+def test_cue_stream_present_but_empty_is_a_missed_shot():
+    empty_cue = _stream(FRAMING_ACTIVE, [], active=np.array([], dtype=bool))
+    record = _record(_drone_at(np.full_like(TIME, 1.5)), _subject(), empty_cue)
+
+    result = score_focus(record, load_scoring_settings())
+
+    assert result.status == 'ok'
+    assert result.summary['filming_started'] is False
+
+
+def test_filmed_run_says_filming_started():
+    record = _record(_drone_at(np.full_like(TIME, 1.5)), _subject(), _cue(100.0))
+
+    result = score_focus(record, load_scoring_settings())
+
+    assert result.summary['filming_started'] is True
+
+
+def test_cue_on_only_while_no_target_is_known_is_unchecked_not_a_missed_shot():
+    anchor = _stream(FOCUS_TARGET, [5.0], value=np.array([1.5]))
+    record = _record(
+        _drone_at(np.full_like(TIME, 1.5)),
+        _subject(),
+        _cue(5.0),
+        anchor,
+        metadata={},
+    )
 
     result = score_focus(record, load_scoring_settings())
 
     assert result.status == 'unchecked'
     assert result.reason == 'no filming time'
-    assert result.summary == {}
 
 
 def test_focus_without_any_target_is_unchecked():

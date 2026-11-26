@@ -139,8 +139,10 @@ def build_standings(
 ) -> None:
     """Scores stale runs, then writes results.csv, manifest.json and the generated table.
 
-    Each run's value follows the judge's rules in ``plan_path``: a failed run takes the
-    plan's worst value, and a focus or motion metric needs ``min_filming_s`` of filming.
+    Each run's value follows the judge's rules in ``plan_path``: a failed run, and a focus or
+    motion metric whose filming never started, take the plan's worst value where the plan has
+    one and are left out where it has none; any other run is left out of a focus or motion
+    metric filmed for less than ``min_filming_s``.
     """
 
     rows = tomllib.loads(Path(manifest_path).read_text(encoding='utf-8')).get('row', [])
@@ -449,19 +451,24 @@ def _table_markdown(
         cells += ['yes' if entry['comparable'] else 'no', note]
         lines.append('| ' + ' | '.join(cell.replace('|', '/') for cell in cells) + ' |')
 
-    rules = (
-        f'n counts the runs behind each median. Focus and motion values need at least '
-        f'{min_filming_s:g} s of filming (`eval/analysis_plan.toml`).'
-    )
+    rules = 'n counts the runs behind each median.'
 
     if worst_valued:
         rules += (
-            f" A failed run (mission not completed, aborted, or collided) takes the plan's "
-            f'worst value in: {", ".join(worst_valued)}.'
+            ' A failed run (mission not completed, aborted, or collided), and a run whose filming '
+            f"never started, take the plan's worst value in: {', '.join(worst_valued)}."
         )
 
     if failed_left_out:
-        rules += f' Not in the plan, so failed runs are left out: {", ".join(failed_left_out)}.'
+        rules += (
+            ' Not in the plan, so failed runs and runs whose filming never started are left out: '
+            f'{", ".join(failed_left_out)}.'
+        )
+
+    rules += (
+        f' Any other run is left out of a focus or motion value when that channel filmed for '
+        f'less than {min_filming_s:g} s (`eval/analysis_plan.toml`).'
+    )
 
     lines += ['', rules]
 

@@ -7,6 +7,10 @@ Rules (spec "Judge" and rigour rules 1-4):
   every metric is also compared with failed runs removed.
 - A metric that is unchecked or missing in a run that did not fail is never given the worst value:
   that run is left out of that metric and listed by name.
+- A focus or motion metric from a run whose filming never started (the cue stream was recorded
+  but never turned on) takes the metric's ``worst_value``, as a failed run does; a metric with no
+  ``worst_value`` leaves that run out and lists it by name. A run that both failed and never
+  started counts once, as failed.
 - A focus or motion metric from a run that did not fail is left out, and listed apart, when the
   channel filmed for less than ``min_filming_s``; with no filming time recorded it counts as
   unchecked. A failed run takes the worst value whatever its filming time.
@@ -105,6 +109,7 @@ class MetricComparison:
     excluded_runs: tuple[str, ...]
     short_filming_runs: tuple[str, ...]
     removed_failed_runs: tuple[str, ...]
+    never_started_runs: tuple[str, ...]
     hodges_lehmann: float | None
     interval: tuple[float, float] | None
     p_value: float | None
@@ -124,6 +129,7 @@ class Comparison:
     collision_partially_checked: dict[str, tuple[str, ...]]
     collided_only: dict[str, int]
     failed_runs: dict[str, dict[str, str]]
+    never_started_runs: dict[str, dict[str, str]]
     pairs: int
     unpaired_runs: dict[str, tuple[str, ...]]
     repeats: dict[str, dict[str, int]]
@@ -344,6 +350,7 @@ def compare(
             arm: {run.name: ', '.join(run.failure_reasons) for run in arm_runs if run.failed}
             for arm, arm_runs in runs.items()
         },
+        never_started_runs={arm: _never_started(arm_runs) for arm, arm_runs in runs.items()},
         pairs=len(common),
         unpaired_runs={
             arm: tuple(run.name for run in arm_runs if run.condition not in common)
@@ -394,6 +401,23 @@ def _checked_summary(score: RunScore, channel_name: str) -> dict[str, float]:
     channel = score.channels.get(channel_name)
 
     return channel.summary if channel is not None and channel.status == OK else {}
+
+
+def _never_started(arm_runs: list[_Run]) -> dict[str, str]:
+    """Each run that did not fail but scored a missed shot, with the channels that say so."""
+
+    never_started = {}
+
+    for run in arm_runs:
+        channels = [
+            channel_name
+            for channel_name in FILMING_CHANNELS
+            if _checked_summary(run.score, channel_name).get('filming_started') is False
+        ]
+        if channels and not run.failed:
+            never_started[run.name] = ', '.join(channels)
+
+    return never_started
 
 
 def failure_reasons(score: RunScore) -> tuple[str, ...]:
@@ -526,6 +550,20 @@ def filming_problem(score: RunScore, metric: str, min_filming_s: float) -> str |
     return FILMING_SHORT if filming_s < min_filming_s else None
 
 
+def filming_never_started(score: RunScore, metric: str) -> bool:
+    """True for a focus or motion metric whose channel scored a missed shot.
+
+    Only a channel that recorded the cue and found it never on says so; a score from before the
+    flag existed, or with no cue stream, is never a missed shot.
+    """
+
+    channel_name = metric.partition('.')[0]
+    if channel_name not in FILMING_CHANNELS:
+        return False
+
+    return _checked_summary(score, channel_name).get('filming_started') is False
+
+
 def run_value(
     score: RunScore,
     metric: str,
@@ -534,11 +572,12 @@ def run_value(
 ) -> float | None:
     """One run's value of ``metric`` under the judge's rules; None leaves the run out.
 
-    A failed run takes ``worst_value`` (None leaves failed runs out); a focus or motion
-    metric filmed for less than ``min_filming_s``, or with no filming time, is left out.
+    A failed run, and a focus or motion metric whose filming never started, take
+    ``worst_value`` (None leaves them out); a focus or motion metric filmed for less than
+    ``min_filming_s``, or with no filming time, is left out.
     """
 
-    if failure_reasons(score):
+    if failure_reasons(score) or filming_never_started(score, metric):
         return worst_value
 
     if filming_problem(score, metric, min_filming_s) is not None:
@@ -573,6 +612,7 @@ def _compare_metric(
     excluded_runs = []
     short_filming_runs = []
     removed_failed_runs = []
+    never_started_runs = []
 
     for arm in arm_names:
         for run in runs[arm]:
@@ -583,6 +623,8 @@ def _compare_metric(
                 continue
             elif run.failed:
                 removed_failed_runs.append(run.name)
+            elif filming_never_started(run.score, spec.metric):
+                never_started_runs.append(run.name)
             elif _filming_problem(run, spec, min_filming_s) == FILMING_SHORT:
                 short_filming_runs.append(run.name)
             else:
@@ -617,6 +659,7 @@ def _compare_metric(
         excluded_runs=tuple(excluded_runs),
         short_filming_runs=tuple(short_filming_runs),
         removed_failed_runs=tuple(removed_failed_runs),
+        never_started_runs=tuple(never_started_runs),
         hodges_lehmann=estimate,
         interval=(
             paired_bootstrap_interval(
@@ -671,9 +714,10 @@ def _noise_floor(
 ) -> float | None:
     """Pooled median absolute deviation from each (arm, condition) group's median.
 
-    Grouping by arm keeps the gap between arms out of the floor. Failed runs, runs missing the
-    metric and runs filmed for under ``min_filming_s`` are left out, as in the comparison with
-    failed pairs removed. Groups with a single run carry no spread and are skipped.
+    Grouping by arm keeps the gap between arms out of the floor. Failed runs, runs whose filming
+    never started, runs missing the metric and runs filmed for under ``min_filming_s`` are left
+    out, as in the comparison with failed pairs removed. Groups with a single run carry no
+    spread and are skipped.
     """
 
     groups: dict[tuple[str, tuple], list[float]] = defaultdict(list)
@@ -820,6 +864,17 @@ def _markdown(comparison: Comparison) -> str:
             f"- Failed runs in {arm} (take each metric's worst value): {len(failed)}: {failed_text}",
         )
 
+    for arm in (arm_a, arm_b):
+        never_started = comparison.never_started_runs[arm]
+        never_started_text = (
+            ', '.join(f'{name} ({channels})' for name, channels in never_started.items()) or 'none'
+        )
+        lines.append(
+            f'- Runs whose filming never started in {arm} '
+            f"(take the worst value of those channels' metrics): "
+            f'{len(never_started)}: {never_started_text}',
+        )
+
     lines += ['', '## Pairs', '', f'- Paired conditions: {comparison.pairs}']
 
     for arm in (arm_a, arm_b):
@@ -868,13 +923,15 @@ def _markdown(comparison: Comparison) -> str:
         f'- min_filming_s = {comparison.min_filming_s:g}: a run that did not fail and whose '
         'focus or motion channel filmed for less than this many seconds is left out of that '
         "channel's metrics and listed by name; a run with no recorded filming time counts "
-        'as unchecked; a failed run takes the worst value whatever its filming time',
+        'as unchecked; a failed run takes the worst value whatever its filming time; '
+        'a run whose filming never started takes the worst value too, and is listed by name '
+        'where a metric has none',
         '- The test runs only when at least that many pairs differ from zero (differences '
         'rounded to 12 decimals); otherwise no p value and no verdict are given, and the '
         'metric is left out of the Holm family',
         '- The noise floor is the median absolute deviation of repeat flights from the median '
-        'of their arm and condition. The noise floor leaves out failed runs, runs filmed '
-        'under min_filming_s and runs missing the metric',
+        'of their arm and condition. The noise floor leaves out failed runs, runs whose '
+        'filming never started, runs filmed under min_filming_s and runs missing the metric',
         '',
     ]
 
@@ -921,6 +978,8 @@ def _metric_lines(
                 f'{len(entry.excluded_runs)} ({_names(entry.excluded_runs)}); '
                 f'filmed under min_filming_s={min_filming_s:g}: '
                 f'{len(entry.short_filming_runs)} ({_names(entry.short_filming_runs)}); '
+                f'filming never started, removed: {len(entry.never_started_runs)} '
+                f'({_names(entry.never_started_runs)}); '
                 f'failed runs removed: {len(entry.removed_failed_runs)} '
                 f'({_names(entry.removed_failed_runs)})',
             )

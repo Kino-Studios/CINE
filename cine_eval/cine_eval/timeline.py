@@ -55,10 +55,8 @@ def sample(
 
 
 def largest_gap(time: np.ndarray, start: float, end: float) -> SampleGap:
-    """Longest wait between samples over ``[start, end]``, the window edges included.
-
-    The samples just outside the window count, because interpolation bridges from them.
-    """
+    """Longest wait between samples over ``[start, end]``, counting the samples just outside
+    the window, because interpolation bridges from them."""
 
     time = np.asarray(time, dtype=float)
     if len(time) == 0:
@@ -117,12 +115,19 @@ def sample_hold(stream: Stream, field: str, clock: np.ndarray) -> np.ndarray:
 
 
 def filming_mask(record: FlightRecord, clock: np.ndarray) -> np.ndarray | None:
-    """True where the framing cue is active; None when the record has no cue."""
+    """True where the framing cue is active; None when the record has no cue.
+
+    An empty cue stream (only in memory, since ``validate`` rejects it) is all False.
+    """
 
     if not record.has(FRAMING_ACTIVE):
         return None
 
-    return sample_hold(record.streams[FRAMING_ACTIVE], 'active', clock)
+    cue = record.streams[FRAMING_ACTIVE]
+    if len(cue.time) == 0:
+        return np.zeros(len(clock), dtype=bool)
+
+    return sample_hold(cue, 'active', clock)
 
 
 def savgol_window_samples(

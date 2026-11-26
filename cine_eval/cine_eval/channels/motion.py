@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.integrate import trapezoid
 
-from cine_eval.channels.result import OK, ChannelResult, unchecked
+from cine_eval.channels.result import FILMING_NEVER_STARTED, OK, ChannelResult, unchecked
 from cine_eval.record import DRONE_TRUE, FRAMING_ACTIVE, FlightRecord
 from cine_eval.settings import ScoringSettings
 from cine_eval.timeline import (
@@ -16,6 +16,18 @@ from cine_eval.timeline import (
 
 NAME = 'motion'
 REQUIRED_STREAMS = (DRONE_TRUE, FRAMING_ACTIVE)
+MEASURED_KEYS = (
+    'peak_speed_mps',
+    'mean_speed_mps',
+    'peak_acceleration_mps2',
+    'rms_acceleration_mps2',
+    'peak_jerk_mps3',
+    'rms_jerk_mps3',
+    'savgol_window_samples',
+    'smoothness_segment_s',
+    'log_dimensionless_jerk',
+    'sparc',
+)
 
 
 def log_dimensionless_jerk(jerk: np.ndarray, clock_hz: float, path_length_m: float) -> float:
@@ -59,7 +71,11 @@ def score_motion(record: FlightRecord, settings: ScoringSettings) -> ChannelResu
     drone = record.streams[DRONE_TRUE]
     clock = fixed_clock(drone.time[0], drone.time[-1], settings.clock_hz)
     position = sample(drone, 'position', clock)
-    filming = filming_mask(record, clock) & np.all(np.isfinite(position), axis=1)
+    cue = filming_mask(record, clock)
+    if not cue.any():
+        return _missed_shot(clock, cue, settings)
+
+    filming = cue & np.all(np.isfinite(position), axis=1)
     if not filming.any():
         return unchecked(NAME, 'no filming time')
 
@@ -104,6 +120,7 @@ def score_motion(record: FlightRecord, settings: ScoringSettings) -> ChannelResu
             ),
         ),
         'smoothness_segment_s': float(longest_count / settings.clock_hz),
+        'filming_started': True,
     }
     reason = _add_smoothness(
         summary,
@@ -125,6 +142,23 @@ def score_motion(record: FlightRecord, settings: ScoringSettings) -> ChannelResu
         reason=reason,
         summary=summary,
         series=series,
+        clock_hz=settings.clock_hz,
+    )
+
+
+def _missed_shot(clock: np.ndarray, cue: np.ndarray, settings: ScoringSettings) -> ChannelResult:
+    """The cue never turned on while the drone was recorded: nothing was filmed to measure."""
+
+    return ChannelResult(
+        name=NAME,
+        status=OK,
+        reason=FILMING_NEVER_STARTED,
+        summary={
+            **dict.fromkeys(MEASURED_KEYS),
+            'filming_s': 0.0,
+            'filming_started': False,
+        },
+        series={'time': clock, 'filming': cue},
         clock_hz=settings.clock_hz,
     )
 

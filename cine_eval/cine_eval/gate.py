@@ -96,13 +96,18 @@ def judge(score: RunScore, run_metadata: dict, thresholds: GateThresholds) -> Ga
 
     focus = summary_of('focus')
     held_share = None if focus is None else focus.get('held_share')
-    record(
-        'focus_held',
-        f'focus_held: held {held_share:.2f} of filming time, below {thresholds.min_focus_held_share:.2f}'
-        if held_share is not None and held_share < thresholds.min_focus_held_share
-        else None,
-        held_share is not None,
-    )
+
+    if focus is not None and focus.get('filming_started') is False:
+        focus_failure = 'focus_held: filming never started (start waypoint not reached)'
+    elif held_share is not None and held_share < thresholds.min_focus_held_share:
+        focus_failure = (
+            f'focus_held: held {held_share:.2f} of filming time, '
+            f'below {thresholds.min_focus_held_share:.2f}'
+        )
+    else:
+        focus_failure = None
+
+    record('focus_held', focus_failure, held_share is not None)
 
     following = summary_of('following')
     jump = None if following is None else following.get('max_setpoint_jump_m')

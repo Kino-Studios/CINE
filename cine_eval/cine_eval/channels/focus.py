@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from cine_eval.channels.result import OK, ChannelResult, unchecked
+from cine_eval.channels.result import FILMING_NEVER_STARTED, OK, ChannelResult, unchecked
 from cine_eval.record import DRONE_TRUE, FOCUS_TARGET, FRAMING_ACTIVE, SUBJECT_TRUE, FlightRecord
 from cine_eval.settings import ScoringSettings
 from cine_eval.timeline import filming_mask, fixed_clock, sample, sample_hold
@@ -27,6 +27,10 @@ def score_focus(record: FlightRecord, settings: ScoringSettings) -> ChannelResul
         return unchecked(NAME, 'drone_true and subject_true do not overlap in time')
 
     clock = fixed_clock(start, end, settings.clock_hz)
+    cue = filming_mask(record, clock)
+    if not cue.any():
+        return _missed_shot(clock, cue, settings)
+
     target_m, target_source = _target_series(record, clock)
     if target_m is None:
         return unchecked(NAME, 'no focus target: neither anchor stream nor run.json')
@@ -36,7 +40,7 @@ def score_focus(record: FlightRecord, settings: ScoringSettings) -> ChannelResul
         axis=1,
     )
     error_m = distance_m - target_m
-    filming = filming_mask(record, clock) & np.isfinite(error_m)
+    filming = cue & np.isfinite(error_m)
     if not filming.any():
         return unchecked(NAME, 'no filming time')
 
@@ -47,6 +51,7 @@ def score_focus(record: FlightRecord, settings: ScoringSettings) -> ChannelResul
         'worst_deviation_m': float(filming_error.max()),
         'filming_s': float(filming.sum() / settings.clock_hz),
         'target_m': float(np.median(target_m[filming])),
+        'filming_started': True,
     }
     series = {
         'time': clock,
@@ -61,6 +66,29 @@ def score_focus(record: FlightRecord, settings: ScoringSettings) -> ChannelResul
         reason=target_source,
         summary=summary,
         series=series,
+        clock_hz=settings.clock_hz,
+    )
+
+
+def _missed_shot(clock: np.ndarray, cue: np.ndarray, settings: ScoringSettings) -> ChannelResult:
+    """The cue never turned on while both poses were recorded: no focus was held.
+
+    No distance was measured while filming, so the deviation and the target are None rather
+    than a number that could be read as a measurement.
+    """
+
+    return ChannelResult(
+        name=NAME,
+        status=OK,
+        reason=FILMING_NEVER_STARTED,
+        summary={
+            'held_share': 0.0,
+            'worst_deviation_m': None,
+            'filming_s': 0.0,
+            'target_m': None,
+            'filming_started': False,
+        },
+        series={'time': clock, 'filming': cue},
         clock_hz=settings.clock_hz,
     )
 
