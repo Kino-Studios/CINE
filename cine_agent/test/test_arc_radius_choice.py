@@ -1,7 +1,9 @@
 """The cost model picks the arc radius, and a moving subject rebuilds the arc only before filming.
 
 A rebuilt route resumes where the drone is, within the same part of the route (before,
-during or after filming), instead of at the route's first waypoint.
+during or after filming), instead of at the route's first waypoint. A detection is placed in
+the world through the camera's depth axis, and the arc's anchors sit where the route comes
+nearest the framing distance, not at the drone's current range from the subject.
 
 The pure-Python CI job has no ROS, and test_cost_calculator replaces rclpy and the message
 packages in sys.modules during collection, so a real node is not available here. Small fakes
@@ -162,6 +164,7 @@ class ArcPlanningNode(
         self.start_pos = ROUTE[0]
         self.current_pos = ROUTE[0]
         self.current_yaw = 0.0
+        self.current_orientation_xyzw = (0.0, 0.0, 0.0, 1.0)
         self.world_bounds_min = (-20.0, -20.0, 0.0)
         self.world_bounds_max = (20.0, 30.0, 4.0)
         self.enable_z_clamp = False
@@ -311,6 +314,20 @@ def _node_flying_towards_the_arc():
     return node
 
 
+def _sharpest_turn_degrees(route):
+    turns = []
+
+    for before, here, after in zip(route, route[1:], route[2:]):
+        incoming = [here[axis] - before[axis] for axis in range(3)]
+        outgoing = [after[axis] - here[axis] for axis in range(3)]
+        lengths = math.hypot(*incoming) * math.hypot(*outgoing)
+        if lengths > 1e-9:
+            cosine = sum(incoming[axis] * outgoing[axis] for axis in range(3)) / lengths
+            turns.append(math.degrees(math.acos(max(-1.0, min(1.0, cosine)))))
+
+    return max(turns)
+
+
 def _logged_arc_choice(node):
     for message in node.logger.info_messages:
         match = ARC_CHOICE_PATTERN.match(message)
@@ -457,3 +474,40 @@ def test_rebuild_after_filming_does_not_fly_the_arc_again():
     node._rebuild_active_with_detection()
 
     assert node.current_target_index > node.framing_end_idx
+
+
+def test_detection_right_of_image_centre_lies_ahead_and_right_of_the_drone():
+    node = ArcPlanningNode()
+    node.current_pos = (1.0, 2.0, 3.0)
+    node.current_yaw = math.pi / 2
+    node.current_orientation_xyzw = (0.0, 0.0, math.sqrt(0.5), math.sqrt(0.5))
+    detection = {
+        'center_x': 420.0,
+        'center_y': 240.0,
+        'depth': 5.0,
+        'norm_x': None,
+        'norm_y': None,
+    }
+
+    subject_world, _ = node._compute_object_world(detection)
+
+    assert subject_world == pytest.approx((2.0, 7.05, 3.0))
+
+
+def test_anchors_bracket_the_nearest_route_stretch_while_the_drone_is_far_away():
+    node = ArcPlanningNode()
+    node.focus_depth_m = 11.8
+
+    node._set_anchors(target_world=SUBJECT)
+
+    assert node.anchor_start_world == ANCHOR_START
+    assert node.anchor_end_world == ANCHOR_END
+
+
+def test_anchor_distance_route_never_turns_back_at_the_arc_ends():
+    node = ArcPlanningNode(enable_cost_optimization=False)
+    node.target_world = SUBJECT
+
+    node.generate_cinematographic_waypoints()
+
+    assert _sharpest_turn_degrees(node.dynamic_waypoints) < 90.0

@@ -6,7 +6,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 
 class AnchorMixin:
-    def _set_anchors(self, target_world=None, obj_depth=None):
+    def _set_anchors(self, target_world=None):
         if self.current_pos is None or self.origin_offset is None:
             return
 
@@ -16,7 +16,9 @@ class AnchorMixin:
             target_world, _ = self._compute_object_world(self.detected_object)
 
         if target_world is not None:
-            desired_distance = self._resolve_focus_distance(obj_depth, use_anchor=False)
+            # The arc is flown at the framing distance, so its ends are chosen there too; the
+            # drone's current range to the subject says nothing about where filming happens.
+            desired_distance = max(self.min_focus_distance_m, self.min_orbit_radius_m)
             start_idx, end_idx = self._select_anchor_pair(
                 static_world,
                 target_world,

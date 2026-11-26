@@ -118,8 +118,8 @@ PLANNER_INTRINSICS = {
     'planner_cx': '320.0',
     'planner_cy': '180.0',
 }
-# The cost calculator reads detection pixels in the full-resolution camera frame; it scales
-# them to the depth image itself.
+# The cost calculator and the waypoint generator read detection pixels in the full-resolution
+# camera frame; the cost calculator scales them to the depth image itself.
 DETECTION_CAMERA = {
     'detection_camera_fx': '497.5985575',
     'detection_camera_fy': '497.5985575',
@@ -560,6 +560,12 @@ def _start_mission(context):
                     'world_bounds_max': [10.0, 20.0, 3.5],
                     'use_sim_time': True,
                     'simulate_object': False,
+                    'camera_fx': float(DETECTION_CAMERA['detection_camera_fx']),
+                    'camera_fy': float(DETECTION_CAMERA['detection_camera_fy']),
+                    'camera_cx': float(DETECTION_CAMERA['detection_camera_cx']),
+                    'camera_cy': float(DETECTION_CAMERA['detection_camera_cy']),
+                    'image_width': int(DETECTION_CAMERA['detection_image_width']),
+                    'image_height': int(DETECTION_CAMERA['detection_image_height']),
                 },
             ],
             output='screen',

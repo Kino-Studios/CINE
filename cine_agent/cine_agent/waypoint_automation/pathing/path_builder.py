@@ -581,39 +581,9 @@ class PathBuilderMixin:
             }
 
         if self.anchor_start_idx is None or self.anchor_end_idx is None:
-            self._set_anchors(
-                target_world=self.target_world,
-                obj_depth=self.detected_object['depth'],
-            )
+            self._set_anchors(target_world=self.target_world)
 
         if self.anchor_start_idx is None or self.anchor_end_idx is None:
-            return
-
-        obj_depth = (
-            float(self.focus_depth_m)
-            if self.focus_depth_m is not None
-            else float(self.detected_object['depth'])
-        )
-        center_x = float(self.detected_object['center_x'])
-        center_y = float(self.detected_object['center_y'])
-        norm_x = self.detected_object.get('norm_x', None)
-        norm_y = self.detected_object.get('norm_y', None)
-        if norm_x is not None and norm_y is not None:
-            u = float(norm_x) * float(self.image_width)
-            v = float(norm_y) * float(self.image_height)
-        else:
-            u = center_x
-            v = center_y
-
-        if self.fx > 0 and self.fy > 0:
-            obj_x_m = (u - self.cx) / self.fx * obj_depth
-            obj_y_m = (v - self.cy) / self.fy * obj_depth
-        else:
-            obj_x_m = 0.0
-            obj_y_m = 0.0
-
-        base_pos = self.current_pos if self.current_pos is not None else self.start_pos
-        if base_pos is None:
             return
 
         target_world = self.target_world
@@ -621,31 +591,7 @@ class PathBuilderMixin:
             target_world, _ = self._compute_object_world(self.detected_object)
 
         if target_world is None:
-            center_x = float(self.detected_object['center_x'])
-            center_y = float(self.detected_object['center_y'])
-            norm_x = self.detected_object.get('norm_x', None)
-            norm_y = self.detected_object.get('norm_y', None)
-            if norm_x is not None and norm_y is not None:
-                u = float(norm_x) * float(self.image_width)
-                v = float(norm_y) * float(self.image_height)
-            else:
-                u = center_x
-                v = center_y
-
-            if self.fx > 0 and self.fy > 0:
-                obj_x_m = (u - self.cx) / self.fx * obj_depth
-                obj_y_m = (v - self.cy) / self.fy * obj_depth
-            else:
-                obj_x_m = 0.0
-                obj_y_m = 0.0
-
-            cos_yaw = math.cos(self.current_yaw)
-            sin_yaw = math.sin(self.current_yaw)
-            target_world = (
-                base_pos[0] + cos_yaw * obj_x_m - sin_yaw * obj_y_m,
-                base_pos[1] + sin_yaw * obj_x_m + cos_yaw * obj_y_m,
-                base_pos[2],
-            )
+            return
 
         self.last_target_world = target_world
 

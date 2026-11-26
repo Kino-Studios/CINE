@@ -3,6 +3,8 @@ import math
 from geometry_msgs.msg import PointStamped, Vector3Stamped
 from std_msgs.msg import Float32, Float32MultiArray
 
+from ...cost_functions.subject_projection import CameraIntrinsics, camera_pixel_to_world
+
 ARC_REBUILD_DISTANCE_M = 0.5
 
 
@@ -90,7 +92,7 @@ class DetectionMixin:
             return
 
         try:
-            self._set_anchors(target_world=self.target_world, obj_depth=self.focus_depth_m)
+            self._set_anchors(target_world=self.target_world)
         except (AttributeError, TypeError, ValueError, IndexError) as error:
             self.get_logger().warn(f'anchor update failed; nulling target world: {error}')
             self.target_world = None
@@ -158,33 +160,27 @@ class DetectionMixin:
             return None
 
         obj_depth = float(detection['depth'])
-        center_x = float(detection['center_x'])
-        center_y = float(detection['center_y'])
         norm_x = detection.get('norm_x', None)
         norm_y = detection.get('norm_y', None)
         if norm_x is not None and norm_y is not None:
-            u = float(norm_x) * float(self.image_width)
-            v = float(norm_y) * float(self.image_height)
+            pixel_column = float(norm_x) * float(self.image_width)
+            pixel_row = float(norm_y) * float(self.image_height)
         else:
-            u = center_x
-            v = center_y
-
-        if self.fx > 0 and self.fy > 0:
-            obj_x_m = (u - self.cx) / self.fx * obj_depth
-            obj_y_m = (v - self.cy) / self.fy * obj_depth
-        else:
-            obj_x_m = 0.0
-            obj_y_m = 0.0
+            pixel_column = float(detection['center_x'])
+            pixel_row = float(detection['center_y'])
 
         base_pos = self.current_pos if self.current_pos is not None else self.start_pos
-        if base_pos is None:
+        if base_pos is None or not (self.fx > 0 and self.fy > 0):
             return None, obj_depth
 
-        cos_yaw = math.cos(self.current_yaw)
-        sin_yaw = math.sin(self.current_yaw)
-        world_dx = cos_yaw * obj_x_m - sin_yaw * obj_y_m
-        world_dy = sin_yaw * obj_x_m + cos_yaw * obj_y_m
-        center_world = (base_pos[0] + world_dx, base_pos[1] + world_dy, base_pos[2])
+        center_world = camera_pixel_to_world(
+            pixel_column,
+            pixel_row,
+            obj_depth,
+            CameraIntrinsics(self.fx, self.fy, self.cx, self.cy),
+            tuple(float(coordinate) for coordinate in base_pos),
+            self.current_orientation_xyzw,
+        )
         self.last_target_world = center_world
 
         return center_world, obj_depth
@@ -209,19 +205,13 @@ class DetectionMixin:
         self.simulated_detection_active = False
         self.use_dynamic_waypoints = True
         self.pending_detection_merge = True
-        obj_depth = float(parsed.get('depth', 0.0))
-        computed = self._compute_object_world(parsed)
-        if computed is not None:
-            target_world_pos, computed_depth = computed
-            if target_world_pos is not None:
-                self.target_world = target_world_pos
-                self.last_target_world = target_world_pos
-
-            if computed_depth is not None:
-                obj_depth = computed_depth
+        target_world_pos, _ = self._compute_object_world(parsed)
+        if target_world_pos is not None:
+            self.target_world = target_world_pos
+            self.last_target_world = target_world_pos
 
         self._publish_target_world()
-        self._set_anchors(target_world=self.target_world, obj_depth=obj_depth)
+        self._set_anchors(target_world=self.target_world)
         self._rebuild_active_with_detection()
 
     def _rebuild_active_with_detection(self):

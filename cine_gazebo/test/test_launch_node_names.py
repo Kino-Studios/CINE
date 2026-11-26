@@ -188,6 +188,12 @@ def test_mission_starts_the_cinematic_waypoint_generator_with_unscaled_waypoints
         'world_bounds_max': '[10.0, 20.0, 3.5]',
         'use_sim_time': 'True',
         'simulate_object': 'False',
+        'camera_fx': "float(DETECTION_CAMERA['detection_camera_fx'])",
+        'camera_fy': "float(DETECTION_CAMERA['detection_camera_fy'])",
+        'camera_cx': "float(DETECTION_CAMERA['detection_camera_cx'])",
+        'camera_cy': "float(DETECTION_CAMERA['detection_camera_cy'])",
+        'image_width': "int(DETECTION_CAMERA['detection_image_width'])",
+        'image_height': "int(DETECTION_CAMERA['detection_image_height'])",
     }
 
 

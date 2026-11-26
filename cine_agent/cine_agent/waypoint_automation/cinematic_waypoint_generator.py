@@ -218,6 +218,7 @@ class CinematicWaypointGenerator(
         self.start_pos = None
         self.origin_offset = None
         self.current_yaw = 0.0
+        self.current_orientation_xyzw = (0.0, 0.0, 0.0, 1.0)
         self.waypoints_sent = False
         self.ready_time = None
         self.STARTUP_DELAY = 0.5
@@ -604,16 +605,20 @@ class CinematicWaypointGenerator(
             self.ready_time = self.get_clock().now()
 
             if self.target_world is not None:
-                self._set_anchors(target_world=self.target_world, obj_depth=self.focus_depth_m)
+                self._set_anchors(target_world=self.target_world)
 
-        w = msg.pose.pose.orientation.w
-        x = msg.pose.pose.orientation.x
-        y = msg.pose.pose.orientation.y
-        z = msg.pose.pose.orientation.z
+        orientation = msg.pose.pose.orientation
+        orientation_w = float(orientation.w)
+        orientation_x = float(orientation.x)
+        orientation_y = float(orientation.y)
+        orientation_z = float(orientation.z)
+        self.current_orientation_xyzw = (orientation_x, orientation_y, orientation_z, orientation_w)
 
-        siny_cosp = 2.0 * (w * z + x * y)
-        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
-        self.current_yaw = math.atan2(siny_cosp, cosy_cosp)
+        yaw_sine_part = 2.0 * (orientation_w * orientation_z + orientation_x * orientation_y)
+        yaw_cosine_part = 1.0 - 2.0 * (
+            orientation_y * orientation_y + orientation_z * orientation_z
+        )
+        self.current_yaw = math.atan2(yaw_sine_part, yaw_cosine_part)
 
         self.velocity_settled = velocity_mag < self.VELOCITY_THRESHOLD
 
