@@ -1,21 +1,15 @@
 #!/usr/bin/env python3
-"""CINE source formatter — enforces the repository whitespace convention.
+"""CINE source formatter: the whitespace convention ruff cannot enforce.
 
-Ruff handles quotes, commas, line length, and import order. Ruff does NOT enforce
-intra-function spacing, so this tool adds the convention's signature rule that ruff
-cannot: a blank line before every `return`/`raise` that is not the first statement of
-its block, and no blank line immediately after a `def`/`class` header. It also collapses
-runs of blank lines inside function bodies to one, while leaving module-level spacing
-(the standard two blank lines around top-level definitions) to ruff.
+A blank line before every `return`/`raise` that is not first in its block, none right after a
+`def`/`class` header, and blank runs in bodies collapsed to one; module-level spacing is ruff's.
 
 Run from a repo root:
     python3 tools/format.py                # format all tracked python in this repo
     python3 tools/format.py path/to/file.py [more.py ...]
     python3 tools/format.py --check        # list files that would change; exit 1 if any
 
-The pass is idempotent and behavior-preserving (it only moves blank lines). Comment
-removal (#8) and descriptive renaming (#10) remain review-time judgment calls, not
-automated here. If `ruff` is on PATH it is run first for the deterministic rules.
+Idempotent: it only moves blank lines. If `ruff` is on PATH it runs first.
 """
 
 import argparse
@@ -129,9 +123,8 @@ def _format_source(source):
             out.append('')
 
         is_blank = line.strip() == ''
-        # Collapse consecutive blanks to one only inside an indented block. A blank
-        # run whose next code is at column 0 is a module-level gap — left for ruff,
-        # which enforces the standard two blank lines around top-level definitions.
+        # Collapse blank runs only inside an indented block; a run before column-0 code is a
+        # module-level gap, where ruff enforces two blank lines around top-level definitions.
         if is_blank and prev.strip() == '' and out and next_indent[number - 1] > 0:
             continue
 

@@ -1,7 +1,5 @@
 """Turns Depth Anything 3 network output into depth in metres."""
 
-# format-hooks: allow-comments
-
 import numpy as np
 
 # From the Depth Anything 3 README: metric depth = focal_px * network_output / 300.
@@ -13,11 +11,8 @@ def metric_depth_metres(
     camera_focal_px: float,
     calibration_image_width: int,
 ) -> np.ndarray:
-    """Scales a metric model's output, which is at the model's processing resolution.
-
-    The focal length must be the one at that resolution, so it is rescaled from the width the
-    camera was calibrated at to the width of ``network_depth``.
-    """
+    """Scales a metric model's output; the focal length is rescaled from the calibration width
+    to the width of ``network_depth``, the model's processing resolution."""
 
     processed_width = network_depth.shape[1]
     processed_focal_px = camera_focal_px * processed_width / calibration_image_width

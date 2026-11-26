@@ -64,7 +64,6 @@ def fetch_depth_models(weights_dir):
     from huggingface_hub import snapshot_download
 
     for repository_id, revision in DEPTH_MODEL_REVISIONS.items():
-        # snapshot_download skips files already in local_dir at this revision.
         local_dir = snapshot_download(
             repo_id=repository_id,
             revision=revision,

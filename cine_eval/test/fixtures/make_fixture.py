@@ -43,10 +43,8 @@ def _first_receive_ns(bag_directory: Path) -> int:
 
 
 def slice_bag(source: Path, output: Path, start_s: float, duration_s: float) -> int:
-    """Writes messages received in [first + start, first + start + duration] to a new bag.
-
-    Returns the number of messages written.
-    """
+    """Copies messages in [first + start, first + start + duration] to a new bag and returns
+    how many it copied."""
 
     first_ns = _first_receive_ns(source)
     window_start_ns = first_ns + round(start_s * NANOSECONDS_PER_SECOND)

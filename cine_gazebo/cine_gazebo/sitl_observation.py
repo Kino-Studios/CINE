@@ -1,12 +1,4 @@
-"""The ROS-free half of sitl_flight_starter: observations, command pacing, frames.
-
-The node converts each ROS message into the plain values here (`LinkState`,
-`OdometrySample`), so everything that decides what the state machine sees can be tested
-without rclpy. Quaternions are (x, y, z, w) tuples; vectors are (x, y, z) tuples in
-MAVROS's local frame (x east, y north, z up) unless a name says otherwise.
-"""
-
-# format-hooks: allow-comments
+"""ROS-free half of sitl_flight_starter; quaternions are (x, y, z, w), vectors local ENU."""
 
 import math
 from dataclasses import dataclass
@@ -16,16 +8,14 @@ import yaml
 
 from cine_gazebo.flight_starter_logic import GPS_SOURCE_SET, Observation
 
-# The machine repeats a command every step until its effect shows; the autopilot needs
-# about this long to answer and show it, so one call per kind per interval.
+# About how long the autopilot takes to show a command's effect; one call per kind per interval.
 COMMAND_RETRY_INTERVAL_S = 1.0
 # A call MAVROS never answers stops blocking retries after this long.
 COMMAND_RESPONSE_TIMEOUT_S = 5.0
 LOCAL_POSITION_MAX_AGE_S = 1.0
 # MAV_SYS_STATUS_PREARM_CHECK in MAVLink's SYS_STATUS sensor bitmasks.
 PREARM_CHECK_BIT = 0x10000000
-# A land action waits this long for the switch to the GPS source set, then lands anyway:
-# landing on the active source beats hovering on it until the landing times out.
+# Land anyway after this long without the GPS source switch, rather than hover until timeout.
 LAND_SWITCH_TIMEOUT_S = 5.0
 
 
@@ -40,16 +30,12 @@ class LinkState:
 
 @dataclass(frozen=True)
 class SensorStatus:
-    """The sensor bitmasks /mavros/sys_status reports (MAVLink SYS_STATUS)."""
-
     sensors_enabled: int
     sensors_health: int
 
 
 @dataclass(frozen=True)
 class OdometrySample:
-    """One odometry message, as received."""
-
     position: tuple[float, float, float]
     orientation: tuple[float, float, float, float]
     # As the source reports it: body frame for MAVROS, VINS's own world frame for VIO.
@@ -58,8 +44,6 @@ class OdometrySample:
 
 
 def load_excitation_pattern(path):
-    """Read [x, y, z, yaw] points from the excitation pattern YAML file."""
-
     raw_points = yaml.safe_load(Path(path).read_text())['excitation_pattern']
     points = tuple(tuple(float(value) for value in point) for point in raw_points)
     if any(len(point) != 4 for point in points):
@@ -75,8 +59,6 @@ def load_excitation_pattern(path):
 
 
 def rotate_by_quaternion(orientation, vector):
-    """Rotate `vector` by the unit quaternion `orientation`."""
-
     axis_x, axis_y, axis_z, scalar = orientation
     axis = (axis_x, axis_y, axis_z)
 
@@ -120,11 +102,7 @@ def autopilot_velocity_in_local(autopilot):
 
 
 def vio_velocity_in_local(autopilot, vio):
-    """Turn VINS's velocity into MAVROS's local frame.
-
-    VINS's world frame is gravity aligned but has an arbitrary heading, so the velocity is
-    turned by the heading difference between the two orientations.
-    """
+    """Rotate VINS's velocity by the yaw gap; its world frame is level but its heading arbitrary."""
 
     heading_offset = yaw_of(autopilot.orientation) - yaw_of(vio.orientation)
 
@@ -154,12 +132,8 @@ def build_observation(
     hold_setpoint,
     sensor_status,
 ):
-    """Build the state machine's Observation from the latest plain values.
-
-    `link`, `autopilot`, `vio` and `sensor_status` are None until their first message. `target_index` is
-    the index of the last excitation setpoint sent, and the error is measured against that
-    same point.
-    """
+    """Build the state machine's Observation; `link`, `autopilot`, `vio`, `sensor_status` are None
+    until their first message, and `target_index` is the last excitation setpoint sent."""
 
     if ekf_source_set is None:
         raise ValueError('the active EKF source set must be known; the autopilot boots on 1')
@@ -193,11 +167,8 @@ def build_observation(
 
 
 def prearm_checks_passed(sensor_status):
-    """Whether the autopilot reports its pre-arm checks passing.
-
-    ArduPilot leaves the pre-arm bit out of the enabled mask when ARMING_CHECK disables
-    every check; then nothing blocks arming.
-    """
+    """Whether pre-arm checks pass; ArduPilot leaves the bit out of the enabled mask when
+    ARMING_CHECK disables every check, and then nothing blocks arming."""
 
     if sensor_status is None:
         return False
@@ -209,13 +180,8 @@ def prearm_checks_passed(sensor_status):
 
 
 def land_request(active_source_set, now_s, switch_requested_s):
-    """What a land action asks the autopilot for this step.
-
-    The GPS source set comes first; LAND is requested once the autopilot has accepted it,
-    or once `LAND_SWITCH_TIMEOUT_S` has passed since the first switch request at
-    `switch_requested_s` (None before it). The machine repeats the land action until the
-    mode reads LAND, so the requests follow each other on consecutive steps.
-    """
+    """Switch to the GPS source set first, then LAND once accepted or `LAND_SWITCH_TIMEOUT_S`
+    after `switch_requested_s` (None before the first request); repeated each step until LAND."""
 
     if active_source_set == GPS_SOURCE_SET:
         return 'land_mode'

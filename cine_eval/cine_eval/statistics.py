@@ -24,14 +24,10 @@ def wilson_interval(successes: int, trials: int, z: float = WILSON_Z_95) -> tupl
 
 
 def wilcoxon_exact_p(differences: np.ndarray) -> float:
-    """Two-sided exact Wilcoxon signed-rank p, zero differences dropped.
+    """Two-sided exact Wilcoxon signed-rank p, zero differences dropped (``zero_method="wilcox"``).
 
-    scipy 1.11.4 cannot be trusted with zeros or ties under ``method="exact"``: with a zero it
-    switches to the normal approximation (with a warning), and with tied magnitudes it silently
-    uses the untied null distribution, whose p can be wrong in either direction (too small or too
-    large, depending on where the ties fall). Zeros are therefore dropped here
-    (the ``zero_method="wilcox"`` rule), scipy is used when no magnitudes tie, and otherwise the
-    exact null distribution of the tied mid-rank sums is enumerated.
+    scipy 1.11.4's ``method="exact"`` mishandles zeros and silently uses the untied null on tied
+    magnitudes, so scipy runs only when no magnitudes tie; otherwise the tied null is built.
     """
 
     nonzero = np.asarray(differences, dtype=float)
@@ -47,8 +43,7 @@ def wilcoxon_exact_p(differences: np.ndarray) -> float:
 
 
 def _tied_exact_p(nonzero: np.ndarray) -> float:
-    # Mid-ranks are multiples of 0.5, so doubled ranks are integers and the null distribution of
-    # the positive-rank sum (each sign equally likely) can be built by convolution.
+    # Doubled mid-ranks are integers, so the positive-rank-sum null builds by convolution.
     doubled_ranks = np.rint(2 * stats.rankdata(np.abs(nonzero))).astype(int)
     probabilities = np.array([1.0])
 

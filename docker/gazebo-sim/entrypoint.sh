@@ -21,9 +21,8 @@ source_ros_script() {
 }
 
 use_cine_venv() {
-  # ROS starts Python nodes with /usr/bin/python3 (their shebang), which ignores PATH, so
-  # the venv's site-packages also go on PYTHONPATH. The ArduPilot tools (sim_vehicle.py,
-  # MAVProxy) come last so their venv's python3 never wins.
+  # ROS runs Python nodes with /usr/bin/python3, ignoring PATH, so the venv joins PYTHONPATH;
+  # the ArduPilot tools (sim_vehicle.py, MAVProxy) go last so their python3 never wins.
   local venv_site_packages
   venv_site_packages="$("${CINE_VENV}/bin/python" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
   export PATH="${CINE_VENV}/bin:${PATH}:/opt/ardupilot/Tools/autotest:/home/ardupilot/venv-ardupilot/bin"
