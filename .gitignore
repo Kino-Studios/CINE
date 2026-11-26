@@ -23,3 +23,7 @@ release-assets/
 
 # Visual meshes whose source CAD may not be redistributed (see cine_gazebo/models/ATTRIBUTION.md)
 cine_gazebo/models/cine_source_one/meshes/restricted_*
+.claude/state/
+
+# Working notes (specs, plans, research); only docs linked from README.md are tracked
+docs/superpowers/
