@@ -243,8 +243,9 @@ class DetectionMixin:
             self.use_dynamic_waypoints = False
             self.pending_detection_merge = True
 
+        resume_phase = self._route_phase() if self.active_waypoints is not None else None
         self.active_waypoints = None
         self.waypoints_sent = False
         self.current_target_index = 0
         self.last_published_index = -1
-        self._initialize_waypoint_sequence()
+        self._initialize_waypoint_sequence(resume_phase=resume_phase)

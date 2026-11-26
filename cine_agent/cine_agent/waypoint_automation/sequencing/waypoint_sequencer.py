@@ -80,7 +80,7 @@ class WaypointSequencerMixin:
 
         return waypoints
 
-    def _initialize_waypoint_sequence(self):
+    def _initialize_waypoint_sequence(self, resume_phase=None):
         if self.baseline_mode:
             waypoints_to_send = self._scaled_static_waypoints()
         else:
@@ -155,10 +155,17 @@ class WaypointSequencerMixin:
             self._insert_focus_entry_waypoints()
             self._update_framing_indices()
 
+        if resume_phase is not None and self.current_pos is not None and self.active_waypoints:
+            self.current_target_index = self._resume_index_after_rebuild(resume_phase)
+            self.get_logger().info(
+                f'Route rebuilt mid-flight ({resume_phase}); resuming at waypoint '
+                f'{self.current_target_index}/{len(self.active_waypoints) - 1}',
+            )
+
         framing_active = self._is_framing_idx(self.current_target_index)
         self._publish_framing_states(framing_active)
 
-        if self.current_pos is not None and self.active_waypoints:
+        if resume_phase is None and self.current_pos is not None and self.active_waypoints:
             skipped = 0
             min_start_threshold = max(
                 self._current_distance_threshold(),
@@ -211,6 +218,64 @@ class WaypointSequencerMixin:
                 )
 
         self._reset_and_prefill_queue()
+
+    def _route_phase(self):
+        if self.framing_start_idx is None or self.current_target_index < self.framing_start_idx:
+            return 'before_filming'
+
+        if self.framing_end_idx is None or self.current_target_index <= self.framing_end_idx:
+            return 'filming'
+
+        return 'after_filming'
+
+    def _resume_index_after_rebuild(self, route_phase):
+        # Searching only the drone's own part of the route keeps a route that crosses itself
+        # from snapping the drone back into the arc or ahead past it.
+        first_index = 0
+        last_index = len(self.active_waypoints) - 1
+
+        if self.framing_start_idx is not None and self.framing_end_idx is not None:
+            if route_phase == 'before_filming':
+                last_index = self.framing_start_idx
+            elif route_phase == 'filming':
+                first_index = self.framing_start_idx
+                last_index = self.framing_end_idx
+            else:
+                first_index = self.framing_end_idx
+
+        if first_index >= last_index:
+            return first_index
+
+        nearest_segment = min(
+            range(first_index, last_index),
+            key=self._distance_to_route_segment,
+        )
+
+        return nearest_segment + 1
+
+    def _distance_to_route_segment(self, segment_index):
+        segment_start = self._rel_to_world(self.active_waypoints[segment_index])
+        segment_end = self._rel_to_world(self.active_waypoints[segment_index + 1])
+        direction = [end - start for start, end in zip(segment_start, segment_end)]
+        length_squared = sum(component * component for component in direction)
+        if length_squared < 1e-12:
+            return math.dist(self.current_pos, segment_start)
+
+        offset = [position - start for position, start in zip(self.current_pos, segment_start)]
+        along = (
+            sum(
+                offset_component * direction_component
+                for offset_component, direction_component in zip(offset, direction)
+            )
+            / length_squared
+        )
+        along = max(0.0, min(1.0, along))
+        closest = [
+            start + along * direction_component
+            for start, direction_component in zip(segment_start, direction)
+        ]
+
+        return math.dist(self.current_pos, closest)
 
     def _limit_consecutive_waypoint_jumps(self, waypoints):
         if not waypoints or self.max_waypoint_jump_m <= 0:

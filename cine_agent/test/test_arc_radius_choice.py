@@ -1,5 +1,8 @@
 """The cost model picks the arc radius, and a moving subject rebuilds the arc only before filming.
 
+A rebuilt route resumes where the drone is, within the same part of the route (before,
+during or after filming), instead of at the route's first waypoint.
+
 The pure-Python CI job has no ROS, and test_cost_calculator replaces rclpy and the message
 packages in sys.modules during collection, so a real node is not available here. Small fakes
 stand in for the ROS modules only while the mixins are imported, which leaves sys.modules as
@@ -237,8 +240,56 @@ class ArcPlanningNode(
     def get_clock(self):
         return SimpleNamespace(now=lambda: SimpleNamespace(to_msg=lambda: 'stamp'))
 
-    def _initialize_waypoint_sequence(self):
+    def _initialize_waypoint_sequence(self, resume_phase=None):
         self.sequence_initializations += 1
+
+
+class RouteFlyingNode(ArcPlanningNode):
+    """The planning node with the real sequence initializer, so a rebuild publishes goals."""
+
+    _initialize_waypoint_sequence = WaypointSequencerMixin._initialize_waypoint_sequence
+
+    def __init__(self):
+        super().__init__()
+        self.max_waypoint_jump_m = float(WaypointParams.MAX_WAYPOINT_JUMP_M)
+        self.focus_entry_decel_waypoints = 0
+        self.waypoint_radius_m = float(WaypointParams.WAYPOINT_RADIUS_M)
+        self.min_goal_distance_m = float(WaypointParams.MIN_GOAL_DISTANCE_M)
+        self.min_first_waypoint_distance_m = float(WaypointParams.MIN_FIRST_WAYPOINT_DISTANCE_M)
+        self.PROGRESS_EPS_M = 0.05
+        self.WAYPOINT_LOOKAHEAD = int(WaypointParams.WAYPOINT_LOOKAHEAD)
+        self.dynamic_waypoint_lookahead = int(WaypointParams.DYNAMIC_WAYPOINT_LOOKAHEAD)
+        self.light_avoidance_enabled = False
+        self.goal_pub = FakePublisher()
+        self.framing_active_pub = FakePublisher()
+        self.baseline_framing_pub = FakePublisher()
+        self.baseline_framing_active = False
+        self.sent_waypoints_history = []
+        self.last_progress_time = None
+        self.last_progress_dist = None
+        self.stuck_attempts = 0
+
+
+def _node_flying_the_route(passed_waypoint):
+    """A node that started the route and is halfway from `passed_waypoint` to the next one.
+
+    The route runs along +y; its filming range is waypoints 7-12 of 0-18.
+    """
+
+    node = RouteFlyingNode()
+    node.target_world = SUBJECT
+    node.generate_cinematographic_waypoints()
+    node._initialize_waypoint_sequence()
+    passed = node.active_waypoints[passed_waypoint]
+    upcoming = node.active_waypoints[passed_waypoint + 1]
+    node.current_pos = tuple(
+        (passed_coordinate + upcoming_coordinate) / 2.0
+        for passed_coordinate, upcoming_coordinate in zip(passed, upcoming)
+    )
+    node.current_target_index = passed_waypoint + 1
+    node.goal_pub.messages.clear()
+
+    return node
 
 
 def _subject_estimate(position):
@@ -370,3 +421,39 @@ def test_estimate_moving_during_filming_leaves_arc_frozen():
     assert node.dynamic_waypoints == waypoints_before
     assert node.anchor_focus_distance == focus_distance_before
     assert len(node.anchor_distance_pub.messages) == published_before
+
+
+def test_rebuild_before_entry_sends_the_drone_forward_not_back_to_the_route_start():
+    node = _node_flying_the_route(passed_waypoint=4)
+    drone_y = node.current_pos[1]
+
+    node.target_world_callback(_subject_estimate((0.0, 11.05, 1.0)))
+
+    assert node.goal_pub.messages[0].pose.position.y > drone_y
+    assert node.current_target_index <= node.framing_start_idx
+
+
+def test_rebuild_before_entry_never_skips_into_the_arc_the_drone_is_beside():
+    node = _node_flying_the_route(passed_waypoint=11)
+    node.current_target_index = 5
+
+    node.target_world_callback(_subject_estimate((0.0, 11.05, 1.0)))
+
+    assert node.current_target_index <= node.framing_start_idx
+
+
+def test_rebuild_during_filming_resumes_inside_the_arc():
+    node = _node_flying_the_route(passed_waypoint=9)
+
+    node._rebuild_active_with_detection()
+
+    assert node.framing_start_idx <= node.current_target_index <= node.framing_end_idx
+    assert node.framing_active
+
+
+def test_rebuild_after_filming_does_not_fly_the_arc_again():
+    node = _node_flying_the_route(passed_waypoint=15)
+
+    node._rebuild_active_with_detection()
+
+    assert node.current_target_index > node.framing_end_idx
