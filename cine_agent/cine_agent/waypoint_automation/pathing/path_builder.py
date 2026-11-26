@@ -1,7 +1,13 @@
 import math
 
+import numpy
+
+BAND_TOP_TOLERANCE_M = 1e-6
+
 
 class PathBuilderMixin:
+    arc_center_world = None
+
     def _build_room_orbit(self):
         radius = max(self.min_orbit_radius_m, 1.0)
         radius = min(radius, 1.5)
@@ -285,6 +291,11 @@ class PathBuilderMixin:
         if not arc_pts or len(arc_pts) < 2:
             return float('inf')
 
+        band_top_m = max(float(value) for value in self.candidate_radius_scale_range)
+        farthest_m = max(math.dist(point, target_world) for point in arc_pts)
+        if farthest_m > band_top_m + BAND_TOP_TOLERANCE_M:
+            return float('inf')
+
         tx, ty, tz = (
             float(target_world[0]),
             float(target_world[1]),
@@ -311,7 +322,164 @@ class PathBuilderMixin:
             total += float(cost)
             ref = wp
 
-        return float(total)
+        # Arcs get one point per arc_waypoint_spacing_m, so a sum would favour short arcs.
+
+        return float(total) / (len(arc_pts) - 1)
+
+    def _candidate_arc_radii(self):
+        range_low, range_high = sorted(float(value) for value in self.candidate_radius_scale_range)
+        lowest_radius = max(range_low, float(self.min_focus_distance_m))
+        samples = int(max(1, self.candidate_radius_samples))
+
+        return [float(radius) for radius in numpy.linspace(lowest_radius, range_high, samples)]
+
+    def _project_onto_sphere(self, point, target_world, radius):
+        offset = [float(point[axis]) - float(target_world[axis]) for axis in range(3)]
+        length = math.sqrt(sum(component * component for component in offset))
+        if length < 1e-6:
+            return None
+
+        scale = float(radius) / length
+
+        return tuple(float(target_world[axis]) + offset[axis] * scale for axis in range(3))
+
+    def _build_candidate_arc(self, start_wp, end_wp, target_world, radius):
+        """Builds the arc between both anchors' projections onto the sphere of this radius.
+
+        Projecting along the subject-to-anchor direction keeps each anchor's elevation angle,
+        so a radius smaller than the anchors' height above the subject still stays above it.
+        """
+
+        arc_start = self._project_onto_sphere(start_wp, target_world, radius)
+        arc_end = self._project_onto_sphere(end_wp, target_world, radius)
+        if arc_start is None or arc_end is None:
+            return []
+
+        return self._build_anchor_arc(
+            arc_start,
+            arc_end,
+            target_world,
+            radius,
+            altitude_m=None,
+            path_length_m=None,
+        )
+
+    def _choose_arc_radius(self, start_wp, end_wp, target_world):
+        """Scores one arc per candidate radius and keeps the cheapest finite one.
+
+        Returns the kept radius (None when every candidate scores infinite) and every
+        (radius, cost) pair. Costs are taken against the configured desired focus distance:
+        the cost model prefers node.anchor_focus_distance when set, so it is cleared here.
+        """
+
+        saved_anchor_focus_distance = self.anchor_focus_distance
+        self.anchor_focus_distance = None
+        candidate_costs = []
+
+        try:
+            for radius in self._candidate_arc_radii():
+                arc = self._build_candidate_arc(start_wp, end_wp, target_world, radius)
+                candidate_costs.append((radius, self._score_arc_points(arc, target_world)))
+        finally:
+            self.anchor_focus_distance = saved_anchor_focus_distance
+
+        finite_costs = [entry for entry in candidate_costs if math.isfinite(entry[1])]
+        if not finite_costs:
+            return None, candidate_costs
+
+        chosen_radius, _ = min(finite_costs, key=lambda entry: entry[1])
+
+        return chosen_radius, candidate_costs
+
+    def _log_arc_radius_choice(self, chosen_radius, candidate_costs):
+        candidates = ', '.join(f'{radius:.2f}={cost:.3f}' for radius, cost in candidate_costs)
+
+        if chosen_radius is None:
+            self.get_logger().info(
+                f'Arc radius: every candidate scored infinite, keeping the anchor distance; '
+                f'candidates: {candidates}',
+            )
+
+            return
+
+        self.get_logger().info(
+            f'Arc radius chosen: {chosen_radius:.2f} m; candidates: {candidates}',
+        )
+
+    def _build_anchor_distance_arc(
+        self,
+        static_world,
+        start_idx,
+        end_idx,
+        start_wp,
+        end_wp,
+        target_world,
+        prev_static,
+        next_static,
+    ):
+        anchor_dist_start = math.dist(start_wp, target_world)
+        anchor_dist_end = math.dist(end_wp, target_world)
+        anchor_distance = max(anchor_dist_start, anchor_dist_end)
+        focus_distance = max(float(anchor_distance), float(self.min_orbit_radius_m))
+        self.anchor_focus_distance = float(focus_distance)
+        self._publish_anchor_focus_distance()
+        base_z = self._resolve_framing_altitude_from_anchors(
+            start_wp,
+            end_wp,
+            target_world=target_world,
+            desired_distance=focus_distance,
+        )
+        base_z = max(self.min_altitude_m, min(self.max_altitude_m, base_z))
+        path_length = self._path_length_between(static_world, start_idx, end_idx)
+
+        tx, ty, tz = (
+            float(target_world[0]),
+            float(target_world[1]),
+            float(target_world[2]),
+        )
+        dz = base_z - tz
+        desired = focus_distance
+        radius_xy = math.sqrt(max(desired * desired - dz * dz, 0.0))
+        radius_xy = max(self.min_orbit_radius_m, radius_xy)
+
+        def _project_to_circle(wp):
+            dx = float(wp[0]) - tx
+            dy = float(wp[1]) - ty
+            xy_dist = math.hypot(dx, dy)
+            if xy_dist < 1e-6:
+                dx = 1.0
+                dy = 0.0
+                xy_dist = 1.0
+
+            scale = radius_xy / xy_dist if radius_xy > 1e-6 else 0.0
+            candidate = (tx + dx * scale, ty + dy * scale, base_z)
+            candidate = self._clamp_waypoint_to_bounds(candidate)
+            dist = math.dist(candidate, (tx, ty, tz))
+            if math.isfinite(dist) and abs(dist - desired) > 1e-3:
+                dx = float(candidate[0]) - tx
+                dy = float(candidate[1]) - ty
+                xy_dist = math.hypot(dx, dy)
+                if xy_dist > 1e-6:
+                    scale = radius_xy / xy_dist if radius_xy > 1e-6 else 0.0
+                    candidate = (tx + dx * scale, ty + dy * scale, base_z)
+                    candidate = self._clamp_waypoint_to_bounds(candidate)
+
+            return candidate
+
+        arc_start = _project_to_circle(start_wp)
+        arc_end = _project_to_circle(end_wp)
+        cinematographic_waypoints = self._build_anchor_arc(
+            arc_start,
+            arc_end,
+            target_world,
+            focus_distance,
+            base_z,
+            path_length,
+            prev_wp=prev_static,
+            next_wp=next_static,
+        )
+
+        return focus_distance, arc_start, arc_end, cinematographic_waypoints
 
     def _resolve_framing_altitude(self, base_pos):
         if self.focus_altitude_m > 0.0 and math.isfinite(self.focus_altitude_m):
@@ -491,97 +659,41 @@ class PathBuilderMixin:
         start_wp = static_world[start_idx]
         end_wp = static_world[end_idx]
 
-        anchor_dist_start = math.dist(start_wp, target_world)
-        anchor_dist_end = math.dist(end_wp, target_world)
-        anchor_distance = max(anchor_dist_start, anchor_dist_end)
-        focus_distance = max(float(anchor_distance), float(self.min_orbit_radius_m))
-        self.anchor_focus_distance = float(focus_distance)
-        self._publish_anchor_focus_distance()
-        base_z = self._resolve_framing_altitude_from_anchors(
-            start_wp,
-            end_wp,
-            target_world=target_world,
-            desired_distance=focus_distance,
-        )
-        base_z = max(self.min_altitude_m, min(self.max_altitude_m, base_z))
-        path_length = self._path_length_between(static_world, start_idx, end_idx)
-
-        tx, ty, tz = (
-            float(target_world[0]),
-            float(target_world[1]),
-            float(target_world[2]),
-        )
-        dz = base_z - tz
-        desired = focus_distance
-        radius_xy = math.sqrt(max(desired * desired - dz * dz, 0.0))
-        radius_xy = max(self.min_orbit_radius_m, radius_xy)
-
-        def _project_to_circle(wp):
-            dx = float(wp[0]) - tx
-            dy = float(wp[1]) - ty
-            xy_dist = math.hypot(dx, dy)
-            if xy_dist < 1e-6:
-                dx = 1.0
-                dy = 0.0
-                xy_dist = 1.0
-
-            scale = radius_xy / xy_dist if radius_xy > 1e-6 else 0.0
-            candidate = (tx + dx * scale, ty + dy * scale, base_z)
-            candidate = self._clamp_waypoint_to_bounds(candidate)
-            dist = math.dist(candidate, (tx, ty, tz))
-            if math.isfinite(dist) and abs(dist - desired) > 1e-3:
-                dx = float(candidate[0]) - tx
-                dy = float(candidate[1]) - ty
-                xy_dist = math.hypot(dx, dy)
-                if xy_dist > 1e-6:
-                    scale = radius_xy / xy_dist if radius_xy > 1e-6 else 0.0
-                    candidate = (tx + dx * scale, ty + dy * scale, base_z)
-                    candidate = self._clamp_waypoint_to_bounds(candidate)
-
-            return candidate
-
-        arc_start = _project_to_circle(start_wp)
-        arc_end = _project_to_circle(end_wp)
-        self.viz_data['arc_start'] = arc_start
-        self.viz_data['arc_end'] = arc_end
-
         prev_static = static_world[start_idx - 1] if start_idx - 1 >= 0 else None
         next_static = static_world[end_idx + 1] if end_idx + 1 < len(static_world) else None
 
-        if prev_static is None and len(static_world) >= 2:
-            fallback_ref = (
-                static_world[min(start_idx + 1, len(static_world) - 1)]
-                if start_idx + 1 < len(static_world)
-                else static_world[start_idx]
+        chosen_radius = None
+
+        if bool(self.enable_cost_optimization):
+            chosen_radius, candidate_costs = self._choose_arc_radius(start_wp, end_wp, target_world)
+            self._log_arc_radius_choice(chosen_radius, candidate_costs)
+
+        if chosen_radius is None:
+            focus_distance, arc_start, arc_end, cinematographic_waypoints = (
+                self._build_anchor_distance_arc(
+                    static_world,
+                    start_idx,
+                    end_idx,
+                    start_wp,
+                    end_wp,
+                    target_world,
+                    prev_static,
+                    next_static,
+                )
+            )
+        else:
+            focus_distance = chosen_radius
+            arc_start = self._project_onto_sphere(start_wp, target_world, chosen_radius)
+            arc_end = self._project_onto_sphere(end_wp, target_world, chosen_radius)
+            cinematographic_waypoints = self._build_candidate_arc(
+                start_wp,
+                end_wp,
+                target_world,
+                chosen_radius,
             )
 
-            prev_static = self._extrapolate_transition_point(
-                static_world[start_idx],
-                fallback_ref,
-                -self.bezier_blend_length_m,
-            )
-
-        if next_static is None and len(static_world) >= 2:
-            fallback_ref = (
-                static_world[max(end_idx - 1, 0)] if end_idx - 1 >= 0 else static_world[end_idx]
-            )
-
-            next_static = self._extrapolate_transition_point(
-                static_world[end_idx],
-                fallback_ref,
-                self.bezier_blend_length_m,
-            )
-
-        cinematographic_waypoints = self._build_anchor_arc(
-            arc_start,
-            arc_end,
-            target_world,
-            focus_distance,
-            base_z,
-            path_length,
-            prev_wp=prev_static,
-            next_wp=next_static,
-        )
+        self.viz_data['arc_start'] = arc_start
+        self.viz_data['arc_end'] = arc_end
 
         has_cinematic_arc = bool(cinematographic_waypoints)
         self.generated_arc_length = len(cinematographic_waypoints) if has_cinematic_arc else 0
@@ -590,8 +702,9 @@ class PathBuilderMixin:
             self.anchor_start_world = arc_start
             self.anchor_end_world = arc_end
 
+        self.arc_center_world = tuple(target_world) if has_cinematic_arc else None
         self.viz_data['cinematographic_waypoints'] = cinematographic_waypoints
-        self._debug_arc(cinematographic_waypoints, target_world, desired)
+        self._debug_arc(cinematographic_waypoints, target_world, focus_distance)
 
         actual_focus_distance = focus_distance
 

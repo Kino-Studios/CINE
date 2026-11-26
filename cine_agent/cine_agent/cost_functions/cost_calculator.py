@@ -50,6 +50,8 @@ from cine_config.constants import (
 from geometry_msgs.msg import PolygonStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 
+from .subject_projection import scale_pixel_to_image
+
 COLLISION_DEPTH_MARGIN_M: float = 0.5
 FOCUS_YAW_HOLD_DEADBAND_RAD: float = math.radians(2.0)
 
@@ -85,6 +87,7 @@ class CostCalculator:
         self.depth_image = None
         self.bgr_image = None
         self.center_depth = None
+        self._subject_detected_at_s = None
         self.light_vector = None
         self.light_distance = None
         self._declare_parameter(
@@ -108,6 +111,7 @@ class CostCalculator:
         self.framing_active = False
         self._declare_parameter('focus_object_id', UserRequestedParams.FOCUS_OBJECT_ID)
         self._declare_parameter('huber_delta_px', CostParams.HUBER_DELTA_PX)
+        self._declare_parameter('subject_detection_stale_s', CostParams.SUBJECT_DETECTION_STALE_S)
         self._declare_parameter('deadband_px', CostParams.DEADBAND_PX)
         self._declare_parameter('w_framing', CostParams.W_FRAMING)
         self._declare_parameter('w_dist', CostParams.W_DIST)
@@ -188,6 +192,8 @@ class CostCalculator:
         self._declare_parameter('camera_cx', self.CinematographyParams.CAMERA_CX)
         self._declare_parameter('camera_cy', self.CinematographyParams.CAMERA_CY)
         self._declare_parameter('collision_depth_margin_m', COLLISION_DEPTH_MARGIN_M)
+        self._declare_parameter('detection_image_width', ImageParams.IMAGE_WIDTH)
+        self._declare_parameter('detection_image_height', ImageParams.IMAGE_HEIGHT)
 
         self._last_framing_log_time = 0.0
 
@@ -217,6 +223,25 @@ class CostCalculator:
             return max(1.0, width), max(1.0, height)
         except PARAMETER_READ_ERRORS:
             return float(self.ImageParams.IMAGE_WIDTH), float(self.ImageParams.IMAGE_HEIGHT)
+
+    def _depth_pixel(self, pixel_u: float, pixel_v: float) -> tuple[int, int]:
+        height, width = self.depth_image.shape[:2]
+
+        try:
+            detection_width = int(self.node.get_parameter('detection_image_width').value)
+            detection_height = int(self.node.get_parameter('detection_image_height').value)
+        except PARAMETER_READ_ERRORS:
+            detection_width = detection_height = 0
+
+        if detection_width > 0 and detection_height > 0:
+            pixel_u, pixel_v = scale_pixel_to_image(
+                pixel_u,
+                pixel_v,
+                (detection_width, detection_height),
+                (width, height),
+            )
+
+        return math.floor(pixel_u), math.floor(pixel_v)
 
     def update_light_vector(self, msg: Vector3Stamped):
         if not self._light_avoidance_enabled():
@@ -288,6 +313,7 @@ class CostCalculator:
 
     def update_bounding_box(self, msg: PolygonStamped):
         self.bounding_box = msg
+        self._subject_detected_at_s = self._now_s()
         self._update_center_depth()
 
     def update_dimensions(self, msg: PolygonStamped):
@@ -295,7 +321,36 @@ class CostCalculator:
 
     def update_center_point(self, msg: PolygonStamped):
         self.center_point = msg
+        self._subject_detected_at_s = self._now_s()
         self._update_center_depth()
+
+    def forget_stale_subject(self):
+        """Clears the last detection once it is older than subject_detection_stale_s.
+
+        The detector publishes nothing on frames without the subject, so without this the
+        last pixel would be re-projected through each new depth image and pose forever,
+        placing the subject on whatever surface now sits behind that pixel.
+        """
+
+        if self._subject_detected_at_s is None:
+            return
+
+        try:
+            stale_after_s = float(self.node.get_parameter('subject_detection_stale_s').value)
+        except PARAMETER_READ_ERRORS:
+            stale_after_s = float(self.CostParams.SUBJECT_DETECTION_STALE_S)
+
+        if self._now_s() - self._subject_detected_at_s <= stale_after_s:
+            return
+
+        self.center_point = None
+        self.bounding_box = None
+        self.dimensions = None
+        self.center_depth = None
+        self._subject_detected_at_s = None
+
+    def _now_s(self) -> float:
+        return self.node.get_clock().now().nanoseconds / 1e9
 
     def update_depth_image(self, depth_image):
         self.depth_image = depth_image
@@ -397,6 +452,7 @@ class CostCalculator:
 
         if center_x is not None and center_y is not None:
             h, w = self.depth_image.shape[:2]
+            center_x, center_y = self._depth_pixel(center_x, center_y)
             center_x = max(0, min(center_x, w - 1))
             center_y = max(0, min(center_y, h - 1))
 
@@ -421,6 +477,7 @@ class CostCalculator:
 
         h, w = self.depth_image.shape[:2]
 
+        x, y = self._depth_pixel(x, y)
         x = int(max(0, min(x, w - 1)))
         y = int(max(0, min(y, h - 1)))
 
@@ -443,10 +500,12 @@ class CostCalculator:
         x_coords = [p.x for p in points]
         y_coords = [p.y for p in points]
 
-        x_min = int(max(0, min(x_coords)))
-        x_max = int(min(w - 1, max(x_coords)))
-        y_min = int(max(0, min(y_coords)))
-        y_max = int(min(h - 1, max(y_coords)))
+        x_min, y_min = self._depth_pixel(min(x_coords), min(y_coords))
+        x_max, y_max = self._depth_pixel(max(x_coords), max(y_coords))
+        x_min = max(0, x_min)
+        y_min = max(0, y_min)
+        x_max = min(w - 1, x_max)
+        y_max = min(h - 1, y_max)
         if x_min >= x_max or y_min >= y_max:
             return None
 
@@ -481,6 +540,7 @@ class CostCalculator:
             return None
 
         h, w = self.depth_image.shape[:2]
+        center_x, center_y = self._depth_pixel(center_x, center_y)
         half_size = int(max(1, self.CostParams.ROI_SIZE // 2))
 
         x_min = max(0, center_x - half_size)
@@ -613,7 +673,7 @@ class CostCalculator:
                 u_current = np.mean(x_coords)
                 v_current = np.mean(y_coords)
             else:
-                logger.debug('CostCalculator: insufficient bbox points (%d)', len(points))
+                logger.debug(f'CostCalculator: insufficient bbox points ({len(points)})')
 
                 return None
         else:
@@ -844,26 +904,17 @@ class CostCalculator:
         total_cost = framing_cost + depth_cost + lighting_cost + smoothness_cost
 
         logger.debug(
-            'CostCalculator: framing=%.3f distance=%.3f lighting=%.3f smoothness=%.3f total=%.3f',
-            framing_cost,
-            depth_cost,
-            lighting_cost,
-            smoothness_cost,
-            total_cost,
+            f'CostCalculator: framing={framing_cost:.3f} distance={depth_cost:.3f} '
+            f'lighting={lighting_cost:.3f} smoothness={smoothness_cost:.3f} '
+            f'total={total_cost:.3f}',
         )
 
         if current_time is not None and current_time - self._last_framing_log_time >= 1.0:
             self._last_framing_log_time = current_time
             logger.info(
-                'CostCalculator detail: framing=%.3f depth_cost=%.3f lighting=%.3f total=%.3f target=%.3f actual=%.3f err=%.3f d_min=%.3f',
-                framing_cost,
-                depth_cost,
-                lighting_cost,
-                total_cost,
-                d_star,
-                Z,
-                Z - d_star,
-                d_min,
+                f'CostCalculator detail: framing={framing_cost:.3f} depth_cost={depth_cost:.3f} '
+                f'lighting={lighting_cost:.3f} total={total_cost:.3f} target={d_star:.3f} '
+                f'actual={Z:.3f} err={Z - d_star:.3f} d_min={d_min:.3f}',
             )
 
         return {
@@ -972,8 +1023,10 @@ class CostCalculator:
         if cam_z <= 0.1:
             return False
 
-        u = int(round((cam_x * fx) / cam_z + cx))
-        v = int(round((cam_y * fy) / cam_z + cy))
+        u, v = self._depth_pixel(
+            round((cam_x * fx) / cam_z + cx),
+            round((cam_y * fy) / cam_z + cy),
+        )
         if u < 0 or u >= w or v < 0 or v >= h:
             return False
 

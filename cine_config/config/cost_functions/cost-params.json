@@ -18,6 +18,7 @@
     "light_distance_gain": 1.0,
     "light_cost_increase_when_close": true,
     "roi_size": 40,
+    "subject_detection_stale_s": 0.5,
     "framing_vertical_weight": 0.75,
     "large_penalty": 1000.0,
     "include_lighting_in_position_cost": false,

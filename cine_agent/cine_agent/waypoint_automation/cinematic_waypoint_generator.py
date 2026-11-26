@@ -41,6 +41,7 @@ from cine_config.constants import (
 from geometry_msgs.msg import PointStamped, PoseArray, PoseStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
+from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import Bool, Float32, Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -192,6 +193,26 @@ class CinematicWaypointGenerator(
             '/cinematography/subject_position',
             10,
         )
+        self.publish_subject_position = bool(
+            self.declare_parameter('publish_subject_position', True).value,
+        )
+        self.subject_wait_timeout_s = float(
+            self.declare_parameter('subject_wait_timeout_s', 0.0).value,
+        )
+        self.start_trigger_topic = str(self.declare_parameter('start_trigger_topic', '').value)
+        self.start_triggered = self.start_trigger_topic == ''
+        self.start_trigger_hold_logged = False
+
+        if self.start_trigger_topic:
+            self.start_trigger_sub = self.create_subscription(
+                PoseStamped,
+                self.start_trigger_topic,
+                self._start_trigger_callback,
+                10,
+            )
+
+        self.subject_wait_started = None
+        self.subject_wait_timed_out = False
         self.target_world_timer = self.create_timer(0.1, self._publish_target_world)
 
         self.start_pos = None
@@ -479,7 +500,16 @@ class CinematicWaypointGenerator(
             '/cinematography/markers/subject',
             10,
         )
-        self.framing_active_pub = self.create_publisher(Bool, '/cinematography/framing_active', 10)
+        self.framing_active_pub = self.create_publisher(
+            Bool,
+            '/cinematography/framing_active',
+            QoSProfile(
+                depth=1,
+                reliability=QoSReliabilityPolicy.RELIABLE,
+                durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            ),
+        )
+        self.framing_active_timer = self.create_timer(0.1, self._republish_framing_active)
         self.baseline_framing_pub = self.create_publisher(
             Bool,
             '/cinematography/baseline_framing_active',
@@ -546,6 +576,9 @@ class CinematicWaypointGenerator(
         if self.baseline_mode:
             self.use_dynamic_waypoints = False
             self.pending_detection_merge = False
+
+    def _start_trigger_callback(self, _message):
+        self.start_triggered = True
 
     def odom_callback(self, msg: Odometry):
         self.current_pos = (

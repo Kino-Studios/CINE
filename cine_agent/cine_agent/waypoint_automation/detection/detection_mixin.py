@@ -3,6 +3,8 @@ import math
 from geometry_msgs.msg import PointStamped, Vector3Stamped
 from std_msgs.msg import Float32, Float32MultiArray
 
+ARC_REBUILD_DISTANCE_M = 0.5
+
 
 class DetectionMixin:
     def light_callback(self, msg: Vector3Stamped):
@@ -37,6 +39,9 @@ class DetectionMixin:
         return last.sec == stamp.sec and last.nanosec == stamp.nanosec
 
     def _publish_target_world(self):
+        if not self.publish_subject_position:
+            return
+
         target = self.target_world or self.last_target_world
         if target is None:
             return
@@ -68,12 +73,37 @@ class DetectionMixin:
 
             return
 
+        if self.arc_center_world is not None and self.active_waypoints is not None:
+            # Once the sequence flies an arc, re-anchoring would republish the static anchor
+            # distance over the arc's, so the arc is either rebuilt whole or left as it is.
+            if self._subject_left_arc_before_entry():
+                self.get_logger().info(
+                    f'Subject estimate moved '
+                    f'{math.dist(self.target_world, self.arc_center_world):.2f} m from the arc '
+                    f'centre before entry; rebuilding the arc',
+                )
+                self.dynamic_waypoints = None
+                self.anchor_start_idx = None
+                self.anchor_end_idx = None
+                self._rebuild_active_with_detection()
+
+            return
+
         try:
             self._set_anchors(target_world=self.target_world, obj_depth=self.focus_depth_m)
         except (AttributeError, TypeError, ValueError, IndexError) as error:
             self.get_logger().warn(f'anchor update failed; nulling target world: {error}')
             self.target_world = None
             self.last_target_world = None
+
+    def _subject_left_arc_before_entry(self):
+        if self.framing_active or self.framing_start_idx is None:
+            return False
+
+        if self.current_target_index >= self.framing_start_idx:
+            return False
+
+        return math.dist(self.target_world, self.arc_center_world) > ARC_REBUILD_DISTANCE_M
 
     def _parse_detection(self, msg: Float32MultiArray):
         if msg is None or msg.data is None:

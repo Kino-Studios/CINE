@@ -97,6 +97,55 @@ def test_acceleration_smoothness_cost(mock_node):
     assert costs['smoothness_cost'] == pytest.approx(float(CostParams.W_SMOOTH))
 
 
+class SingleMessageLogger:
+    """Takes one message string and keyword options only, like rclpy's RcutilsLogger."""
+
+    def __init__(self):
+        self.messages = []
+
+    def debug(self, message, **kwargs):
+        self.messages.append(message)
+
+    def info(self, message, **kwargs):
+        self.messages.append(message)
+
+
+def test_calculate_cost_logs_preformatted_detail_line_through_rclpy_style_logger(mock_node):
+    logger = SingleMessageLogger()
+    mock_node.get_logger.return_value = logger
+    calculator = CostCalculator(mock_node)
+    calculator.orientation = np.array([0.0, 0.0, 0.0, 1.0])
+    calculator.depth_image = np.zeros((10, 10))
+    calculator.center_depth = 5.0
+
+    msg = PolygonStamped()
+    from geometry_msgs.msg import Point32
+
+    p = Point32()
+    p.x, p.y = 320.0, 240.0
+    msg.polygon.points = [p]
+    calculator.center_point = msg
+
+    costs = calculator.calculate_cost()
+
+    assert costs is not None
+    assert logger.messages[-1].startswith('CostCalculator detail: framing=')
+
+
+def test_calculate_cost_returns_none_for_one_bbox_point_through_rclpy_style_logger(mock_node):
+    mock_node.get_logger.return_value = SingleMessageLogger()
+    calculator = CostCalculator(mock_node)
+    calculator.depth_image = np.zeros((10, 10))
+
+    msg = PolygonStamped()
+    from geometry_msgs.msg import Point32
+
+    msg.polygon.points = [Point32()]
+    calculator.bounding_box = msg
+
+    assert calculator.calculate_cost() is None
+
+
 def test_feature_tracking_center_depth(mock_node):
     calculator = CostCalculator(mock_node)
     calculator.depth_image = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
@@ -206,3 +255,78 @@ def test_position_cost_rises_by_framing_cost_when_framing_is_on(mock_node):
 
     assert with_framing - without_framing == pytest.approx(_framing_component(calculator))
     assert _framing_component(calculator) > 0.0
+
+
+def test_center_depth_reads_the_depth_pixel_under_a_detection_box_in_camera_pixels(mock_node):
+    from geometry_msgs.msg import Point32
+
+    param_values = {
+        'detection_image_width': 1152,
+        'detection_image_height': 648,
+    }
+    original_side_effect = mock_node.get_parameter.side_effect
+    mock_node.get_parameter.side_effect = lambda name: (
+        MagicMock(value=param_values[name]) if name in param_values else original_side_effect(name)
+    )
+    calculator = CostCalculator(mock_node)
+    depth_image = np.full((360, 640), 9.0, dtype=np.float32)
+    depth_image[178:183, 318:323] = 4.0
+    calculator.depth_image = depth_image
+
+    msg = PolygonStamped()
+    center = Point32()
+    center.x, center.y = 576.0, 324.0
+    msg.polygon.points = [center]
+    calculator.center_point = msg
+
+    calculator._update_center_depth()
+
+    assert calculator.center_depth == 4.0
+
+
+def _detection_message():
+    from geometry_msgs.msg import Point32
+
+    msg = PolygonStamped()
+    center = Point32()
+    center.x, center.y = 576.0, 324.0
+    msg.polygon.points = [center]
+
+    return msg
+
+
+def _calculator_seeing_subject_at(mock_node, seen_at_s):
+    original_side_effect = mock_node.get_parameter.side_effect
+    mock_node.get_parameter.side_effect = lambda name: (
+        MagicMock(value=0.5) if name == 'subject_detection_stale_s' else original_side_effect(name)
+    )
+    calculator = CostCalculator(mock_node)
+    mock_node.get_clock().now().nanoseconds = int(seen_at_s * 1e9)
+    calculator.update_center_point(_detection_message())
+    calculator.update_bounding_box(_detection_message())
+    calculator.update_dimensions(_detection_message())
+    calculator.center_depth = 3.0
+
+    return calculator
+
+
+def test_subject_last_detected_longer_ago_than_stale_time_is_forgotten(mock_node):
+    calculator = _calculator_seeing_subject_at(mock_node, seen_at_s=10.0)
+    mock_node.get_clock().now().nanoseconds = int(10.6 * 1e9)
+
+    calculator.forget_stale_subject()
+
+    assert calculator.center_point is None
+    assert calculator.bounding_box is None
+    assert calculator.dimensions is None
+    assert calculator.center_depth is None
+
+
+def test_subject_detected_within_stale_time_is_kept(mock_node):
+    calculator = _calculator_seeing_subject_at(mock_node, seen_at_s=10.0)
+    mock_node.get_clock().now().nanoseconds = int(10.4 * 1e9)
+
+    calculator.forget_stale_subject()
+
+    assert calculator.center_point is not None
+    assert calculator.center_depth == 3.0

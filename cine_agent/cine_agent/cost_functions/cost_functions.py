@@ -36,6 +36,7 @@ from std_msgs.msg import Bool, Float32
 from cine_msgs.msg import CinematographyCosts
 
 from .cost_calculator import CostCalculator
+from .subject_projection import CameraIntrinsics, camera_pixel_to_world
 
 
 class CostFunctionCalculatorNode(Node):
@@ -45,6 +46,11 @@ class CostFunctionCalculatorNode(Node):
         self.light_avoidance_enabled = bool(
             self.declare_parameter('light_avoidance_enabled', LightAvoidanceParams.ENABLED).value,
         )
+        # CostCalculator declares these too, but skips any the node declared first.
+        self.declare_parameter('camera_fx', self.params.CAMERA_FX)
+        self.declare_parameter('camera_fy', self.params.CAMERA_FY)
+        self.declare_parameter('camera_cx', self.params.CAMERA_CX)
+        self.declare_parameter('camera_cy', self.params.CAMERA_CY)
         self._framing_active = False
         self.cost_calculator = CostCalculator(self)
         self.cost_calculator.update_framing_active(self._framing_active)
@@ -53,10 +59,6 @@ class CostFunctionCalculatorNode(Node):
 
         self.declare_parameter('image_width', self.params.IMAGE_WIDTH)
         self.declare_parameter('image_height', self.params.IMAGE_HEIGHT)
-        self.declare_parameter('camera_fx', self.params.CAMERA_FX)
-        self.declare_parameter('camera_fy', self.params.CAMERA_FY)
-        self.declare_parameter('camera_cx', self.params.CAMERA_CX)
-        self.declare_parameter('camera_cy', self.params.CAMERA_CY)
         self.declare_parameter('depth_topic', self.params.DEPTH_TOPIC)
         self.declare_parameter('center_topic', self.params.CENTER_TOPIC)
         self.declare_parameter('bbox_topic', self.params.BBOX_TOPIC)
@@ -169,6 +171,7 @@ class CostFunctionCalculatorNode(Node):
         self.cost_calculator.update_framing_active(active)
 
     def _tick(self):
+        self.cost_calculator.forget_stale_subject()
         now_msg = self.get_clock().now().to_msg()
         frame_id = str(self.get_parameter('frame_id').value)
 
@@ -255,19 +258,22 @@ class CostFunctionCalculatorNode(Node):
         if fx <= 0.0 or fy <= 0.0:
             return None
 
-        x_cam = (u - cx) * float(depth_m) / fx
-        y_cam = (v - cy) * float(depth_m) / fy
-        z_cam = float(depth_m)
-
         drone_pos = self._last_odom.pose.pose.position
+        drone_orientation = self._last_odom.pose.pose.orientation
 
-        target_world = (
-            float(drone_pos.x) + z_cam,
-            float(drone_pos.y) - x_cam,
-            float(drone_pos.z) - y_cam,
+        return camera_pixel_to_world(
+            u,
+            v,
+            float(depth_m),
+            CameraIntrinsics(fx, fy, cx, cy),
+            (float(drone_pos.x), float(drone_pos.y), float(drone_pos.z)),
+            (
+                float(drone_orientation.x),
+                float(drone_orientation.y),
+                float(drone_orientation.z),
+                float(drone_orientation.w),
+            ),
         )
-
-        return target_world
 
 
 def main(args=None):

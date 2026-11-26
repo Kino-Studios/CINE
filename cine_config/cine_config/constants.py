@@ -436,6 +436,11 @@ class CostParams:
         'light_cost_increase_when_close',
     )
     ROI_SIZE = config.get('costs', 'cost_function_parameters', 'roi_size')
+    SUBJECT_DETECTION_STALE_S = config.get(
+        'costs',
+        'cost_function_parameters',
+        'subject_detection_stale_s',
+    )
     LARGE_PENALTY = config.get('costs', 'cost_function_parameters', 'large_penalty')
     INCLUDE_LIGHTING_IN_POSITION_COST = config.get(
         'costs',

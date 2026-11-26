@@ -13,9 +13,51 @@ class WaypointSequencerMixin:
             elapsed = (self.get_clock().now() - self.ready_time).nanoseconds / 1e9
             if elapsed >= self.STARTUP_DELAY or self.velocity_settled:
                 if self.active_waypoints is None:
+                    if not self.start_triggered:
+                        if not self.start_trigger_hold_logged:
+                            self.start_trigger_hold_logged = True
+                            self.get_logger().info(
+                                f'Holding goals until the start trigger on {self.start_trigger_topic}',
+                            )
+
+                        return
+
+                    if self._waiting_for_subject_estimate():
+                        return
+
                     self._initialize_waypoint_sequence()
 
                 self._step_waypoint_sequence()
+
+    def _waiting_for_subject_estimate(self):
+        if (
+            self.subject_wait_timeout_s <= 0.0
+            or self.baseline_mode
+            or self.target_world is not None
+            or self.subject_wait_timed_out
+        ):
+            return False
+
+        now = self.get_clock().now()
+
+        if self.subject_wait_started is None:
+            self.subject_wait_started = now
+            self.get_logger().info(
+                f'Holding goals until the subject estimate arrives (up to {self.subject_wait_timeout_s:.1f} s)',
+            )
+
+            return True
+
+        waited_s = (now - self.subject_wait_started).nanoseconds / 1e9
+        if waited_s < self.subject_wait_timeout_s:
+            return True
+
+        self.subject_wait_timed_out = True
+        self.get_logger().warn(
+            f'No subject estimate after {self.subject_wait_timeout_s:.1f} s; flying the static route without it',
+        )
+
+        return False
 
     def _should_scale_static_waypoints(self):
         return (
@@ -383,6 +425,14 @@ class WaypointSequencerMixin:
         msg.data = active
         self.framing_active_pub.publish(msg)
         self.framing_active = active
+
+    def _republish_framing_active(self):
+        if self.active_waypoints is None:
+            return
+
+        msg = Bool()
+        msg.data = bool(self.framing_active)
+        self.framing_active_pub.publish(msg)
 
     def _publish_baseline_framing_active(self, active):
         active = bool(active)
