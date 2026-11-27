@@ -180,6 +180,7 @@ class DetectionMixin:
             CameraIntrinsics(self.fx, self.fy, self.cx, self.cy),
             tuple(float(coordinate) for coordinate in base_pos),
             self.current_orientation_xyzw,
+            (self.camera_mount_forward_m, 0.0, 0.0),
         )
         self.last_target_world = center_world
 

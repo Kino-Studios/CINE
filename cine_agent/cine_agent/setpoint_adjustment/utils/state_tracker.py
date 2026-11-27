@@ -22,7 +22,7 @@ class StateTracker:
         self.last_center_uv = center_uv
 
     def record_depth(self, depth_value_m: float):
-        if depth_value_m <= 0 or np.isnan(depth_value_m):
+        if not np.isfinite(depth_value_m) or depth_value_m <= 0:
             return
 
         self.recent_depth_samples.append(float(depth_value_m))

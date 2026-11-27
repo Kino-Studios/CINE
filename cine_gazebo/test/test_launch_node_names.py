@@ -194,6 +194,7 @@ def test_mission_starts_the_cinematic_waypoint_generator_with_unscaled_waypoints
         'camera_cy': "float(DETECTION_CAMERA['detection_camera_cy'])",
         'image_width': "int(DETECTION_CAMERA['detection_image_width'])",
         'image_height': "int(DETECTION_CAMERA['detection_image_height'])",
+        'camera_mount_forward_m': "float(DETECTION_CAMERA['detection_camera_mount_forward_m'])",
     }
 
 

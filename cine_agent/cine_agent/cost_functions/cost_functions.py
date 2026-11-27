@@ -25,6 +25,8 @@ All depth values are in metres; angles in radians; positions in the ENU world
 frame unless ``frame_id`` is overridden.
 """
 
+import math
+
 import rclpy
 from cine_config.constants import CinematographyParams, LightAvoidanceParams
 from geometry_msgs.msg import PointStamped, PolygonStamped, Vector3Stamped
@@ -51,6 +53,7 @@ class CostFunctionCalculatorNode(Node):
         self.declare_parameter('camera_fy', self.params.CAMERA_FY)
         self.declare_parameter('camera_cx', self.params.CAMERA_CX)
         self.declare_parameter('camera_cy', self.params.CAMERA_CY)
+        self.declare_parameter('camera_mount_forward_m', self.params.CAMERA_MOUNT_TRANSLATION_M[0])
         self._framing_active = False
         self.cost_calculator = CostCalculator(self)
         self.cost_calculator.update_framing_active(self._framing_active)
@@ -260,8 +263,14 @@ class CostFunctionCalculatorNode(Node):
 
         drone_pos = self._last_odom.pose.pose.position
         drone_orientation = self._last_odom.pose.pose.orientation
+        mount_translation = self.params.CAMERA_MOUNT_TRANSLATION_M
+        mount_offset = (
+            float(self.get_parameter('camera_mount_forward_m').value),
+            float(mount_translation[1]),
+            float(mount_translation[2]),
+        )
 
-        return camera_pixel_to_world(
+        subject_position = camera_pixel_to_world(
             u,
             v,
             float(depth_m),
@@ -273,7 +282,13 @@ class CostFunctionCalculatorNode(Node):
                 float(drone_orientation.z),
                 float(drone_orientation.w),
             ),
+            mount_offset,
         )
+        # A NaN or infinite estimate would send every reader of the topic to nowhere.
+        if not all(math.isfinite(coordinate) for coordinate in subject_position):
+            return None
+
+        return subject_position
 
 
 def main(args=None):

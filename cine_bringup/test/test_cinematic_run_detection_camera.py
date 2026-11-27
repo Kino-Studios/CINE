@@ -11,6 +11,7 @@ DETECTION_ARGUMENT_BY_PARAMETER = {
     'camera_cy': 'detection_camera_cy',
     'detection_image_width': 'detection_image_width',
     'detection_image_height': 'detection_image_height',
+    'camera_mount_forward_m': 'detection_camera_mount_forward_m',
 }
 
 
@@ -84,4 +85,5 @@ def test_detection_camera_arguments_default_to_the_hardware_camera():
         'detection_camera_cy': 'hardware_camera.CAMERA_CY',
         'detection_image_width': 'hardware_camera.IMAGE_WIDTH',
         'detection_image_height': 'hardware_camera.IMAGE_HEIGHT',
+        'detection_camera_mount_forward_m': 'hardware_camera.CAMERA_MOUNT_TRANSLATION_M[0]',
     }

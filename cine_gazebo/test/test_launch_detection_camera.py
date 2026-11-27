@@ -28,6 +28,8 @@ def test_simulated_detection_camera_is_the_gazebo_camera_at_full_resolution():
         'detection_camera_cy': 324.0,
         'detection_image_width': 1152.0,
         'detection_image_height': 648.0,
+        # model.sdf.template mounts the camera 0.10 m ahead of the body origin.
+        'detection_camera_mount_forward_m': 0.10,
     }
 
 

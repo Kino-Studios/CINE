@@ -193,6 +193,7 @@ class ArcPlanningNode(
         self.fy = 500.0
         self.cx = 320.0
         self.cy = 240.0
+        self.camera_mount_forward_m = 0.05
         self.image_width = 640
         self.image_height = 480
         self.detected_object = None
@@ -492,6 +493,23 @@ def test_detection_right_of_image_centre_lies_ahead_and_right_of_the_drone():
     subject_world, _ = node._compute_object_world(detection)
 
     assert subject_world == pytest.approx((2.0, 7.05, 3.0))
+
+
+def test_detection_is_placed_from_the_camera_mount_not_the_drone_centre():
+    node = ArcPlanningNode()
+    node.camera_mount_forward_m = 0.10
+    node.current_pos = (0.0, 0.0, 2.0)
+    detection = {
+        'center_x': 320.0,
+        'center_y': 240.0,
+        'depth': 5.0,
+        'norm_x': None,
+        'norm_y': None,
+    }
+
+    subject_world, _ = node._compute_object_world(detection)
+
+    assert subject_world == pytest.approx((5.10, 0.0, 2.0))
 
 
 def test_anchors_bracket_the_nearest_route_stretch_while_the_drone_is_far_away():

@@ -128,6 +128,8 @@ DETECTION_CAMERA = {
     'detection_camera_cy': '324.0',
     'detection_image_width': '1152',
     'detection_image_height': '648',
+    # model.sdf.template mounts the camera 0.10 m ahead of the body origin.
+    'detection_camera_mount_forward_m': '0.10',
 }
 # The planner's map is centred on the origin in x and y (the drone spawns there, and the
 # EKF origin is the takeoff point) and spans z from -0.01 m up; the ceiling is an occupied
@@ -571,6 +573,9 @@ def _start_mission(context):
                     'camera_cy': float(DETECTION_CAMERA['detection_camera_cy']),
                     'image_width': int(DETECTION_CAMERA['detection_image_width']),
                     'image_height': int(DETECTION_CAMERA['detection_image_height']),
+                    'camera_mount_forward_m': float(
+                        DETECTION_CAMERA['detection_camera_mount_forward_m'],
+                    ),
                 },
             ],
             output='screen',

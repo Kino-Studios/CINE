@@ -633,6 +633,9 @@ class CinematographyParams:
     CAMERA_CY: float = field(
         default_factory=lambda: config.get('camera', 'camera_params', 'camera_cy'),
     )
+    CAMERA_MOUNT_TRANSLATION_M: list = field(
+        default_factory=lambda: config.get('camera', 'camera_params', 'body_to_camera_translation'),
+    )
 
     # topic strings
     WAYPOINTS_TOPIC: str = field(

@@ -68,6 +68,51 @@ node.destroy_node()
 rclpy.shutdown()
 """
 
+NO_SUBJECT_ESTIMATE_FROM_A_NON_FINITE_POSE = """
+import rclpy
+from geometry_msgs.msg import Point32, PolygonStamped
+from nav_msgs.msg import Odometry
+from cine_agent.cost_functions.cost_functions import CostFunctionCalculatorNode
+
+rclpy.init()
+node = CostFunctionCalculatorNode()
+odometry = Odometry()
+odometry.pose.pose.position.x = float('nan')
+odometry.pose.pose.orientation.w = 1.0
+node._odom_cb(odometry)
+center = PolygonStamped()
+center.polygon.points = [Point32(x=320.0, y=240.0)]
+node._center_cb(center)
+assert node._estimate_target_world_position(5.0) is None
+node.destroy_node()
+rclpy.shutdown()
+"""
+
+SUBJECT_ESTIMATE_FROM_THE_CAMERA_MOUNT = """
+import rclpy
+from geometry_msgs.msg import Point32, PolygonStamped
+from nav_msgs.msg import Odometry
+from cine_agent.cost_functions.cost_functions import CostFunctionCalculatorNode
+
+rclpy.init(args=['--ros-args', '-p', 'camera_mount_forward_m:=0.10'])
+node = CostFunctionCalculatorNode()
+odometry = Odometry()
+odometry.pose.pose.orientation.w = 1.0
+node._odom_cb(odometry)
+center = PolygonStamped()
+center.polygon.points = [
+    Point32(
+        x=float(node.get_parameter('camera_cx').value),
+        y=float(node.get_parameter('camera_cy').value),
+    ),
+]
+node._center_cb(center)
+estimate = node._estimate_target_world_position(5.0)
+assert abs(estimate[0] - 5.10) < 1e-6, estimate
+node.destroy_node()
+rclpy.shutdown()
+"""
+
 
 def _run_against_package_source(script):
     environment = dict(
@@ -98,5 +143,17 @@ def test_calculate_cost_completes_with_real_rclpy_node_logger():
 
 def test_cost_node_tick_forgets_subject_once_detection_is_stale():
     result = _run_against_package_source(TICK_FORGETS_STALE_SUBJECT)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_cost_node_places_the_subject_from_the_camera_mount_it_is_given():
+    result = _run_against_package_source(SUBJECT_ESTIMATE_FROM_THE_CAMERA_MOUNT)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_cost_node_never_estimates_a_subject_position_from_a_non_finite_pose():
+    result = _run_against_package_source(NO_SUBJECT_ESTIMATE_FROM_A_NON_FINITE_POSE)
 
     assert result.returncode == 0, result.stderr

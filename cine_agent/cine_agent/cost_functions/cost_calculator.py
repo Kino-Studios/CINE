@@ -457,7 +457,8 @@ class CostCalculator:
             center_y = max(0, min(center_y, h - 1))
 
             depth_value = self.depth_image[center_y, center_x]
-            if depth_value > 0 and not np.isnan(depth_value):
+            # Gazebo reports +inf past the far clip, which would place the subject at infinity.
+            if np.isfinite(depth_value) and depth_value > 0:
                 self.center_depth = float(depth_value)
 
     def _compute_yaw_to_target(self) -> float | None:
@@ -482,12 +483,19 @@ class CostCalculator:
         y = int(max(0, min(y, h - 1)))
 
         depth_value = self.depth_image[y, x]
-        if depth_value > 0 and not np.isnan(depth_value):
+        if np.isfinite(depth_value) and depth_value > 0:
             return float(depth_value)
         else:
             return None
 
     def get_median_depth_object(self):
+        """Median depth over the middle third of the subject's box, in width and height.
+
+        A person fills about half of their detection box and the scene behind them fills the
+        rest, so a median over the whole box can land on the background. The middle third is
+        the torso.
+        """
+
         if self.depth_image is None or self.bounding_box is None:
             return None
 
@@ -509,9 +517,14 @@ class CostCalculator:
         if x_min >= x_max or y_min >= y_max:
             return None
 
-        depth_region = self.depth_image[y_min : y_max + 1, x_min : x_max + 1]
+        third_width = (x_max - x_min) // 3
+        third_height = (y_max - y_min) // 3
+        depth_region = self.depth_image[
+            y_min + third_height : y_max - third_height + 1,
+            x_min + third_width : x_max - third_width + 1,
+        ]
 
-        valid_depths = depth_region[(depth_region > 0) & ~np.isnan(depth_region)]
+        valid_depths = depth_region[np.isfinite(depth_region) & (depth_region > 0)]
         if len(valid_depths) == 0:
             return None
 
@@ -522,6 +535,11 @@ class CostCalculator:
     def get_median_depth_roi(self):
         if self.depth_image is None:
             return None
+
+        # A fixed window wider than a distant subject's box is mostly background.
+        subject_depth = self.get_median_depth_object()
+        if subject_depth is not None:
+            return subject_depth
 
         center_x = None
         center_y = None
@@ -551,7 +569,7 @@ class CostCalculator:
             return None
 
         depth_region = self.depth_image[y_min : y_max + 1, x_min : x_max + 1]
-        valid_depths = depth_region[(depth_region > 0) & ~np.isnan(depth_region)]
+        valid_depths = depth_region[np.isfinite(depth_region) & (depth_region > 0)]
         if valid_depths.size == 0:
             return None
 

@@ -274,6 +274,12 @@ class CinematicWaypointGenerator(
         self.fy = float(self.declare_parameter('camera_fy', self.params.CAMERA_FY).value)
         self.cx = float(self.declare_parameter('camera_cx', self.params.CAMERA_CX).value)
         self.cy = float(self.declare_parameter('camera_cy', self.params.CAMERA_CY).value)
+        self.camera_mount_forward_m = float(
+            self.declare_parameter(
+                'camera_mount_forward_m',
+                self.params.CAMERA_MOUNT_TRANSLATION_M[0],
+            ).value,
+        )
         self.orbit_altitude_m = float(
             self.declare_parameter('orbit_altitude_m', self.params.CONSTANT_ALTITUDE_M).value,
         )

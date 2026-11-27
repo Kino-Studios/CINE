@@ -1,5 +1,6 @@
 import math
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 mock_rclpy = MagicMock()
@@ -282,6 +283,80 @@ def test_center_depth_reads_the_depth_pixel_under_a_detection_box_in_camera_pixe
     calculator._update_center_depth()
 
     assert calculator.center_depth == 4.0
+
+
+def test_subject_beyond_the_depth_cameras_far_clip_gets_no_depth(mock_node):
+    from geometry_msgs.msg import Point32
+
+    calculator = CostCalculator(mock_node)
+    calculator.depth_image = np.array([[1.0, 2.0], [3.0, np.inf]], dtype=np.float32)
+    msg = PolygonStamped()
+    center = Point32()
+    center.x, center.y = 1.0, 1.0
+    msg.polygon.points = [center]
+    calculator.center_point = msg
+
+    calculator._update_center_depth()
+
+    assert calculator.center_depth is None
+
+
+def _calculator_with_mostly_sky_around_subject(mock_node):
+    # geometry_msgs is mocked, so Point32() hands back one shared object; distinct corners
+    # need plain records.
+    calculator = CostCalculator(mock_node)
+    depth_image = np.full((40, 40), np.inf, dtype=np.float32)
+    depth_image[20, 20] = 6.0
+    calculator.depth_image = depth_image
+    msg = PolygonStamped()
+    msg.polygon.points = [SimpleNamespace(x=10.0, y=10.0), SimpleNamespace(x=30.0, y=30.0)]
+    calculator.bounding_box = msg
+
+    return calculator
+
+
+def test_subject_box_median_depth_ignores_sky_beyond_the_far_clip(mock_node):
+    calculator = _calculator_with_mostly_sky_around_subject(mock_node)
+
+    assert calculator.get_median_depth_object() == 6.0
+
+
+def test_subject_neighbourhood_median_depth_ignores_sky_beyond_the_far_clip(mock_node):
+    calculator = _calculator_with_mostly_sky_around_subject(mock_node)
+
+    assert calculator.get_median_depth_roi() == 6.0
+
+
+def _calculator_with_thin_subject_in_front_of_a_hedge(mock_node):
+    # A person 9 m away fills about half of their detection box; the hedge behind them
+    # fills the rest, as in the simulator's cine_field.
+    calculator = CostCalculator(mock_node)
+    depth_image = np.full((360, 640), 17.0, dtype=np.float32)
+    depth_image[150:201, 310:329] = 9.0
+    calculator.depth_image = depth_image
+    # geometry_msgs is mocked, so every PolygonStamped() is one shared object.
+    calculator.bounding_box = SimpleNamespace(
+        polygon=SimpleNamespace(
+            points=[SimpleNamespace(x=300.0, y=145.0), SimpleNamespace(x=338.0, y=205.0)],
+        ),
+    )
+    calculator.center_point = SimpleNamespace(
+        polygon=SimpleNamespace(points=[SimpleNamespace(x=319.0, y=175.0)]),
+    )
+
+    return calculator
+
+
+def test_subject_box_depth_reads_the_subject_not_the_background_behind_it(mock_node):
+    calculator = _calculator_with_thin_subject_in_front_of_a_hedge(mock_node)
+
+    assert calculator.get_median_depth_object() == 9.0
+
+
+def test_subject_neighbourhood_depth_reads_the_subject_not_the_background_behind_it(mock_node):
+    calculator = _calculator_with_thin_subject_in_front_of_a_hedge(mock_node)
+
+    assert calculator.get_median_depth_roi() == 9.0
 
 
 def _detection_message():

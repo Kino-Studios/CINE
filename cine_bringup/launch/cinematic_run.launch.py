@@ -85,6 +85,7 @@ def _detection_camera_arguments():
         'detection_camera_cy': hardware_camera.CAMERA_CY,
         'detection_image_width': hardware_camera.IMAGE_WIDTH,
         'detection_image_height': hardware_camera.IMAGE_HEIGHT,
+        'detection_camera_mount_forward_m': hardware_camera.CAMERA_MOUNT_TRANSLATION_M[0],
     }
 
     return [
@@ -108,6 +109,7 @@ def _detection_parameters():
             ('camera_cy', 'detection_camera_cy', float),
             ('detection_image_width', 'detection_image_width', int),
             ('detection_image_height', 'detection_image_height', int),
+            ('camera_mount_forward_m', 'detection_camera_mount_forward_m', float),
         )
     ]
 
