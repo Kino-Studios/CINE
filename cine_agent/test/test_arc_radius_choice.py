@@ -428,6 +428,16 @@ def test_estimate_moving_more_than_half_a_metre_before_entry_rebuilds_arc():
     assert node.arc_center_world == pytest.approx(moved_subject)
 
 
+def test_rebuild_before_entry_publishes_only_the_rebuilt_arc_focus_distance():
+    node = _node_flying_towards_the_arc()
+    published_before = len(node.anchor_distance_pub.messages)
+
+    node.target_world_callback(_subject_estimate((0.0, 11.05, 1.0)))
+
+    published = [message.data for message in node.anchor_distance_pub.messages[published_before:]]
+    assert published == [pytest.approx(node.anchor_focus_distance)]
+
+
 def test_estimate_moving_during_filming_leaves_arc_frozen():
     node = _node_flying_towards_the_arc()
     node.current_target_index = 4
@@ -561,6 +571,20 @@ def test_anchors_bracket_the_nearest_route_stretch_while_the_drone_is_far_away()
 
     assert node.anchor_start_world == ANCHOR_START
     assert node.anchor_end_world == ANCHOR_END
+
+
+def test_route_whose_last_waypoint_is_nearest_the_subject_still_ends_at_that_waypoint():
+    # The Gazebo mission ends north of the subject's walking loop, closer to it than any other
+    # waypoint. An arc ending there replaced the mission's end with a hover 1 m from the subject.
+    node = ArcPlanningNode()
+    mission_end = (0.0, 14.0, 3.0)
+    node.static_waypoints = [(0.0, 3.0, 2.5), (-5.1, 6.0, 3.0), (-5.1, 13.0, 3.0), mission_end]
+    node.start_pos = node.current_pos = node.static_waypoints[0]
+    node.target_world = (0.0, 10.0, 1.0)
+
+    node.generate_cinematographic_waypoints()
+
+    assert node.dynamic_waypoints[-1] == pytest.approx(mission_end)
 
 
 def test_anchor_distance_route_never_turns_back_at_the_arc_ends():

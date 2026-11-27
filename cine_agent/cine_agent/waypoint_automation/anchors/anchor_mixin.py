@@ -6,7 +6,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 
 class AnchorMixin:
-    def _set_anchors(self, target_world=None):
+    def _set_anchors(self, target_world=None, publish_focus_distance=True):
         if self.current_pos is None or self.origin_offset is None:
             return
 
@@ -69,7 +69,9 @@ class AnchorMixin:
         self.anchor_end_idx = int(end_idx)
         self.anchors_set = True
         self._publish_anchor_points()
-        self._publish_anchor_focus_distance()
+
+        if publish_focus_distance:
+            self._publish_anchor_focus_distance()
 
     def _segment_circle_intersection(self, p0, p1, target_world, desired_distance):
         tx, ty, tz = (
@@ -195,7 +197,11 @@ class AnchorMixin:
             dz = float(wp[2]) - tz
             distances.append(math.sqrt(dx * dx + dy * dy + dz * dz))
 
-        closest_idx = int(min(range(n), key=lambda i: distances[i]))
+        # The exit anchor stops short of the final waypoint whenever the route allows it, so after
+        # filming the drone resumes the static path away from the subject instead of hovering
+        # on the arc beside it.
+        last_exit_idx = n - 2 if n >= 3 else n - 1
+        closest_idx = min(int(min(range(n), key=lambda i: distances[i])), last_exit_idx)
         min_gap = max(1, int(self.anchor_min_gap))
         balance_weight = 1.5
 
@@ -210,7 +216,7 @@ class AnchorMixin:
             if not math.isfinite(di) or di < self.min_orbit_radius_m:
                 continue
 
-            for j in range(i + min_gap, n):
+            for j in range(i + min_gap, last_exit_idx + 1):
                 if j < closest_idx:
                     continue
 

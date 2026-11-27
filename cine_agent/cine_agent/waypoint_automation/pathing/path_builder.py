@@ -581,7 +581,9 @@ class PathBuilderMixin:
             }
 
         if self.anchor_start_idx is None or self.anchor_end_idx is None:
-            self._set_anchors(target_world=self.target_world)
+            # The arc built below publishes the distance it is flown at; the static anchors'
+            # distance would reach the trajectory server first as a stale focus target.
+            self._set_anchors(target_world=self.target_world, publish_focus_distance=False)
 
         if self.anchor_start_idx is None or self.anchor_end_idx is None:
             return
