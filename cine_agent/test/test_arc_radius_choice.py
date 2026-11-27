@@ -79,7 +79,7 @@ _FAKE_ROS_MODULES = {
         **{name: FakeMessage for name in _MESSAGE_NAMES},
     ),
     'nav_msgs': _fake_module('nav_msgs'),
-    'nav_msgs.msg': _fake_module('nav_msgs.msg', Odometry=FakeMessage),
+    'nav_msgs.msg': _fake_module('nav_msgs.msg', Odometry=FakeMessage, Path=FakeMessage),
     'std_msgs': _fake_module('std_msgs'),
     'std_msgs.msg': _fake_module(
         'std_msgs.msg',
@@ -264,7 +264,9 @@ class RouteFlyingNode(ArcPlanningNode):
         self.WAYPOINT_LOOKAHEAD = int(WaypointParams.WAYPOINT_LOOKAHEAD)
         self.dynamic_waypoint_lookahead = int(WaypointParams.DYNAMIC_WAYPOINT_LOOKAHEAD)
         self.light_avoidance_enabled = False
-        self.goal_pub = FakePublisher()
+        self.route_pub = FakePublisher()
+        self.route_goals_by_index = {}
+        self.route_window_start = None
         self.framing_active_pub = FakePublisher()
         self.baseline_framing_pub = FakePublisher()
         self.baseline_framing_active = False
@@ -272,6 +274,7 @@ class RouteFlyingNode(ArcPlanningNode):
         self.last_progress_time = None
         self.last_progress_dist = None
         self.stuck_attempts = 0
+        self.enable_progress_skip = False
 
 
 def _node_flying_the_route(passed_waypoint):
@@ -291,7 +294,7 @@ def _node_flying_the_route(passed_waypoint):
         for passed_coordinate, upcoming_coordinate in zip(passed, upcoming)
     )
     node.current_target_index = passed_waypoint + 1
-    node.goal_pub.messages.clear()
+    node.route_pub.messages.clear()
 
     return node
 
@@ -447,8 +450,46 @@ def test_rebuild_before_entry_sends_the_drone_forward_not_back_to_the_route_star
 
     node.target_world_callback(_subject_estimate((0.0, 11.05, 1.0)))
 
-    assert node.goal_pub.messages[0].pose.position.y > drone_y
+    assert node.route_pub.messages[-1].poses[0].pose.position.y > drone_y
     assert node.current_target_index <= node.framing_start_idx
+
+
+def test_rebuild_sends_the_planner_only_the_rebuilt_route_goals():
+    node = _node_flying_the_route(passed_waypoint=4)
+
+    node.target_world_callback(_subject_estimate((0.0, 11.05, 1.0)))
+
+    sent = [
+        (goal.pose.position.x, goal.pose.position.y, goal.pose.position.z)
+        for goal in node.route_pub.messages[-1].poses
+    ]
+    expected = [
+        node._rel_to_world(node.active_waypoints[index])
+        for index in range(node.current_target_index, node.last_published_index + 1)
+    ]
+    assert sent == pytest.approx(expected)
+
+
+def test_reaching_a_waypoint_sends_a_route_that_starts_at_the_next_one():
+    node = _node_flying_the_route(passed_waypoint=4)
+    node._reset_and_prefill_queue()
+    next_target = node._rel_to_world(node.active_waypoints[node.current_target_index + 1])
+    node.current_pos = node._rel_to_world(node.active_waypoints[node.current_target_index])
+
+    node._step_waypoint_sequence()
+
+    first_goal = node.route_pub.messages[-1].poses[0].pose.position
+    assert (first_goal.x, first_goal.y, first_goal.z) == pytest.approx(next_target)
+
+
+def test_a_step_without_progress_sends_no_new_route():
+    node = _node_flying_the_route(passed_waypoint=4)
+    node._reset_and_prefill_queue()
+    routes_before = len(node.route_pub.messages)
+
+    node._step_waypoint_sequence()
+
+    assert len(node.route_pub.messages) == routes_before
 
 
 def test_rebuild_before_entry_never_skips_into_the_arc_the_drone_is_beside():

@@ -39,7 +39,7 @@ from cine_config.constants import (
     WaypointParams,
 )
 from geometry_msgs.msg import PointStamped, PoseArray, PoseStamped, Vector3Stamped
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import Bool, Float32, Float32MultiArray
@@ -76,8 +76,8 @@ class CinematicWaypointGenerator(
         self.waypoints_topic = str(self.declare_parameter('waypoints_topic', '').value)
         self.waypoints_file = str(self.declare_parameter('waypoints_file', '').value)
 
-        self.output_topic = str(
-            self.declare_parameter('output_topic', self.params.WAYPOINTS_TOPIC).value,
+        self.route_topic = str(
+            self.declare_parameter('route_topic', self.params.PLANNER_ROUTE_TOPIC).value,
         )
         self.odom_topic = str(self.declare_parameter('odom_topic', self.params.ODOM_TOPIC).value)
         self.detections_topic = str(
@@ -139,7 +139,7 @@ class CinematicWaypointGenerator(
             ).value
         ]
 
-        self.goal_pub = self.create_publisher(PoseStamped, self.output_topic, 10)
+        self.route_pub = self.create_publisher(Path, self.route_topic, 10)
         self.odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, 10)
         self.detection_sub = self.create_subscription(
             Float32MultiArray,
@@ -457,6 +457,8 @@ class CinematicWaypointGenerator(
         self.active_waypoints = None
         self.current_target_index = 0
         self.last_published_index = -1
+        self.route_goals_by_index = {}
+        self.route_window_start = None
         self.simulated_detection_active = True
         self.pending_detection_merge = True
 

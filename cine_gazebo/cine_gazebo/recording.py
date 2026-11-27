@@ -16,6 +16,8 @@ def recorded_topics(drone_id: int) -> list[str]:
         '/mavros/local_position/odom',
         '/cinematography/drone_odometry',
         '/imu_propagate',
+        # The goal window the waypoint generator hands the planner; each one replaces its queue.
+        '/cinematography/planner_route',
         # Every setpoint stage: the planner, the cinematography agent, then the
         # relay's output to MAVROS (names as mavros_setpoints.py publishes them).
         f'drone_{drone_id}_planning/pos_cmd',

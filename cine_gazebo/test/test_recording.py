@@ -39,6 +39,10 @@ def test_recording_includes_truth_and_estimates():
     assert {'/vio/odometry', '/mavros/local_position/odom'} <= set(topics)
 
 
+def test_recording_includes_the_route_sent_to_the_planner():
+    assert '/cinematography/planner_route' in recorded_topics(0)
+
+
 def test_recording_includes_every_setpoint_stage():
     topics = recorded_topics(0)
 

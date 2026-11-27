@@ -1,6 +1,7 @@
 import math
 
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
 from std_msgs.msg import Bool
 
 
@@ -518,7 +519,7 @@ class WaypointSequencerMixin:
             self._publish_framing_active(framing_active)
             self._publish_baseline_framing_active(False)
 
-    def _publish_waypoint(self, target_world, idx: int):
+    def _add_goal_to_route_window(self, target_world, idx: int):
         goal = PoseStamped()
         goal.header.stamp = self.get_clock().now().to_msg()
         goal.header.frame_id = self.frame_id
@@ -549,7 +550,7 @@ class WaypointSequencerMixin:
         qz = math.sin(0.5 * yaw)
         goal.pose.orientation.w = qw
         goal.pose.orientation.z = qz
-        self.goal_pub.publish(goal)
+        self.route_goals_by_index[idx] = goal
         self.sent_waypoints_history.append(target_world)
 
         if idx == self.current_target_index:
@@ -568,20 +569,49 @@ class WaypointSequencerMixin:
 
         lookahead = max(1, int(lookahead))
         lookahead = min(2, lookahead)
+        window_grew = False
+
         while (
             self.last_published_index < len(self.active_waypoints) - 1
             and (self.last_published_index - self.current_target_index + 1) < lookahead
         ):
             next_idx = self.last_published_index + 1
             target_world = self._rel_to_world(self.active_waypoints[next_idx])
-            self._publish_waypoint(target_world, next_idx)
+            self._add_goal_to_route_window(target_world, next_idx)
             self.last_published_index = next_idx
+            window_grew = True
+
+        if window_grew or self.route_window_start != self.current_target_index:
+            self._publish_route_window()
+
+    def _publish_route_window(self):
+        # The planner replaces its queue with each route. Sending goals one at a time made it
+        # append them, so the goals of every abandoned route stayed queued ahead of the new one.
+        self.route_goals_by_index = {
+            index: goal
+            for index, goal in self.route_goals_by_index.items()
+            if index >= self.current_target_index
+        }
+
+        self.route_window_start = self.current_target_index
+
+        if not self.route_goals_by_index:
+            return
+
+        route = Path()
+        route.header.stamp = self.get_clock().now().to_msg()
+        route.header.frame_id = self.frame_id
+        route.poses = [
+            self.route_goals_by_index[index] for index in sorted(self.route_goals_by_index)
+        ]
+        self.route_pub.publish(route)
 
     def _reset_and_prefill_queue(self):
         if self.active_waypoints is None:
             return
 
         self.last_published_index = self.current_target_index - 1
+        self.route_goals_by_index = {}
         self._prefill_waypoint_queue()
 
     def _step_waypoint_sequence(self):

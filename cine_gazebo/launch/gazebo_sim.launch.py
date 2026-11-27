@@ -624,8 +624,8 @@ def _start_mission(context):
                         **DETECTION_CAMERA,
                         # It would publish a second /cinematography/costs stream and its own goals.
                         'start_cinematic_intent_node': 'false',
-                        # The generator's goals on /move_base_simple/goal steer the planner
-                        # only in manual-target mode.
+                        # The generator's route on /cinematography/planner_route steers the
+                        # planner only in manual-target mode.
                         'flight_type': '1',
                     }.items(),
                 ),

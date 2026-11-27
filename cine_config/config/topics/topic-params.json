@@ -1,6 +1,7 @@
 {
   "topics": {
     "waypoints_topic": "/move_base_simple/goal",
+    "planner_route_topic": "/cinematography/planner_route",
     "odom_topic": "/vio/odometry",
     "depth_topic": "/depth/image_raw",
     "center_topic": "/object_detection/center_point",

@@ -46,6 +46,8 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_emergency_stop_policy test/test_emergency_stop_policy.cpp)
   target_include_directories(test_emergency_stop_policy PRIVATE include)
+  ament_add_gtest(test_route_replacement test/test_route_replacement.cpp)
+  target_include_directories(test_route_replacement PRIVATE include ${EIGEN3_INCLUDE_DIR})
 endif()
 
 include_directories(

@@ -641,6 +641,9 @@ class CinematographyParams:
     WAYPOINTS_TOPIC: str = field(
         default_factory=lambda: config.get('topics', 'topics', 'waypoints_topic'),
     )
+    PLANNER_ROUTE_TOPIC: str = field(
+        default_factory=lambda: config.get('topics', 'topics', 'planner_route_topic'),
+    )
     ODOM_TOPIC: str = field(default_factory=lambda: SensorNoiseParams.effective_odom_topic())
     DEPTH_TOPIC: str = field(default_factory=lambda: config.get('topics', 'topics', 'depth_topic'))
     CENTER_TOPIC: str = field(

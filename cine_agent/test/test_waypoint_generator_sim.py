@@ -28,7 +28,7 @@ import time
 
 import rclpy
 from geometry_msgs.msg import PointStamped, PoseStamped
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
@@ -155,7 +155,7 @@ shut_down(node, probe, executor)
 
 HOLD_GOALS_FOR_ESTIMATE = """
 node, probe, executor = start(LONG_ROUTE_PARAMETERS + [('subject_wait_timeout_s', '30.0')])
-goals = collect(probe, PoseStamped, node.output_topic)
+goals = collect(probe, Path, node.route_topic)
 odometry_pub = publisher_for(probe, Odometry, node.odom_topic, executor)
 odometry_pub.publish(odometry_at(0.0, 0.0, 0.0))
 assert spin_until(executor, lambda: node.start_pos is not None, 5)
@@ -170,7 +170,7 @@ shut_down(node, probe, executor)
 
 HOLD_GOALS_FOR_START_TRIGGER = """
 node, probe, executor = start(LONG_ROUTE_PARAMETERS + [('start_trigger_topic', '/traj_start_trigger')])
-goals = collect(probe, PoseStamped, node.output_topic)
+goals = collect(probe, Path, node.route_topic)
 odometry_pub = publisher_for(probe, Odometry, node.odom_topic, executor)
 odometry_pub.publish(odometry_at(0.0, 0.0, 0.0))
 assert spin_until(executor, lambda: node.start_pos is not None, 5)
@@ -196,7 +196,7 @@ class RecordingLogger:
 
 
 node.get_logger = lambda: RecordingLogger()
-goals = collect(probe, PoseStamped, node.output_topic)
+goals = collect(probe, Path, node.route_topic)
 odometry_pub = publisher_for(probe, Odometry, node.odom_topic, executor)
 odometry_pub.publish(odometry_at(0.0, 0.0, 0.0))
 assert spin_until(executor, lambda: len(goals) > 0, 10), 'no goal after the wait timed out'
@@ -206,7 +206,7 @@ shut_down(node, probe, executor)
 
 FOUR_POINT_MISSION_AROUND_SUBJECT = """
 node, probe, executor = start(MISSION_PARAMETERS)
-goals = collect(probe, PoseStamped, node.output_topic)
+goals = collect(probe, Path, node.route_topic)
 odometry_pub = publisher_for(probe, Odometry, node.odom_topic, executor)
 odometry_pub.publish(odometry_at(0.0, 0.0, 0.0))
 assert spin_until(executor, lambda: node.start_pos is not None, 5)

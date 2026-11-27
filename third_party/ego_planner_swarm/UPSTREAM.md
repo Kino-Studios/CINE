@@ -126,3 +126,21 @@ is back and it has slowed below 0.1 m/s.
 | `plan_manage/src/ego_replan_fsm.cpp`                 | The `EMERGENCY_STOP` state leaves for `GEN_NEW_TRAJ` through `canLeaveEmergencyStop`, reading the map's depth-lost flag. `checkCollisionCallback` no longer sets `enable_fail_safe_` to false on depth loss; it still enters `EMERGENCY_STOP` on every tick while depth is lost. |
 | `plan_env/test/test_depth_timeout_flag.cpp`, `plan_env/CMakeLists.txt`, `plan_env/package.xml` | New gtest: the flag rises when depth stops and clears when depth resumes. Built only with `BUILD_TESTING`; adds the `ament_cmake_gtest` test dependency. |
 | `plan_manage/test/test_emergency_stop_policy.cpp`, `plan_manage/CMakeLists.txt`, `plan_manage/package.xml` | New gtest for `canLeaveEmergencyStop`. Built only with `BUILD_TESTING`; adds the `ament_cmake_gtest` test dependency. |
+
+### Route replaces the waypoint queue (2026-11-27)
+
+Upstream appended every goal that arrived on `/move_base_simple/goal` during a flight to the
+end of its queue. The CINE waypoint generator re-sends its two-goal window each time it
+rebuilds the route around a moved subject, so the goals of every abandoned route stayed
+queued ahead of the new ones and the drone flew them first. Measured in the Gazebo run
+`eval/runs/modal/2026-11-27_03-40-46_mission_sim_calm_c229`: 38 rebuilds before filming
+grew the queue to 82 goals, and the planner had reached only goal 6 when the run ended. The
+generator now sends its whole window as one `nav_msgs/Path` on
+`/cinematography/planner_route`, which replaces the queue. `/move_base_simple/goal` still
+appends, for goals sent by hand.
+
+| File (under `src/planner/`)                          | Change |
+| ---------------------------------------------------- | ------ |
+| `plan_manage/include/ego_planner/route_replacement.h` | New. `routeStartsAtCurrentTarget(queue, current_index, route_start)`: true when the route's first goal is the goal being flown to, within 1 mm. |
+| `plan_manage/include/ego_planner/ego_replan_fsm.h`, `plan_manage/src/ego_replan_fsm.cpp` | In manual-target mode, a subscription to `/cinematography/planner_route` (`routeCallback`) replaces `wps_` with the route (goals below z = -0.1 dropped, z clamped at 0, as `waypointCallback` does) and restarts at its first goal. It replans unless it is already flying and the route starts at its current goal; from `WAIT_TARGET` it first sets `init_pt_` to the current position. |
+| `plan_manage/test/test_route_replacement.cpp`, `plan_manage/CMakeLists.txt` | New gtest for `routeStartsAtCurrentTarget`. Built only with `BUILD_TESTING`. |

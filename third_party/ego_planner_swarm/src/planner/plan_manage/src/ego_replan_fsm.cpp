@@ -1,5 +1,6 @@
 
 #include <ego_planner/ego_replan_fsm.h>
+#include <ego_planner/route_replacement.h>
 #include <ego_planner/emergency_stop_policy.h>
 
 namespace ego_planner
@@ -135,6 +136,13 @@ namespace ego_planner
           {
             this->waypointCallback(msg);
           });
+      route_sub_ = node_->create_subscription<nav_msgs::msg::Path>(
+          "/cinematography/planner_route",
+          10,
+          [this](const std::shared_ptr<const nav_msgs::msg::Path> &msg)
+          {
+            this->routeCallback(msg);
+          });
     }
     else if (target_type_ == TARGET_TYPE::PRESET_TARGET)
     {
@@ -252,6 +260,41 @@ namespace ego_planner
       waypoint_num_ = wps_.size();
       RCLCPP_INFO(node_->get_logger(), "Waypoint added to queue. Total waypoints: %d", waypoint_num_);
     }
+  }
+
+  void EGOReplanFSM::routeCallback(const std::shared_ptr<const nav_msgs::msg::Path> &msg)
+  {
+    constexpr double MIN_WAYPOINT_Z = 0.0;
+    std::vector<Eigen::Vector3d> route;
+    for (const auto &stamped : msg->poses)
+    {
+      if (stamped.pose.position.z < -0.1)
+        continue;
+
+      route.emplace_back(stamped.pose.position.x, stamped.pose.position.y,
+                         std::max(MIN_WAYPOINT_Z, stamped.pose.position.z));
+    }
+
+    if (route.empty())
+      return;
+
+    const bool waiting = exec_state_ == WAIT_TARGET;
+    const bool keep_flying = !waiting && routeStartsAtCurrentTarget(wps_, wp_id_, route.front());
+    wps_ = route;
+    waypoint_num_ = wps_.size();
+    wp_id_ = 0;
+
+    if (keep_flying)
+    {
+      RCLCPP_INFO(node_->get_logger(), "Route replaced; still flying to its first goal (%d queued)", waypoint_num_);
+      return;
+    }
+
+    if (waiting)
+      init_pt_ = odom_pos_;
+
+    RCLCPP_INFO(node_->get_logger(), "Route replaced; flying to its first goal (%d queued)", waypoint_num_);
+    planNextWaypoint(wps_[wp_id_]);
   }
 
   void EGOReplanFSM::odometryCallback(const std::shared_ptr<const nav_msgs::msg::Odometry> &msg)
