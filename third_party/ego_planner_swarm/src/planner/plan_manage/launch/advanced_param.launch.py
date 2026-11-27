@@ -162,7 +162,8 @@ def generate_launch_description():
             {'grid_map/local_update_range_x': 5.5},
             {'grid_map/local_update_range_y': 5.5},
             {'grid_map/local_update_range_z': 4.5},
-            {'grid_map/obstacles_inflation': 0.099},
+            # The CINE drone's radius; GridMap rounds it up to whole cells, so 0.3 m.
+            {'grid_map/obstacles_inflation': 0.25},
             {'grid_map/local_map_margin': 10},
             {'grid_map/ground_height': -0.01},
             # camera parameter

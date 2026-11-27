@@ -776,25 +776,9 @@ class PathBuilderMixin:
         best_radius = float(radius)
 
         if bool(self.enable_cost_optimization) and reference is not None:
-            radius_samples = int(max(1, self.candidate_radius_samples))
-            r_scale_min, r_scale_max = [float(v) for v in self.candidate_radius_scale_range]
-            r_scale_min, r_scale_max = (
-                min(r_scale_min, r_scale_max),
-                max(r_scale_min, r_scale_max),
-            )
-
-            r0 = float(radius)
-            r_min = max(self.min_orbit_radius_m, r0 * r_scale_min)
-            r_max = max(r_min, r0 * r_scale_max)
-            radii = (
-                [r_min + (r_max - r_min) * k / (radius_samples - 1) for k in range(radius_samples)]
-                if radius_samples > 1
-                else [r0]
-            )
-
             best_total = float('inf')
 
-            for rr in radii:
+            for rr in self._candidate_arc_radii():
                 total = 0.0
                 ref = reference
 

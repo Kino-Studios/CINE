@@ -79,6 +79,7 @@ Committed as `11a6fbc` ("Vendor ego-planner under third_party for Jazzy") and
 | `planner/plan_manage/launch/advanced_param.launch.py` | 2026-11-14      | Odometry, camera-pose and depth remaps add the `drone_<id>_` prefix only to relative topic names; a name starting with `/` is used unchanged. Relative names resolve as before. |
 | `planner/plan_manage/launch/advanced_param.launch.py` | 2026-11-15      | New `virtual_ceil_height` launch argument (default 2.9, the previous literal) sets `grid_map/virtual_ceil_height`; `cine_bringup/launch/cinematic_run.launch.py` passes it through so the Gazebo launch can raise the ceiling. |
 | `planner/plan_manage/launch/advanced_param.launch.py` | 2026-11-24      | New `odom_depth_timeout` launch argument (default 1.0, the upstream value) sets `grid_map/odom_depth_timeout`; `cine_bringup/launch/cinematic_run.launch.py` passes it through as `planner_odom_depth_timeout` so the Gazebo launch can lengthen it to 3.0 s. |
+| `planner/plan_manage/launch/advanced_param.launch.py` | 2026-11-26      | `grid_map/obstacles_inflation` raised from 0.099 to 0.25, the CINE drone's radius (`airframe_radius_m` in `cine_config/config/eval/scoring.json`). GridMap rounds it up to whole 0.1 m cells, so obstacles grow by 0.3 m instead of 0.1 m. `cine_gazebo/test/test_planner_obstacle_padding.py` keeps the two values in step. |
 
 ### Trajectory timing on the node clock (2026-11-22)
 

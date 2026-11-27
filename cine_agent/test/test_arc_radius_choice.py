@@ -511,3 +511,19 @@ def test_anchor_distance_route_never_turns_back_at_the_arc_ends():
     node.generate_cinematographic_waypoints()
 
     assert _sharpest_turn_degrees(node.dynamic_waypoints) < 90.0
+
+
+class FartherIsCheaperCost:
+    def estimate_position_cost_at_position(self, x, y, z, target_x, target_y, target_z, **kwargs):
+        return -math.dist((x, y, z), (target_x, target_y, target_z))
+
+
+def test_fallback_orbit_never_leaves_the_radius_band_in_metres():
+    node = ArcPlanningNode()
+    node.cost_calculator = FartherIsCheaperCost()
+
+    orbit = node._build_orbit_segment(SUBJECT, radius=1.5, z=SUBJECT[2])
+
+    assert max(math.dist(point, SUBJECT) for point in orbit) == pytest.approx(
+        max(WaypointParams.CANDIDATE_RADIUS_RANGE_M),
+    )
