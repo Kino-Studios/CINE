@@ -3,6 +3,7 @@
 import numpy as np
 
 from cine_eval.channels.result import OK, ChannelResult, unchecked
+from cine_eval.frames import FrameError, positions_in_frame
 from cine_eval.record import DRONE_TRUE, SETPOINTS, FlightRecord
 from cine_eval.settings import ScoringSettings
 from cine_eval.timeline import sample
@@ -17,22 +18,19 @@ def score_following(record: FlightRecord, settings: ScoringSettings) -> ChannelR
         return unchecked(NAME, f'missing streams: {", ".join(missing)}')
 
     setpoints = record.streams[SETPOINTS]
-    truth_frame = record.streams[DRONE_TRUE].frame_id
-    if setpoints.frame_id != truth_frame:
-        transform_key = f'{setpoints.frame_id}->{truth_frame}'
-        if transform_key not in record.metadata.get('frame_transforms', {}):
-            return unchecked(
-                NAME,
-                f'{SETPOINTS} is in frame {setpoints.frame_id!r} but {DRONE_TRUE} is in '
-                f'frame {truth_frame!r}, and the record has no transform {transform_key!r}',
-            )
 
-        return unchecked(
-            NAME,
-            f'frame transform not implemented: {transform_key!r} is recorded but not yet applied',
+    try:
+        setpoint_position = positions_in_frame(
+            record.metadata,
+            setpoints.fields['position'],
+            setpoints.frame_id,
+            record.streams[DRONE_TRUE].frame_id,
+            SETPOINTS,
+            DRONE_TRUE,
         )
+    except FrameError as exception:
+        return unchecked(NAME, str(exception))
 
-    setpoint_position = np.asarray(setpoints.fields['position'], dtype=float)
     drone_position = sample(record.streams[DRONE_TRUE], 'position', setpoints.time)
     error_m = np.linalg.norm(drone_position - setpoint_position, axis=1)
     covered = np.isfinite(error_m)

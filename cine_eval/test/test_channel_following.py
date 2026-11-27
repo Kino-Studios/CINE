@@ -74,12 +74,22 @@ def test_following_is_unchecked_when_setpoint_frame_differs_from_truth():
     )
 
 
-def test_following_reports_a_recorded_but_unapplied_transform():
+def test_following_scores_setpoints_through_the_recorded_transform():
+    # Setpoints 1 m behind the drone in their own frame, which sits 1 m ahead of map.
+    record = _record([[t - 1.0, 0, 0] for t in range(5)], setpoint_frame='odom')
+    record.metadata['frame_transforms'] = {'odom->map': [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]}
+
+    result = score_following(record, SETTINGS)
+
+    assert result.status == 'ok'
+    assert result.summary['max_tracking_error_m'] == pytest.approx(0.0)
+
+
+def test_following_with_a_malformed_transform_is_unchecked():
     record = _record([[0, 0, 0]] * 5, setpoint_frame='odom')
     record.metadata['frame_transforms'] = {'odom->map': [0, 0, 0]}
 
     result = score_following(record, SETTINGS)
 
-    assert result.reason == (
-        "frame transform not implemented: 'odom->map' is recorded but not yet applied"
-    )
+    assert result.status == 'unchecked'
+    assert 'odom->map' in result.reason

@@ -80,6 +80,12 @@ def test_run_metadata_names_the_world_as_the_waypoints_frame():
     assert _metadata(world='cine_field')['waypoints_frame'] == 'cine_field'
 
 
+def test_run_metadata_records_the_flight_controller_map_as_the_world_frame():
+    assert _metadata(world='cine_field')['frame_transforms'] == {
+        'map->cine_field': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+    }
+
+
 def test_run_metadata_points_the_world_file_at_the_committed_template():
     assert _metadata()['world_file'] == 'cine_gazebo/worlds/cine_field.sdf.template'
 

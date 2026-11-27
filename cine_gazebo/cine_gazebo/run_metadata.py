@@ -38,6 +38,8 @@ def build_run_metadata(
         # Gazebo reports true poses in a frame named after the world; the waypoints are metres
         # in it, the drone spawning at its origin (config/mission_waypoints.yaml).
         'waypoints_frame': world,
+        # MAVROS's 'map' starts at the drone spawn, the world origin; measured to agree within 3 cm.
+        'frame_transforms': {f'map->{world}': [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]},
         'waypoints_sha1': waypoints_sha1,
         'wind': wind,
         'seed': seed,

@@ -1,8 +1,11 @@
 """Estimate channel: how far the subject estimate sits from the subject's true position."""
 
+from dataclasses import replace
+
 import numpy as np
 
 from cine_eval.channels.result import OK, ChannelResult, unchecked
+from cine_eval.frames import FrameError, positions_in_frame
 from cine_eval.record import (
     DETECTIONS,
     SUBJECT_ESTIMATE,
@@ -23,20 +26,31 @@ def score_estimate(record: FlightRecord, settings: ScoringSettings) -> ChannelRe
 
     estimate = record.streams[SUBJECT_ESTIMATE]
     truth = record.streams[SUBJECT_TRUE]
-    if estimate.frame_id != truth.frame_id:
-        transform_key = f'{estimate.frame_id}->{truth.frame_id}'
-        transforms = record.metadata.get('frame_transforms', {})
-        if transform_key not in transforms:
-            return unchecked(
-                NAME,
-                f'{SUBJECT_ESTIMATE} is in frame {estimate.frame_id!r} but {SUBJECT_TRUE} is in '
-                f'frame {truth.frame_id!r}, and the record has no transform {transform_key!r}',
-            )
+    raw_position = np.asarray(estimate.fields['position'], dtype=float)
+    finite = np.all(np.isfinite(raw_position), axis=1)
+    if not finite.any():
+        return unchecked(NAME, f'{SUBJECT_ESTIMATE} has no finite position')
 
-        return unchecked(
-            NAME,
-            f'frame transform not implemented: {transform_key!r} is recorded but not yet applied',
+    non_finite_share = float(1.0 - finite.mean())
+
+    try:
+        estimate_position = positions_in_frame(
+            record.metadata,
+            raw_position[finite],
+            estimate.frame_id,
+            truth.frame_id,
+            SUBJECT_ESTIMATE,
+            SUBJECT_TRUE,
         )
+    except FrameError as exception:
+        return unchecked(NAME, str(exception))
+
+    estimate = replace(
+        estimate,
+        time=estimate.time[finite],
+        receive_time=estimate.receive_time[finite],
+        fields={'position': estimate_position},
+    )
 
     start = max(estimate.time[0], truth.time[0])
     end = min(estimate.time[-1], truth.time[-1])
@@ -52,6 +66,7 @@ def score_estimate(record: FlightRecord, settings: ScoringSettings) -> ChannelRe
         'median_error_m': float(np.median(error_m)),
         'p95_error_m': float(np.percentile(error_m, 95)),
         'max_error_m': float(error_m.max()),
+        'non_finite_estimate_share': non_finite_share,
     }
     notes = []
     stale_share = _stale_detection_share(record, clock, settings)

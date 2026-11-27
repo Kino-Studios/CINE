@@ -80,6 +80,17 @@ def test_extract_copies_run_json_into_metadata(tmp_path):
     assert record.metadata['run'] == {'seed': 7}
 
 
+def test_extract_lifts_the_run_frame_transforms_to_where_the_scorers_read_them(tmp_path):
+    bag = tmp_path / 'with_transforms'
+    shutil.copytree(FIXTURE_BAG, bag)
+    identity = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+    (bag / 'run.json').write_text(json.dumps({'frame_transforms': {'map->cine_field': identity}}))
+
+    record = extract(bag)
+
+    assert record.metadata['frame_transforms'] == {'map->cine_field': identity}
+
+
 def test_extract_unclosed_bag_reindexes_a_copy_and_leaves_original_untouched(tmp_path):
     bag = tmp_path / 'unclosed'
     shutil.copytree(FIXTURE_BAG, bag)
@@ -106,6 +117,22 @@ def test_stream_is_sorted_by_time_and_keeps_the_first_received_of_duplicate_stam
     assert stream.time.tolist() == [1.0, 2.0]
     assert stream.receive_time.tolist() == [2.2, 2.1]
     assert stream.fields['position'].tolist() == [[1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]
+
+
+def test_receive_stamped_stream_keeps_the_last_message_of_a_shared_clock_tick():
+    # The generator publishes a stale focus distance and its replacement 3 ms apart, inside one
+    # tick of the simulator clock; the replacement is the value that held afterwards.
+    samples = _TopicSamples(
+        frame_id='',
+        time=[37.4, 37.4, 37.8],
+        receive_time=[37.4, 37.4, 37.8],
+        stamp_sources={'receive'},
+        fields={'value': [6.161, 1.0, 1.0]},
+    )
+
+    stream = _to_stream('focus_target', samples)
+
+    assert stream.fields['value'].tolist() == [1.0, 1.0]
 
 
 def test_extract_zero_byte_bag_raises_bag_error(tmp_path):

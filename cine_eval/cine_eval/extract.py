@@ -18,6 +18,7 @@ import rosbag2_py
 from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
 
+from cine_eval.frames import TRANSFORMS_KEY
 from cine_eval.message_time import HEADER, RECEIVE, header_clock_is_foreign, message_time
 from cine_eval.record import (
     DETECTIONS,
@@ -278,12 +279,23 @@ def _on_simulation_clock(samples: _TopicSamples) -> tuple[_TopicSamples, bool]:
 
 
 def _to_stream(name: str, samples: _TopicSamples) -> Stream:
-    """Sorts by time (stable, so receive order breaks ties) and drops exact-duplicate stamps."""
+    """Sorts by time (stable, so receive order breaks ties) and drops exact-duplicate stamps.
+
+    A repeated header stamp is the same sample sent again, so the first copy is kept. Messages
+    stamped on receipt share a stamp when they land in one tick of the simulator clock; the last
+    of them is the state that held afterwards, so it is kept instead.
+    """
 
     time = np.asarray(samples.time, dtype=float)
     order = np.argsort(time, kind='stable')
     sorted_time = time[order]
-    keep = np.concatenate(([True], np.diff(sorted_time) != 0))
+    stamp_changes = np.diff(sorted_time) != 0
+
+    if samples.stamp_sources == {RECEIVE}:
+        keep = np.concatenate((stamp_changes, [True]))
+    else:
+        keep = np.concatenate(([True], stamp_changes))
+
     kept = order[keep]
 
     if len(samples.stamp_sources) == 1:
@@ -360,6 +372,9 @@ def extract(bag_directory: Path) -> FlightRecord:
             metadata['run'] = json.loads(run_file.read_text())
         except json.JSONDecodeError as exception:
             raise BagError(f'{run_file}: not valid JSON: {exception}') from None
+
+        if TRANSFORMS_KEY in metadata['run']:
+            metadata[TRANSFORMS_KEY] = metadata['run'][TRANSFORMS_KEY]
 
     metadata['skipped_topics'] = sorted(skipped_topics)
     metadata['foreign_clock_topics'] = sorted(foreign_clock_topics)

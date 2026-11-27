@@ -66,13 +66,63 @@ def test_estimate_in_a_different_frame_without_transform_is_unchecked():
     assert 'map' in result.reason
 
 
-def test_estimate_in_a_different_frame_with_a_transform_is_still_unchecked_until_applied():
+def test_estimate_in_another_frame_is_scored_through_the_recorded_transform():
+    # The estimate frame sits 2 m east of the truth frame, so the recorded transform adds
+    # 2 m in x; an estimate 2 m short in its own frame is then exactly on the truth.
+    metadata = {'frame_transforms': {'odom->map': [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]}}
+
+    result = score_estimate(
+        _record(estimate_offset=(-2.0, 0.0, 0.0), estimate_frame='odom', metadata=metadata),
+        SETTINGS,
+    )
+
+    assert result.status == 'ok'
+    assert result.summary['median_error_m'] == pytest.approx(0.0)
+
+
+def test_estimate_in_another_frame_is_rotated_by_the_recorded_transform():
+    # A quarter turn about z maps the estimate's (0, -t/2, 1) onto the truth's (t/2, 0, 1).
+    quarter_turn_about_z = [0.0, 0.0, 0.0, 0.0, 0.0, np.sqrt(0.5), np.sqrt(0.5)]
+    metadata = {'frame_transforms': {'odom->map': quarter_turn_about_z}}
+    record = _record(estimate_frame='odom', metadata=metadata)
+    record.streams[SUBJECT_ESTIMATE].fields['position'] = np.stack(
+        [np.zeros_like(TIME), -TIME * 0.5, np.ones_like(TIME)],
+        axis=1,
+    )
+
+    result = score_estimate(record, SETTINGS)
+
+    assert result.summary['max_error_m'] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_estimate_with_a_malformed_transform_is_unchecked():
     metadata = {'frame_transforms': {'camera_link->map': [0.0] * 7}}
 
     result = score_estimate(_record(estimate_frame='camera_link', metadata=metadata), SETTINGS)
 
     assert result.status == 'unchecked'
-    assert 'frame transform not implemented' in result.reason
+    assert 'camera_link->map' in result.reason
+
+
+def test_non_finite_estimates_are_left_out_of_the_error_and_counted():
+    record = _record()
+    position = record.streams[SUBJECT_ESTIMATE].fields['position']
+    position[::4] = np.nan
+
+    result = score_estimate(record, SETTINGS)
+
+    assert result.summary['max_error_m'] == pytest.approx(0.5)
+    assert result.summary['non_finite_estimate_share'] == pytest.approx(0.25, abs=0.01)
+
+
+def test_an_estimate_that_is_never_finite_is_unchecked():
+    record = _record()
+    record.streams[SUBJECT_ESTIMATE].fields['position'][:] = np.inf
+
+    result = score_estimate(record, SETTINGS)
+
+    assert result.status == 'unchecked'
+    assert 'finite' in result.reason
 
 
 def test_missing_estimate_stream_is_unchecked():
