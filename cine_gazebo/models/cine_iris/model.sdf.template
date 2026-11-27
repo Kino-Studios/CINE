@@ -36,9 +36,12 @@
     </include>
 
     <!-- The real camera is fixed to the frame, so no gimbal. Gazebo cameras look along
-         their link's +x, which is the drone's forward axis. -->
+         their link's +x, which is the drone's forward axis. The camera sits ahead of the
+         body mesh: at 0.05 m it was inside the mesh, 1-2 cm from it on every side. The RGB
+         camera's 0.05 m near clip cut that shell away, but the depth camera reports anything
+         nearer than its near clip as -inf, so every depth pixel was -inf. -->
     <link name="camera_link">
-      <pose relative_to="iris_with_standoffs::base_link">0.05 0 0 0 0 0</pose>
+      <pose relative_to="iris_with_standoffs::base_link">0.10 0 0 0 0 0</pose>
       <enable_wind>true</enable_wind>
       <inertial>
         <mass>0.01</mass>

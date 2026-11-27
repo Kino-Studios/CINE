@@ -23,6 +23,7 @@ from ament_index_python.packages import get_package_share_directory
 from cine_bringup.mission_waypoints import load_mission_waypoints
 from cine_gazebo.depth_source import depth_routing
 from cine_gazebo.flight_starter_logic import VALID_NAV_SOURCES
+from cine_gazebo.mavros_plugins import mavros_plugin_denylist
 from cine_gazebo.model_rendering import (
     CAMERA_TOPIC,
     DEPTH_TOPIC,
@@ -303,7 +304,11 @@ def _start_vehicle(context):
                     'fcu_protocol': 'v2.0',
                     'use_sim_time': True,
                 },
-                str(mavros_launch_directory / 'apm_pluginlists.yaml'),
+                {
+                    'plugin_denylist': mavros_plugin_denylist(
+                        (mavros_launch_directory / 'apm_pluginlists.yaml').read_text(),
+                    ),
+                },
                 str(mavros_launch_directory / 'apm_config.yaml'),
                 {'conn_timeout': MAVROS_HEARTBEAT_TIMEOUT_S},
             ],
@@ -658,19 +663,12 @@ def _start_sensing(context):
             output='screen',
         ),
         # The gazebo profile names the weights by file name only; Ultralytics looks for a
-        # bare name in the working directory, checked above, before downloading it.
-        Node(
-            package='cine_sensing_yolo',
-            executable='yolo_camera',
-            name='yolo_camera',
-            cwd=str(WEIGHTS_DIRECTORY),
-            output='screen',
-        ),
+        # bare name in the working directory, checked above, before downloading it. The
+        # log-only yolo_camera node is left out: it ran the same model on the same image.
         Node(
             package='cine_sensing_yolo',
             executable='bb_extractor',
             name='bb_extractor',
-            # bb_extractor loads the same bare model name.
             cwd=str(WEIGHTS_DIRECTORY),
             output='screen',
         ),

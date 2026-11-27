@@ -238,12 +238,12 @@ def test_rendered_model_leaves_no_placeholder():
     assert '{{' not in rendered
 
 
-def test_rendered_model_mounts_camera_five_centimetres_ahead_of_base_link():
+def test_rendered_model_mounts_camera_ten_centimetres_ahead_clear_of_the_body_mesh():
     pose = _rendered_model().find("model/link[@name='camera_link']/pose")
 
     assert (pose.get('relative_to'), pose.text) == (
         'iris_with_standoffs::base_link',
-        '0.05 0 0 0 0 0',
+        '0.10 0 0 0 0 0',
     )
 
 
